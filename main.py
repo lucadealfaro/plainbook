@@ -1,16 +1,24 @@
-from bottle import route, template, request, get, post, static_file, view
+#!/usr/bin/env python3
+
+from bottle import route, template, request, get, post, static_file, view, run
 import json
 import os
 import socket
 import webbrowser
+import sys
 
 APP_FOLDER = os.path.dirname(__file__)
-
-# Reads the sample notebook.
 TEST_INPUTS = os.path.join(APP_FOLDER, "tests/files")
-with open(os.path.join(TEST_INPUTS, "sample_notebook.ipynb")) as f:
-    SAMPLE_NOTEBOOK = json.load(f)
 
+# Parse command line arguments
+notebook_path = None
+notebook_name = "Sample Notebook"
+
+if len(sys.argv) > 1:
+    notebook_path = os.path.abspath(sys.argv[1])
+    notebook_name = os.path.splitext(os.path.basename(notebook_path))[0]
+
+# Static file routes 
 @route('/js/<filepath:path>')
 def server_static_js(filepath):
     return static_file(filepath, root=os.path.join(APP_FOLDER, 'js'))
@@ -19,14 +27,16 @@ def server_static_js(filepath):
 def server_static_css(filepath):
     return static_file(filepath, root=os.path.join(APP_FOLDER, 'css'))
 
+# Main routes
 @route('/')
 @view('index.html')
 def index():
-    return dict(notebook_name="Sample Notebook")
+    return dict(notebook_name=notebook_name)
 
 @get('/get_notebook')
 def get_notebook():
-    notebook = SAMPLE_NOTEBOOK.copy()
+    with open(notebook_path or os.path.join(TEST_INPUTS, "sample_notebook.ipynb")) as f:
+        notebook = json.load(f)
     # Adds to each code cell a markdown component that explains the cell's code. 
     for cell in notebook['cells']:
         if cell['cell_type'] == 'code':
@@ -60,6 +70,9 @@ def edit_code():
     print(f"Updated code for cell {cell_index}: {source}")
     return dict(status='success')
 
+################################
+# Server startup
+
 def find_free_port(start_port):
     port = start_port
     while True:
@@ -68,14 +81,11 @@ def find_free_port(start_port):
                 return port
             port += 2
     
-if __name__ == '__main__':
-    from bottle import run
+if __name__ == '__main__':    
     port = find_free_port(8080)
-    url = f"http://127.0.0.1:{port}/"
-    
+    url = f"http://127.0.0.1:{port}/"    
     try:
         webbrowser.open(url)
     except Exception:
         print(f"If the browser does not open, please load this URL: {url}")
-    
-    run(host='localhost', port=port, debug=True)
+    run(host='localhost', port=port, debug=True, reloader=True)
