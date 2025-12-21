@@ -1,14 +1,17 @@
 #!/usr/bin/env python3
 
-from bottle import route, template, request, get, post, static_file, view, run
+from bottle import route, template, request, get, post, static_file, view, run, HTTPError
 import json
 import os
 import socket
 import webbrowser
 import sys
+import secrets
+from functools import wraps
 
 APP_FOLDER = os.path.dirname(__file__)
 TEST_INPUTS = os.path.join(APP_FOLDER, "tests/files")
+AUTH_TOKEN = secrets.token_hex(32)
 
 # Parse command line arguments
 notebook_path = None
@@ -27,13 +30,25 @@ def server_static_js(filepath):
 def server_static_css(filepath):
     return static_file(filepath, root=os.path.join(APP_FOLDER, 'css'))
 
+# Authentication decorator
+def require_token(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        token = request.query.get('token')
+        if token != AUTH_TOKEN:
+            raise HTTPError(403, 'Invalid or missing token')
+        return func(*args, **kwargs)
+    return wrapper
+
 # Main routes
-@route('/')
+@get('/')
 @view('index.html')
+@require_token
 def index():
     return dict(notebook_name=notebook_name)
 
 @get('/get_notebook')
+@require_token
 def get_notebook():
     with open(notebook_path or os.path.join(TEST_INPUTS, "sample_notebook.ipynb")) as f:
         notebook = json.load(f)
@@ -51,6 +66,7 @@ def get_notebook():
     )
     
 @post('/edit_explanation')
+@require_token
 def edit_explanation():
     data = request.json
     cell_index = data.get('cell_index')
@@ -61,6 +77,7 @@ def edit_explanation():
     return dict(status='success')
 
 @post('/edit_code')
+@require_token
 def edit_code():
     data = request.json
     cell_index = data.get('cell_index')
@@ -83,9 +100,9 @@ def find_free_port(start_port):
     
 if __name__ == '__main__':    
     port = find_free_port(8080)
-    url = f"http://127.0.0.1:{port}/"    
+    url = f"http://127.0.0.1:{port}/?token={AUTH_TOKEN}"    
     try:
         webbrowser.open(url)
     except Exception:
         print(f"If the browser does not open, please load this URL: {url}")
-    run(host='localhost', port=port, debug=True, reloader=True)
+    run(host='localhost', port=port, debug=True)

@@ -8,6 +8,10 @@ import ExplanationEditor from './ExplanationEditor.js';
 createApp({
     components: { MarkdownCell, CodeCell, ExplanationEditor, OutputRenderer },
     setup() {
+        // Extract token from URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const authToken = urlParams.get('token');
+
         // 1. Initialize notebook as null
         const notebook = ref(null);
         const loading = ref(true);
@@ -19,7 +23,7 @@ createApp({
             try {
                 loading.value = true;
                 // Replace this URL with your actual callback endpoint
-                const response = await fetch('/get_notebook');
+                const response = await fetch(`/get_notebook?token=${authToken}`);
                 
                 if (!response.ok) throw new Error('Failed to fetch notebook');
                 
@@ -37,7 +41,7 @@ createApp({
 
         const sendExplanationToServer = async (content, cellIndex) => {
             try {
-                const response = await fetch('/edit_explanation', {
+                const response = await fetch(`/edit_explanation?token=${authToken}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
@@ -53,7 +57,7 @@ createApp({
 
         const sendCodeToServer = async (content, cellIndex) => {
             try {
-                const response = await fetch('/edit_code', {
+                const response = await fetch(`/edit_code?token=${authToken}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ 
@@ -71,7 +75,7 @@ createApp({
 
         const sendRedoToServer = async (cellIndex) => {
             try {
-                const response = await fetch('/redo', {
+                const response = await fetch(`/redo?token=${authToken}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ cell_index: cellIndex })
