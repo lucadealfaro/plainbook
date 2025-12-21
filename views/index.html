@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <link rel="shortcut icon" href="data:image/x-icon;base64,AAABAAEAAQEAAAEAIAAwAAAAFgAAACgAAAABAAAAAgAAAAEAIAAAAAAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAPAAAAAA=="/>
+    <link rel="stylesheet" href="css/main.css">
+    <link rel="stylesheet" href="css/font-awesome.css">
+  </head>
+  <body>
+    <!-- Navigation bar -->
+    <nav class="navbar is-dark" role="navigation" aria-label="main navigation">
+      <div class="navbar-brand">
+
+        <a role="button" class="navbar-burger burger" aria-label="menu" aria-expanded="false" data-target="the-navbar-menu"
+           onclick="this.classList.toggle('is-active');document.getElementById(this.dataset.target).classList.toggle('is-active');">
+          <span aria-hidden="true"></span>
+          <span aria-hidden="true"></span>
+          <span aria-hidden="true"></span>
+        </a>
+      </div>
+
+      <div id="the-navbar-menu" class="navbar-menu">
+        <div class="navbar-start">
+          <!-- Here we can put menu items -->
+        </div>
+
+        <div class="navbar-end">
+          <div class="navbar-item">
+            <div class="buttons">
+            </div>
+          </div>
+        </div>
+      </div>
+    </nav>
+
+    <div class="section">
+      <h1 class="title">{{notebook_name}}</h1>
+      <div id="app"></div>
+    </div>
+
+    <footer class="footer">
+    </footer>
+  </body>
+  <!-- Loads the index-specific js for Vue -->
+  <script src="js/prism.min.js"></script>
+  <script src="js/prism-python.min.js"></script>
+  <script src="js/markdown-it.min.js"></script>
+  <script type="module" src="js/nb.js"></script>
+</html>
+

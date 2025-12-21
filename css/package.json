@@ -1,0 +1,23 @@
+{
+  "name": "bulma",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "bulma": "^1.0.4",
+    "sass": "^1.97.0"
+  },
+  "devDependencies": {
+    "vite": "^7.3.0"
+  },
+  "scripts": {
+    "build": "sass -I node_modules --quiet-deps main.scss main.css --style=compressed",
+    "watch": "sass -I node_modules --quiet-deps --watch main.scss main.css"
+  }
+}

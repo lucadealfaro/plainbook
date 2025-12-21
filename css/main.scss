@@ -1,0 +1,36 @@
+// 3. Load the rest of Bulma
+@use "bulma/sass" with (
+  $primary: #3273dc,
+  $pre-padding: 0.5rem,
+  $control-size: 0.85rem,
+  $body-line-height: 1.5,
+);
+
+// 4. Your Prism Fix (The alignment fix)
+.code-cell-wrapper {
+  .token {
+    display: inline !important;
+    vertical-align: baseline !important;
+    background: transparent !important;
+    padding: 0 !important;
+  }
+}
+
+pre[class*="language-"] {
+  background: transparent !important;
+  margin: 0 !important;
+  padding: 0 !important;
+}
+
+// .output-zone {
+//   border-top: 1px solid var(--bulma-border);
+// }
+
+.explanation-body {
+  // Resets the bottom margin for all Bulma 'block' elements inside
+  --bulma-block-spacing: 0;
+}
+
+[v-cloak] {
+  display: none;
+}

@@ -1,0 +1,14 @@
+{
+    "version": "0.2.0",
+    "configurations": [
+        {
+            "name": "NLBook",
+            "type": "debugpy",
+            "request": "launch",
+            "program": "${workspaceFolder}/main.py",
+            "jinja": true,
+            "justMyCode": true,
+            "console": "integratedTerminal"
+        }
+    ]
+}
