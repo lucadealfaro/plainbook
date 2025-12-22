@@ -138,7 +138,8 @@ def logger_middleware(app):
         return app(environ, logging_start_response)
     return wrapper
     
-if __name__ == '__main__':    
+    
+def main():   
     port = find_free_port(8080)
     url = f"http://127.0.0.1:{port}/?token={AUTH_TOKEN}"    
     try:
@@ -148,3 +149,7 @@ if __name__ == '__main__':
     app_with_logging = logger_middleware(default_app())
     run(app=app_with_logging, host='localhost', port=port, server='waitress', 
         threads=16, debug=True)
+
+
+if __name__ == '__main__': 
+    main()
