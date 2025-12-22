@@ -5,8 +5,11 @@
             "name": "NLBook",
             "type": "debugpy",
             "request": "launch",
-            "program": "${workspaceFolder}/main.py",
-            "console": "integratedTerminal"
+            "module": "nlbook.main",
+            "console": "integratedTerminal",
+            "jinja": true,
+            "justMyCode": true,
+            "cwd": "${workspaceFolder}" // Ensure this is the root project folder
         }
     ]
 }

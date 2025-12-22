@@ -1,4 +1,4 @@
-css/node_modules
+nlbook/css/node_modules
 .venv
 __pycache__/
 *.pyc
