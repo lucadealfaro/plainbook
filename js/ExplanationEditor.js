@@ -2,7 +2,7 @@ import { ref, computed, watch, nextTick } from './vue.esm-browser.js';
 
 const ExplanationRenderer = {
     props: ['source', 'isActive'],
-    emits: ['update:source', 'save', 'redo'],
+    emits: ['update:source', 'save', 'redo', 'run'],
     setup(props, { emit }) {
         const isEditing = ref(false);
         const localSource = ref(Array.isArray(props.source) ? props.source.join('') : props.source);
@@ -50,7 +50,12 @@ const ExplanationRenderer = {
             emit('redo');
         };
 
-        return { isEditing, localSource, rendered, enterEditMode, saveChanges, textareaEl, autoResize, handleRedo };
+        const runCell = () => {
+            emit('run');
+        }
+
+        return { isEditing, localSource, rendered, enterEditMode, saveChanges, textareaEl, autoResize, 
+            handleRedo, runCell };
     },
     template: /* html */ `
         <div class="explanation-container p-2" style="position: relative;">
@@ -65,6 +70,9 @@ const ExplanationRenderer = {
                 </button>
                 <button class="button is-small is-warning" style="opacity: 0.6;" @click="handleRedo">
                     Redo
+                </button>
+                <button class="button is-small is-success" style="opacity: 0.6;" @click="runCell">
+                    Run
                 </button>
             </div>
 

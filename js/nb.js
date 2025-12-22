@@ -87,6 +87,29 @@ createApp({
             }
         };
 
+        const sendRunToServer = async (cellIndex) => {
+            try {
+                const response = await fetch(`/execute_cell?token=${authToken}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ cell_index: cellIndex })
+                });
+                if (!response.ok) throw new Error('Failed to run cell');
+                const r = await response.json();
+                if (r.status === 'error') {
+                    console.error('Execution error:', r.message);
+                } else {
+                    console.log('Cell executed:', cellIndex, r.details);
+                    // Update outputs in the notebook model
+                    if (notebook.value && notebook.value.cells[cellIndex]) {
+                        notebook.value.cells[cellIndex].outputs = r.outputs;
+                    }
+                }
+            } catch (err) {
+                console.error('Run error:', err);
+            }
+        };
+
         const handleKeydown = (e) => {
             // Here we can send the code for execution too. 
             if (!e.shiftKey || e.key !== 'Enter') return;
@@ -106,8 +129,10 @@ createApp({
             window.removeEventListener('keydown', handleKeydown);
         });
 
-        return { notebook, loading, error, sendExplanationToServer, sendCodeToServer, activeIndex, setActiveCell, sendRedoToServer };
+        return { notebook, loading, error, sendExplanationToServer, sendCodeToServer, activeIndex, 
+            setActiveCell, sendRedoToServer, sendRunToServer };
     },
+    
     template: /* html */ `
         <div class="notebook-container px-2 py-2">
             
@@ -133,7 +158,10 @@ createApp({
 
                     <div v-else-if="cell.cell_type === 'code'">
                         <div v-if="cell.metadata?.explanation" class="has-background-light p-2 border-bottom">
-                            <explanation-editor v-model:source="cell.metadata.explanation" :isActive="activeIndex === index" @save="(content) => sendExplanationToServer(content, index)" @redo="() => sendRedoToServer(index)" />
+                            <explanation-editor v-model:source="cell.metadata.explanation" :isActive="activeIndex === index" 
+                            @save="(content) => sendExplanationToServer(content, index)" 
+                            @redo="() => sendRedoToServer(index)" 
+                            @run="() => sendRunToServer(index)" />
                         </div>
                         <code-cell v-model:source="cell.source" :execution-count="cell.execution_count" @save="(content) => sendCodeToServer(content, index)" />
                         

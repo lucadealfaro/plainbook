@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 # General imports
+import atexit
 from functools import wraps
 import json
 import os
@@ -18,9 +19,12 @@ from nbclient import NotebookClient
 from nbclient.exceptions import CellExecutionError
 import nbformat
 
+import sys
+print(f"DEBUGGER PYTHON: {sys.executable}")
+
 APP_FOLDER = os.path.dirname(__file__)
 TEST_INPUTS = os.path.join(APP_FOLDER, "tests/files")
-AUTH_TOKEN = secrets.token_hex(32)
+AUTH_TOKEN = "secret" # DEBUG secrets.token_hex(32)
 
 class ExecutionError(Exception):
     """Custom exception for execution errors in LNBook."""
@@ -42,6 +46,10 @@ class LNBook(object):
         self.kc = self.km.client()
         self.kc.start_channels()
         self.client = NotebookClient(nb=self.nb, km=self.km, kc=self.kc)
+        assert self.km.is_alive(), "Kernel failed to start"
+        assert self.client is not None, "Notebook client failed to start"
+        # Register the cleanup function
+        atexit.register(self._shutdown)
 
     def load_notebook(self):
         """Loads the notebook from the specified path."""
@@ -85,6 +93,17 @@ class LNBook(object):
     def get_json(self):
         """Returns the JSON representation of the entire notebook."""
         return self.nb
+        
+    def _shutdown(self):
+            """Cleanly shuts down the kernel and closes channels."""
+            print(f"Shutting down kernel for {self.name}...")
+            try:
+                if hasattr(self, 'kc'):
+                    self.kc.stop_channels()
+                if hasattr(self, 'km'):
+                    self.km.shutdown_kernel(now=True)
+            except Exception as e:
+                print(f"Error during kernel shutdown: {e}")
                     
 notebook_path = os.path.join(TEST_INPUTS, 'sample_notebook.ipynb')
 if len(sys.argv) > 1:
@@ -162,6 +181,7 @@ def last_valid_cell():
 def execute_cell():
     data = request.json
     cell_index = data.get('cell_index')
+    print(f"Executing cell {cell_index}")
     try:
         outputs, details = notebook.execute_cell(cell_index)
         return dict(status="ok", details=details, outputs=outputs)
