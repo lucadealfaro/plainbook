@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
 # General imports
-import atexit
+import argparse
 from functools import wraps
 import json
 import os
@@ -9,16 +9,10 @@ from pathlib import Path
 import secrets
 import socket
 import sys
-import threading
 import webbrowser
 # Bottle imports
 from bottle import route, template, get, post, static_file, view, HTTPError
 from bottle import run, default_app, request, TEMPLATE_PATH
-# Notebook imports
-from jupyter_client import KernelManager
-from nbclient import NotebookClient
-from nbclient.exceptions import CellExecutionError
-import nbformat
 
 import sys
 print(f"DEBUGGER PYTHON: {sys.executable}")
@@ -31,11 +25,19 @@ app_path = Path(APP_FOLDER)
 PARENT_FOLDER = app_path.parent
 print(f"DEBUGGER PARENT FOLDER: {PARENT_FOLDER}")
 TEST_INPUTS = os.path.join(PARENT_FOLDER, "tests/files")
-AUTH_TOKEN = "secret" # DEBUG secrets.token_hex(32)
+
+# Parse command line arguments
+parser = argparse.ArgumentParser(description='Run the nlbook notebook server')
+parser.add_argument('notebook', nargs='?', 
+                    default=os.path.join(TEST_INPUTS, 'sample_notebook.ipynb'),
+                    help='Path to the notebook file to open')
+parser.add_argument('--debug', action='store_true', default=False,
+                    help='Enable debug mode')
+args = parser.parse_args()
+
+AUTH_TOKEN = "secret" if args.debug else secrets.token_hex(32)
                     
-notebook_path = os.path.join(TEST_INPUTS, 'sample_notebook.ipynb')
-if len(sys.argv) > 1:
-    notebook_path = os.path.abspath(sys.argv[1]) 
+notebook_path = os.path.abspath(args.notebook)
     
 notebook = LNBook(notebook_path)
                     
@@ -141,15 +143,19 @@ def logger_middleware(app):
     
 def main():   
     port = find_free_port(8080)
-    url = f"http://127.0.0.1:{port}/?token={AUTH_TOKEN}"    
-    try:
-        webbrowser.open(url)
-    except Exception:
-        print(f"If the browser does not open, please load this URL: {url}")
-    app_with_logging = logger_middleware(default_app())
+    url = f"http://127.0.0.1:{port}/?token={AUTH_TOKEN}"
+    if args.debug:  
+        print(f"Please load this URL: {url}")
+    else:
+        try:
+            webbrowser.open(url)
+        except Exception:
+            print(f"If the browser does not open, please load this URL: {url}")
+    app_with_logging = logger_middleware(default_app()) if args.debug else default_app()
     run(app=app_with_logging, host='localhost', port=port, server='waitress', 
-        threads=16, debug=True)
+        threads=16, debug=args.debug)
 
 
 if __name__ == '__main__': 
+    
     main()

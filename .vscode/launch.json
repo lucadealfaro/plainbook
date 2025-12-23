@@ -6,6 +6,7 @@
             "type": "debugpy",
             "request": "launch",
             "module": "nlbook.main",
+            "args": ["--debug"],
             "console": "integratedTerminal",
             "jinja": true,
             "justMyCode": true,
