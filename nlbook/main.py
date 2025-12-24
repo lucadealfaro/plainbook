@@ -16,7 +16,7 @@ import sys
 print(f"DEBUGGER PYTHON: {sys.executable}")
 
 # NLBook imports
-from nlbook.nlbook import LNBook, ExecutionError
+from .nlbook import LNBook, ExecutionError
 
 APP_FOLDER = os.path.dirname(__file__)
 TEMPLATE_PATH.insert(0, os.path.join(APP_FOLDER, 'views'))
@@ -161,6 +161,7 @@ def main():
         except Exception:
             print(f"If the browser does not open, please load this URL: {url}")
     app_with_logging = logger_middleware(default_app()) if args.debug else default_app()
+    # Do not use reloader=True. 
     run(app=app_with_logging, host='localhost', port=port, server='waitress', 
         threads=16, debug=args.debug)
 
