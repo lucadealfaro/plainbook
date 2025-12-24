@@ -22,6 +22,9 @@ createApp({
         const running = ref(false);
         const lastRunIndex = ref(-1);
 
+        // For settings modal
+        const showSettings = ref(false);
+
         // 2. Define the fetch logic
         const fetchNotebook = async () => {
             try {
@@ -92,7 +95,7 @@ createApp({
         };
 
         // Runs cells up to the present one. 
-        const doRun = async (cellIndex) => {
+        const runUpToCell = async (cellIndex) => {
             if (!running.value) {
                 running.value = true;
                 for (let i = lastRunIndex.value + 1; i <= cellIndex; i++) {
@@ -103,6 +106,7 @@ createApp({
             }
         };
 
+        // Runs all cells in the notebook.
         const runAllCells = async () => {
             if (!running.value) {
                 running.value = true;
@@ -160,6 +164,14 @@ createApp({
             if (next !== activeIndex.value) setActiveCell(next);
         };
 
+        const openSettings = () => {
+            showSettings.value = true;
+        };
+
+        const closeSettings = () => {
+            showSettings.value = false;
+        };
+
         // 3. Trigger the fetch when the component is mounted
         onMounted(() => {
             fetchNotebook();
@@ -171,7 +183,8 @@ createApp({
         });
 
         return { notebook, loading, error, sendExplanationToServer, sendCodeToServer, activeIndex, 
-            setActiveCell, sendRedoToServer, doRun, running, lastRunIndex, runAllCells, interruptKernel };
+            setActiveCell, sendRedoToServer, runUpToCell, running, lastRunIndex, runAllCells, interruptKernel,
+            showSettings, openSettings, closeSettings };
     },
 template: `#app-template`,
 }).mount('#app');

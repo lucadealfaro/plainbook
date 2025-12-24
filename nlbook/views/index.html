@@ -79,7 +79,7 @@
                             <explanation-editor v-model:source="cell.metadata.explanation" :isActive="activeIndex === index" 
                             @save="(content) => sendExplanationToServer(content, index)" 
                             @redo="() => sendRedoToServer(index)" 
-                            @run="() => doRun(index)" />
+                            @run="() => runUpToCell(index)" />
                         </div>
                         <code-cell v-model:source="cell.source" :execution-count="cell.execution_count" @save="(content) => sendCodeToServer(content, index)" />
                         
@@ -89,6 +89,23 @@
                     </div>
                 </div>
             </div>
+        </div>
+    </div>
+
+    <!-- Settings Modal -->
+    <div class="modal" :class="{'is-active': showSettings}">
+        <div class="modal-background" @click="closeSettings"></div>
+        <div class="modal-card">
+            <header class="modal-card-head">
+                <p class="modal-card-title">Settings</p>
+                <button class="delete" aria-label="close" @click="closeSettings"></button>
+            </header>
+            <section class="modal-card-body">
+                <p class="has-text-grey">Settings will be available here in the future.</p>
+            </section>
+            <footer class="modal-card-foot">
+                <button class="button" @click="closeSettings">Close</button>
+            </footer>
         </div>
     </div>
     </script>
