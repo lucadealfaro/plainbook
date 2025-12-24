@@ -79,7 +79,7 @@
                             <explanation-editor v-model:source="cell.metadata.explanation" :isActive="activeIndex === index" 
                             @save="(content) => sendExplanationToServer(content, index)" 
                             @redo="() => sendRedoToServer(index)" 
-                            @run="() => runUpToCell(index)" />
+                            @run="() => runOneCell(index)" />
                         </div>
                         <code-cell v-model:source="cell.source" :execution-count="cell.execution_count" @save="(content) => sendCodeToServer(content, index)" />
                         

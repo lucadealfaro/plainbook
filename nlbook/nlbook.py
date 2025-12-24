@@ -28,7 +28,9 @@ class LNBook(object):
         self.km.start_kernel()
         self.kc = self.km.client()
         self.kc.start_channels()
+        assert self.kc is not None
         self.client = NotebookClient(nb=self.nb, km=self.km, kc=self.kc)
+        self.client.setup_kernel()
         assert self.km.is_alive(), "Kernel failed to start"
         assert self.client is not None, "Notebook client failed to start"
         # Register the cleanup function
@@ -57,11 +59,18 @@ class LNBook(object):
             cell = self.nb.cells[index]
             if cell.cell_type != 'code':
                 return None, "Not a code cell"
-            if index <= self.last_executed_cell:
-                return cell.outputs, "Cached"
-            if index > self.last_executed_cell + 1:
-                raise ExecutionError("Cannot execute cell out of order")
+            # DEBUG
+            # if index <= self.last_executed_cell:
+            #     return cell.outputs, "Cached"
+            # if index > self.last_executed_cell + 1:
+            #     raise ExecutionError("Cannot execute cell out of order")
             try:
+                # For some reason, the client may have forgotten the kernel client
+                # due to threading. 
+                if self.client.kc is None:
+                    self.client.kc = self.kc
+                assert self.client.kc is not None
+                assert self.client.km.is_alive()
                 self.client.execute_cell(cell, index)
                 self.last_executed_cell = index
                 return cell.outputs, 'ok'

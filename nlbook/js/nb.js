@@ -183,7 +183,7 @@ createApp({
         });
 
         return { notebook, loading, error, sendExplanationToServer, sendCodeToServer, activeIndex, 
-            setActiveCell, sendRedoToServer, runUpToCell, running, lastRunIndex, runAllCells, interruptKernel,
+            setActiveCell, sendRedoToServer, runUpToCell, runOneCell, running, lastRunIndex, runAllCells, interruptKernel,
             showSettings, openSettings, closeSettings };
     },
 template: `#app-template`,

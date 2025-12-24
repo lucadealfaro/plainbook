@@ -12,17 +12,15 @@ import webbrowser
 from bottle import route, template, get, post, static_file, view, HTTPError
 from bottle import run, default_app, request, TEMPLATE_PATH
 
-import sys
-print(f"DEBUGGER PYTHON: {sys.executable}")
+# print(f"DEBUGGER PYTHON: {sys.executable}")
 
-# NLBook imports
+# LNBook imports
 from .nlbook import LNBook, ExecutionError
 
 APP_FOLDER = os.path.dirname(__file__)
 TEMPLATE_PATH.insert(0, os.path.join(APP_FOLDER, 'views'))
 app_path = Path(APP_FOLDER)
 PARENT_FOLDER = app_path.parent
-print(f"DEBUGGER PARENT FOLDER: {PARENT_FOLDER}")
 TEST_INPUTS = os.path.join(PARENT_FOLDER, "tests/files")
 
 # Parse command line arguments
@@ -41,6 +39,8 @@ if args.debug:
     notebook_path = os.path.join(TEST_INPUTS, 'sample_notebook.ipynb')
     
 notebook = LNBook(notebook_path)
+assert notebook.kc is not None
+assert notebook.km.is_alive()
                     
 # Static file routes 
 @route('/js/<filepath:path>')
@@ -113,6 +113,8 @@ def execute_cell():
     cell_index = data.get('cell_index')
     print(f"Executing cell {cell_index}")
     try:
+        assert notebook.kc is not None
+        assert notebook.km.is_alive()
         outputs, details = notebook.execute_cell(cell_index)
         return dict(status="ok", details=details, outputs=outputs)
     except ExecutionError as e:
