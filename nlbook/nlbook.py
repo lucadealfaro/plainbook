@@ -126,7 +126,12 @@ class NLBook(object):
             self.client.setup_kernel()
             self.last_executed_cell = -1
             print("Kernel reset successfully.")
-                    
+            
+    def interrupt_kernel(self):
+        if self.km and self.km.is_alive():
+            print("Interrupting kernel...")
+            self.km.interrupt_kernel()
+                        
     def get_cell_json(self, index):
         """Returns the JSON representation of a cell by index."""
         if index < 0 or index >= len(self.nb.cells):
