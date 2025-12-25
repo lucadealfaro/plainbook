@@ -77,9 +77,10 @@
                     <div v-if="cell.cell_type === 'code'">
                         <div v-if="cell.metadata?.explanation" class="has-background-light p-2 border-bottom">
                             <explanation-editor v-model:source="cell.metadata.explanation" :isActive="activeIndex === index" 
+                                                :index="index" :asRead="asRead" :lastRunIndex="lastRunIndex"
                             @save="(content) => sendExplanationToServer(content, index)" 
                             @redo="() => sendRedoToServer(index)" 
-                            @run="() => runOneCell(index)" />
+                            @run="() => runCell(index)" />
                         </div>
                         <code-cell v-model:source="cell.source" :execution-count="cell.execution_count" @save="(content) => sendCodeToServer(content, index)" />
                         

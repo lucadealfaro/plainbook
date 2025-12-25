@@ -113,11 +113,18 @@ def execute_cell():
     cell_index = data.get('cell_index')
     print(f"Executing cell {cell_index}")
     try:
-        assert notebook.kc is not None
-        assert notebook.km.is_alive()
         outputs, details = notebook.execute_cell(cell_index)
         return dict(status="ok", details=details, outputs=outputs)
     except ExecutionError as e:
+        return dict(status='error', message=str(e))
+
+@post('/reset_kernel')
+@require_token
+def reset_kernel():
+    try:
+        notebook.reset_kernel()
+        return dict(status='success')
+    except Exception as e:
         return dict(status='error', message=str(e))
 
 @post('/interrupt_kernel')

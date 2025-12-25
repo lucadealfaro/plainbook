@@ -1,7 +1,7 @@
 import { ref, computed, watch, nextTick } from './vue.esm-browser.js';
 
 const ExplanationRenderer = {
-    props: ['source', 'isActive'],
+    props: ['source', 'isActive', 'index', 'lastRunIndex', 'asRead'],
     emits: ['update:source', 'save', 'redo', 'run'],
     setup(props, { emit }) {
         const isEditing = ref(false);
@@ -65,14 +65,25 @@ const ExplanationRenderer = {
             </div>
             <div v-if="!isEditing && isActive"
                  style="position: absolute; bottom: 10px; right: 10px; display: flex; gap: 0.5rem;">
+                <button class="button is-small" style="opacity: 0.6;">
+                    <span v-if="asRead">Unmodified</span>
+                    <span v-else-if="lastRunIndex < index">Needs running</span>
+                    <span v-else>Up to date</span>
+                </button> 
                 <button class="button is-small is-info" style="opacity: 0.6;" @click="enterEditMode">
                     Edit
                 </button>
                 <button class="button is-small is-warning" style="opacity: 0.6;" @click="handleRedo">
-                    Redo
+                    Regenerate Code
                 </button>
-                <button class="button is-small is-success" style="opacity: 0.6;" @click="runCell">
-                    Run
+                <button v-if="index === lastRunIndex" class="button is-small is-success" style="opacity: 0.6;" @click="runCell">
+                    Re-Run
+                </button>
+                <button v-else-if="lastRunIndex < index" class="button is-small is-success" style="opacity: 0.6;" @click="runCell">
+                    Run Up To Here
+                </button>
+                <button v-else class="button is-small is-success" style="opacity: 0.6;" @click="runCell">
+                    Run From Start To Here
                 </button>
             </div>
 

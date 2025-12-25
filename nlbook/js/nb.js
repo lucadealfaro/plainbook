@@ -21,6 +21,7 @@ createApp({
         // For running a notebook.
         const running = ref(false);
         const lastRunIndex = ref(-1);
+        const asRead = ref(true);
 
         // For settings modal
         const showSettings = ref(false);
@@ -43,10 +44,12 @@ createApp({
                 console.error("Fetch error:", err);
             } finally {
                 loading.value = false;
+                asRead.value = true;
             }
         };
 
         const sendExplanationToServer = async (content, cellIndex) => {
+            asRead.value = false;
             try {
                 const response = await fetch(`/edit_explanation?token=${authToken}`, {
                     method: 'POST',
@@ -63,6 +66,7 @@ createApp({
         };
 
         const sendCodeToServer = async (content, cellIndex) => {
+            asRead.value = false;
             try {
                 const response = await fetch(`/edit_code?token=${authToken}`, {
                     method: 'POST',
@@ -80,29 +84,28 @@ createApp({
 
         const setActiveCell = (idx) => { activeIndex.value = idx; };
 
-        const sendRedoToServer = async (cellIndex) => {
-            try {
-                const response = await fetch(`/redo?token=${authToken}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ cell_index: cellIndex })
-                });
-                if (!response.ok) throw new Error('Failed to redo');
-                console.log('Redo executed for cell:', cellIndex);
-            } catch (err) {
-                console.error('Redo error:', err);
-            }
-        };
-
         // Runs cells up to the present one. 
-        const runUpToCell = async (cellIndex) => {
+        const runCell = async (cellIndex) => {
             if (!running.value) {
                 running.value = true;
-                for (let i = lastRunIndex.value + 1; i <= cellIndex; i++) {
-                    await runOneCell(i);
+                if (lastRunIndex.value === cellIndex) {
+                    // We rerun the same cell.
+                    await runOneCell(cellIndex);
+                } else if (lastRunIndex.value > cellIndex) {
+                    // We need to run from the start up to cellIndex
+                    await resetKernel();
+                    for (let i = 0; i <= cellIndex; i++) {
+                        await runOneCell(i);
+                    }
+                    lastRunIndex.value = cellIndex;
+                } else {
+                    // We run f
+                    for (let i = lastRunIndex.value + 1; i <= cellIndex; i++) {
+                        await runOneCell(i);
+                    }
+                    lastRunIndex.value = cellIndex;
                 }
                 running.value = false;
-                lastRunIndex.value = cellIndex;
             }
         };
 
@@ -118,7 +121,9 @@ createApp({
             }
         };
 
+        // Function in charge of running one cell in the notebook.
         const runOneCell = async (cellIndex) => {
+            asRead.value = false;
             try {
                 const response = await fetch(`/execute_cell?token=${authToken}`, {
                     method: 'POST',
@@ -155,6 +160,20 @@ createApp({
             }
         };
 
+        const resetKernel = async () => {
+            try {
+                const response = await fetch(`/reset_kernel?token=${authToken}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' }
+                });
+                if (!response.ok) throw new Error('Failed to reset kernel');
+                console.log('Kernel reset');
+                lastRunIndex.value = -1;
+            } catch (err) {
+                console.error('Reset error:', err);
+            }
+        };
+
         const handleKeydown = (e) => {
             // Here we can send the code for execution too. 
             if (!e.shiftKey || e.key !== 'Enter') return;
@@ -183,8 +202,8 @@ createApp({
         });
 
         return { notebook, loading, error, sendExplanationToServer, sendCodeToServer, activeIndex, 
-            setActiveCell, sendRedoToServer, runUpToCell, runOneCell, running, lastRunIndex, runAllCells, interruptKernel,
-            showSettings, openSettings, closeSettings };
+            setActiveCell, runCell, running, lastRunIndex, asRead, runAllCells, 
+            interruptKernel, showSettings, openSettings, closeSettings };
     },
 template: `#app-template`,
 }).mount('#app');
