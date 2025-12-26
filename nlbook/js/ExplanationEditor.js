@@ -58,18 +58,23 @@ const ExplanationRenderer = {
             handleRedo, runCell };
     },
     template: /* html */ `
-        <div class="explanation-container p-2" style="position: relative;">
+        <div class="explanation-container pt-3 pl-4 pr-4 pb-1">
             <div v-if="!isEditing" 
                  class="explanation-body content"
                  v-html="rendered" @dblclick="enterEditMode">
             </div>
-            <div v-if="!isEditing && isActive"
-                 style="position: absolute; bottom: 10px; right: 10px; display: flex; gap: 0.5rem;">
+        </div>
+        <div v-if="!isEditing && isActive"
+                class="explanation-toolbar has-background-grey-lighter pl-3 pr-3"
+                style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem">
+            <div class="toolbar-left">
                 <button class="button is-small" style="opacity: 0.6;">
                     <span v-if="asRead">Unmodified</span>
                     <span v-else-if="lastRunIndex < index">Needs running</span>
                     <span v-else>Up to date</span>
-                </button> 
+                </button>
+            </div>
+            <div class="toolbar-right" style="display: flex; gap: 0.5rem;">
                 <button class="button is-small is-info" style="opacity: 0.6;" @click="enterEditMode">
                     Edit
                 </button>

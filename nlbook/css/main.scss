@@ -50,3 +50,34 @@ pre[class*="language-"] {
     padding-right: 0.75rem;
   }
 }
+
+// Notebook viewport: prevent content from scrolling under the navbar
+.section {
+  height: calc(100vh - 3.25rem);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+// Ensure cells don't end up hidden under the navbar when scrolled into view
+.notebook-cell {
+  scroll-margin-top: 1rem;
+}
+
+// Explanation toolbar strip under rendered output
+.explanation-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  padding: 0.25rem 0.5rem;
+}
+
+.explanation-toolbar .toolbar-right {
+  display: flex;
+  gap: 0.5rem;
+}
+
+// Muted utility for subtle buttons
+.is-muted {
+  opacity: 0.6;
+}

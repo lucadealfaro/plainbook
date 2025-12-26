@@ -8,8 +8,18 @@
     <link rel="stylesheet" href="css/font-awesome.css">
     <style>
       /* Ensure content isn’t hidden behind the fixed navbar */
-      body.has-navbar-fixed-top { padding-top: 3.25rem; }
-    </style>
+      body.has-navbar-fixed-top { padding-top: 3.25rem; }      
+      /* Make the notebook section scrollable and prevent overlap with navbar */
+      .section {
+        height: calc(100vh - 3.25rem);
+        overflow-y: auto;
+        overflow-x: hidden;
+      }
+      
+      /* Add scroll margin to cells so they don't hide under the navbar when scrolling */
+      .notebook-cell {
+        scroll-margin-top: 1rem;
+      }    </style>
   </head>
   <body class="has-navbar-fixed-top">
 
@@ -75,7 +85,7 @@
                     <markdown-cell v-if="cell.cell_type === 'markdown'" :source="cell.source" />
 
                     <div v-if="cell.cell_type === 'code'">
-                        <div v-if="cell.metadata?.explanation" class="has-background-light p-2 border-bottom">
+                        <div v-if="cell.metadata?.explanation" class="has-background-light p-0 border-bottom">
                             <explanation-editor v-model:source="cell.metadata.explanation" :isActive="activeIndex === index" 
                                                 :index="index" :asRead="asRead" :lastRunIndex="lastRunIndex"
                             @save="(content) => sendExplanationToServer(content, index)" 

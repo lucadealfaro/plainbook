@@ -16,7 +16,7 @@ export default {
                 '34': 'color: #3490dc;', // Blue
                 '35': 'color: #9561e2;', // Magenta
                 '36': 'color: #4dc0b5;', // Cyan
-                '37': 'color: #000;',
+                '37': 'color: white;',
                 '39': 'color: black;', // Reset foreground
                 '0': 'color: black; font-weight: normal;' // Reset all
             };

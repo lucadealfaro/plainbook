@@ -1,4 +1,4 @@
-import { createApp, ref, onMounted, onBeforeUnmount } from './vue.esm-browser.js';
+import { createApp, ref, onMounted, onBeforeUnmount, nextTick } from './vue.esm-browser.js';
 
 import MarkdownCell from './MarkdownCell.js';
 import OutputRenderer from './OutputRenderer.js';
@@ -82,7 +82,23 @@ createApp({
             }
         };
 
-        const setActiveCell = (idx) => { activeIndex.value = idx; };
+        const setActiveCell = (idx, shouldScroll = false) => { 
+            activeIndex.value = idx; 
+            if (shouldScroll) {
+                nextTick(() => {
+                    const cells = document.querySelectorAll('.notebook-cell');
+                    if (cells[idx]) {
+                        cells[idx].scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+                    }
+                });
+            }
+        };
+
+        const isEditingField = (el) => {
+            if (!el) return false;
+            const tag = el.tagName;
+            return el.isContentEditable || tag === 'TEXTAREA' || tag === 'INPUT' || tag === 'SELECT' || tag === 'OPTION';
+        };
 
         // Runs cells up to the present one. 
         const runCell = async (cellIndex) => {
@@ -175,12 +191,25 @@ createApp({
         };
 
         const handleKeydown = (e) => {
-            // Here we can send the code for execution too. 
-            if (!e.shiftKey || e.key !== 'Enter') return;
-            if (!notebook.value || activeIndex.value < 0) return;
-            e.preventDefault();
-            const next = Math.min(activeIndex.value + 1, notebook.value.cells.length - 1);
-            if (next !== activeIndex.value) setActiveCell(next);
+            const total = notebook.value?.cells?.length ?? 0;
+            if (total === 0) return;
+
+            if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+                if (isEditingField(e.target)) return;
+                e.preventDefault();
+                const delta = e.key === 'ArrowDown' ? 1 : -1;
+                const current = activeIndex.value < 0 ? 0 : activeIndex.value;
+                const next = Math.min(Math.max(current + delta, 0), total - 1);
+                if (next !== activeIndex.value) setActiveCell(next, true);
+                return;
+            }
+
+            if (e.key === 'Enter' && e.shiftKey) {
+                if (!notebook.value || activeIndex.value < 0) return;
+                e.preventDefault();
+                const next = Math.min(activeIndex.value + 1, total - 1);
+                if (next !== activeIndex.value) setActiveCell(next);
+            }
         };
 
         const openSettings = () => {
