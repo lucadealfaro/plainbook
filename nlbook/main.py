@@ -78,6 +78,7 @@ def index():
 def get_notebook():
     return dict(
         nb=notebook.get_json(),
+        nb_name=os.path.basename(notebook_path),
     )
     
 @post('/edit_explanation')

@@ -14,6 +14,7 @@ createApp({
 
         // 1. Initialize notebook as null
         const notebook = ref(null);
+        const notebook_name = ref('');
         const loading = ref(true);
         const error = ref(null);
         const activeIndex = ref(-1);
@@ -39,8 +40,7 @@ createApp({
                 
                 const r = await response.json();
                 notebook.value = r.nb;
-                console.log("Fetched notebook:", notebook.value);
-                console.log("Original response:", r);
+                notebook_name.value = r.nb_name;
             } catch (err) {
                 error.value = err.message;
                 console.error("Fetch error:", err);
@@ -330,10 +330,11 @@ createApp({
             window.removeEventListener('keydown', handleKeydown);
         });
 
-        return { notebook, loading, error, sendExplanationToServer, sendCodeToServer, sendMarkdownToServer, activeIndex, 
+        return { notebook, notebook_name, loading, error, sendExplanationToServer, sendCodeToServer, 
+            sendMarkdownToServer, activeIndex, 
             setActiveCell, runCell, running, lastRunIndex, asRead, runAllCells, 
-            interruptKernel, showSettings, openSettings, closeSettings, insertCell, markdownEditKey, explanationEditKey,
-            deleteCell, moveCell };
+            interruptKernel, showSettings, openSettings, closeSettings, insertCell, markdownEditKey, 
+            explanationEditKey, deleteCell, moveCell };
     },
 template: `#app-template`,
 }).mount('#app');

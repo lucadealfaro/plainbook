@@ -52,6 +52,10 @@ pre[class*="language-"] {
   .navbar-item .button {
     padding-left: 0.75rem;
     padding-right: 0.75rem;
+    justify-content: center;
+  }
+  .navbar-item .button .icon {
+    margin: 0 !important;
   }
 }
 
