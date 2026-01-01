@@ -310,6 +310,8 @@ createApp({
             }
         };
 
+        
+
         const handleKeydown = (e) => {
             const total = notebook.value?.cells?.length ?? 0;
             if (total === 0) return;

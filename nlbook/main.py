@@ -206,6 +206,31 @@ def interrupt_kernel():
         return dict(status='success')
     except Exception as e:
         return dict(status='error', message=str(e))
+    
+@post('/generate_code_cell')
+@require_token
+def generate_code_cell():
+    data = request.json
+    cell_index = data.get('cell_index')
+    instructions = data.get('instructions')
+    gemini_api_key = settings.get('gemini_api_key')
+    if not gemini_api_key:
+        return dict(status='error', message='Gemini API key not set.')
+    try:
+        new_code = notebook.generate_code_cell(gemini_api_key, cell_index, instructions)
+        return dict(status='success', new_code=new_code,
+                    last_executed_cell=notebook.last_executed_cell)
+    except Exception as e:
+        return dict(status='error', message=str(e))
+    
+@post('/cancel_ai_request')
+@require_token
+def cancel_ai_request():
+    try:
+        notebook.cancel_ai_request()
+        return dict(status='success')
+    except Exception as e:
+        return dict(status='error', message=str(e))
 
 
 ################################

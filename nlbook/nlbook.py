@@ -9,6 +9,8 @@ from nbclient import NotebookClient
 from nbclient.exceptions import CellExecutionError
 import nbformat
 
+from .gemini import generate_notebook_cell
+
 
 class ExecutionError(Exception):
     """Custom exception for execution errors in LNBook."""
@@ -34,6 +36,8 @@ class NLBook(object):
         self.client.setup_kernel()
         assert self.km.is_alive(), "Kernel failed to start"
         assert self.client is not None, "Notebook client failed to start"
+        # AI request tracker, so we can interrupt if needed.
+        self.ai_request_pending = False
         # Register the cleanup function
         atexit.register(self._shutdown)
 
@@ -109,36 +113,39 @@ class NLBook(object):
     def reset_kernel(self):
         """Resets the kernel."""
         with self._lock:
-            self._heal_client()
-            print("Resetting kernel and creating new client...")
-            # 1. Properly stop and discard the old client
-            if self.kc:
-                try:
-                    self.kc.stop_channels()
-                except Exception:
-                    pass # Already stopped or dead
-            # 2. Shutdown the old kernel process
-            if self.km:
-                self.km.shutdown_kernel(now=True)
-            if hasattr(self.km, 'context') and self.km.context:
-                try:
-                    self.km.context.destroy(linger=0)
-                except Exception:
-                    pass
-            # 3. Initialize a NEW KernelManager
-            self.km = KernelManager()
-            self.km.start_kernel()
-            # 4. OBTAIN A NEW CLIENT INSTANCE
-            # Overwriting self.kc with a fresh object is mandatory here.
-            self.kc = self.km.client()
-            # 5. Start channels on the NEW client (this will NOT error)
-            self.kc.start_channels()
-            # 6. Update the NotebookClient with the new references
-            self.client.km = self.km
-            self.client.kc = self.kc
-            # 7. Re-initialize the internal async state
-            self.client.setup_kernel()
-            self.last_executed_cell = -1
+            self._reset_kernel()
+            
+    def _reset_kernel(self):        
+        self._heal_client()
+        print("Resetting kernel and creating new client...")
+        # 1. Properly stop and discard the old client
+        if self.kc:
+            try:
+                self.kc.stop_channels()
+            except Exception:
+                pass # Already stopped or dead
+        # 2. Shutdown the old kernel process
+        if self.km:
+            self.km.shutdown_kernel(now=True)
+        if hasattr(self.km, 'context') and self.km.context:
+            try:
+                self.km.context.destroy(linger=0)
+            except Exception:
+                pass
+        # 3. Initialize a NEW KernelManager
+        self.km = KernelManager()
+        self.km.start_kernel()
+        # 4. OBTAIN A NEW CLIENT INSTANCE
+        # Overwriting self.kc with a fresh object is mandatory here.
+        self.kc = self.km.client()
+        # 5. Start channels on the NEW client (this will NOT error)
+        self.kc.start_channels()
+        # 6. Update the NotebookClient with the new references
+        self.client.km = self.km
+        self.client.kc = self.kc
+        # 7. Re-initialize the internal async state
+        self.client.setup_kernel()
+        self.last_executed_cell = -1
             
     def interrupt_kernel(self):
         if self.km and self.km.is_alive():
@@ -179,7 +186,9 @@ class NLBook(object):
                 new_cell = nbformat.v4.new_code_cell(source="", execution_count=None, outputs=[])
                 new_cell.metadata['explanation'] = ["Write the explanation here.\n"]
             self.nb.cells.insert(index, new_cell)
-            self.last_executed_cell = min(self.last_executed_cell, index - 1)
+            # Inserting code cells before the last executed cell requires resetting the kernel.
+            if cell_type == 'code' and index <= self.last_executed_cell:
+                self._reset_kernel()
             self._write()
             return new_cell, index
     
@@ -188,31 +197,37 @@ class NLBook(object):
         with self._lock:
             if index < 0 or index >= len(self.nb.cells):
                 raise IndexError("Cell index out of range")
+            cell = self.nb.cells[index]
+            if self.last_executed_cell >= index:
+                if cell.cell_type == 'code':
+                    # Deleting a code cell that has been executed requires a reset.
+                    self._reset_kernel()
+                else:
+                    # Adjust the last executed cell index
+                    self.last_executed_cell -= 1
             del self.nb.cells[index]
-            if self.last_executed_cell > index:
-                self.last_executed_cell -= 1
-            elif self.last_executed_cell == index:
-                self.last_executed_cell = index - 1
             self._write()
 
     def move_cell(self, index, new_index):
         """Move a cell from index to new_index."""
         with self._lock:
             n = len(self.nb.cells)
-            if index < 0 or index >= n:
-                raise IndexError("Cell index out of range")
-            if new_index < 0:
-                new_index = 0
-            if new_index >= n:
-                new_index = n - 1
+            assert 0 <= index < n, "Cell index out of range"
+            assert 0 <= new_index <= n, "New index out of range"            
             cell = self.nb.cells.pop(index)
             self.nb.cells.insert(new_index, cell)
-            if self.last_executed_cell == index:
-                self.last_executed_cell = new_index
-            elif self.last_executed_cell > index and self.last_executed_cell <= new_index:
-                self.last_executed_cell -= 1
-            elif self.last_executed_cell < index and self.last_executed_cell >= new_index:
-                self.last_executed_cell += 1
+            if cell.cell_type == 'code':
+                if self.last_executed_cell >= min(index, new_index):
+                    # Moving a code cell that has been executed may require a reset.
+                    # TODO: More fine-grained logic could be applied here, to check if all 
+                    # intervening cells are non-code.
+                    self._reset_kernel()
+            else:
+                # Adjust the last executed cell index if needed.
+                if self.last_executed_cell >= index:
+                    self.last_executed_cell -= 1
+                if self.last_executed_cell >= new_index:
+                    self.last_executed_cell += 1
             self._write()
             
     # Cell editing methods
@@ -226,7 +241,8 @@ class NLBook(object):
                 # Reset outputs and execution count on code cell edit
                 self.nb.cells[index].outputs = []
                 if index <= self.last_executed_cell:
-                    self.last_executed_cell = index - 1
+                    # We need to restart. 
+                    self._reset_kernel()
             self._write()
 
     def set_cell_explanation(self, index, explanation):
@@ -246,16 +262,50 @@ class NLBook(object):
         cell = self.nb.cells[index]
         if cell.cell_type == 'code':
             explanation = cell.metadata.get('explanation', [])
-            explanation_text = "\n# ".join(explanation) + "\n"
+            explanation = ["# " + line for line in explanation]
+            explanation_text = "\n".join(explanation) + "\n"
             code_text = "\n".join(cell.source)
             return explanation_text + code_text
         elif cell.cell_type == 'markdown':
-            return "\n# ".join(cell.source)
+            return "\n".join(["# " + line for line in cell.source])
+        else:
+            return ""
 
-    def _get_code_for_ai(self):
-        """Returns the concatenated source code of all code cells for context.
-        Needs to be called with the lock held."""
-        pass
+    def _get_code_for_ai(self, index):
+        """Returns the concatenated source code of all previous code cells for context."""
+        previous_code = [self._get_cell_for_ai(i) for i in range(index)]
+        return "\n".join(previous_code)
+        
+    def generate_cell(self, index, api_key):
+        """Generates code for the cell at index using Gemini."""
+        with self._lock:
+            if self.ai_request_pending:
+                raise RuntimeError("An AI request is already pending.")
+            self.ai_request_pending = True
+            assert 0 <= index < len(self.nb.cells)
+            cell = self.nb.cells[index]
+            assert cell.cell_type == 'code'
+            instructions = cell.metadata.get('explanation')
+            previous_code = self._get_code_for_ai(index)
+            # Mark that an AI request is pending
+            try:
+                new_code = generate_notebook_cell(api_key, previous_code, instructions)
+                # If we are still in a request, update the cell.
+                if self.ai_request_pending:
+                    cell.source = new_code
+                    # Reset outputs and execution count
+                    cell.outputs = []
+                    if index <= self.last_executed_cell:
+                        self._reset_kernel()
+                    self._write()
+                    return new_code
+                else:
+                    return None
+            finally:
+                self.ai_request_pending = False
 
-
+    def cancel_ai_request(self):
+        """Cancels any ongoing AI request by interrupting the kernel."""
+        self.ai_request_pending = False
+        
         
