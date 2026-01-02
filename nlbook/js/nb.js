@@ -121,6 +121,25 @@ createApp({
             }
         };
 
+        const generateCode = async (cellIndex) => {
+            asRead.value = false;
+            try {
+                const response = await fetch(`/generate_code?token=${authToken}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ cell_index: cellIndex })
+                });
+                if (!response.ok) throw new Error('Failed to generate code');
+                const r = await response.json();
+                lastRunIndex.value = r.last_executed_cell;
+                if (notebook.value && notebook.value.cells[cellIndex]) {
+                    notebook.value.cells[cellIndex].source = r.code;
+                }
+            } catch (err) {
+                console.error('Generate code error:', err);
+            }
+        };
+
         const setActiveCell = (idx, shouldScroll = false) => { 
             activeIndex.value = idx; 
             if (shouldScroll) {
@@ -133,8 +152,8 @@ createApp({
             }
         };
 
-        const insertCell = async (insertAfter, cellType) => {
-            const position = insertAfter + 1;
+        const insertCell = async (position, cellType) => {
+            asRead.value = false;
             try {
                 const response = await fetch(`/insert_cell?token=${authToken}`, {
                     method: 'POST',
@@ -161,6 +180,7 @@ createApp({
         };
 
         const deleteCell = async (cellIndex) => {
+            asRead.value = false;
             try {
                 const response = await fetch(`/delete_cell?token=${authToken}`, {
                     method: 'POST',
@@ -187,6 +207,7 @@ createApp({
         };
 
         const moveCell = async (cellIndex, direction) => {
+            asRead.value = false;
             const newIndex = cellIndex + direction;
             const total = notebook.value?.cells?.length ?? 0;
             if (newIndex < 0 || newIndex >= total) return;
@@ -218,6 +239,7 @@ createApp({
 
         // Runs cells up to the present one. 
         const runCell = async (cellIndex) => {
+            asRead.value = false;
             if (!running.value) {
                 running.value = true;
                 if (lastRunIndex.value === cellIndex) {
@@ -243,6 +265,7 @@ createApp({
 
         // Runs all cells in the notebook.
         const runAllCells = async () => {
+            asRead.value = false;
             if (!running.value) {
                 running.value = true;
                 for (let i = lastRunIndex.value + 1; i < notebook.value.cells.length && running.value; i++) {
@@ -310,8 +333,6 @@ createApp({
             }
         };
 
-        
-
         const handleKeydown = (e) => {
             const total = notebook.value?.cells?.length ?? 0;
             if (total === 0) return;
@@ -370,7 +391,7 @@ createApp({
         });
 
         return { notebook, notebook_name, loading, error, sendExplanationToServer, sendCodeToServer, 
-            sendMarkdownToServer, activeIndex, reloadNotebook,
+            sendMarkdownToServer, generateCode, activeIndex, reloadNotebook,
             setActiveCell, runCell, running, lastRunIndex, asRead, runAllCells, 
             interruptKernel, showSettings, openSettings, closeSettings, insertCell, markdownEditKey, 
             explanationEditKey, deleteCell, moveCell, geminiApiKey };

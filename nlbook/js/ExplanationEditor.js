@@ -57,8 +57,8 @@ const ExplanationRenderer = {
             isEditing.value = false;
         };
 
-        const handleRedo = () => {
-            emit('redo');
+        const generateCode = () => {
+            emit('gencode');
         };
 
         const runCell = () => {
@@ -66,7 +66,7 @@ const ExplanationRenderer = {
         }
 
         return { isEditing, localSource, rendered, enterEditMode, saveChanges, cancelEdit, textareaEl, autoResize, 
-            handleRedo, runCell };
+            generateCode, runCell };
     },
     template: /* html */ `
         <div class="explanation-container pt-3 pl-4 pr-4 pb-1">
@@ -89,7 +89,7 @@ const ExplanationRenderer = {
                 <button class="button is-small is-info" @click="enterEditMode">
                     Edit
                 </button>
-                <button class="button is-small is-warning" @click="handleRedo">
+                <button class="button is-small is-warning" @click="generateCode">
                     <span class="icon"><i class="fa fa-repeat"></i></span> <span>Regenerate Code</span>
                 </button>
                 <button v-if="index === lastRunIndex" class="button is-small is-primary" @click="runCell">

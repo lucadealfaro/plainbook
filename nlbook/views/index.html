@@ -89,8 +89,8 @@
                 </div>
                 <div v-for="(cell, index) in notebook.cells" :key="index">
                     <div v-if="activeIndex === index" class="py-1" style="display:flex; justify-content:center; gap:0.5rem;">
-                        <button class="button insert-cell is-success is-small py-0 px-3" @click.stop="insertCell(index - 1, 'markdown')">Insert Comment</button>
-                        <button class="button insert-cell is-success is-small py-0 px-3" @click.stop="insertCell(index - 1, 'code')">Insert Action</button>
+                        <button class="button insert-cell is-success is-small py-0 px-3" @click.stop="insertCell(index, 'markdown')">Insert Comment</button>
+                        <button class="button insert-cell is-success is-small py-0 px-3" @click.stop="insertCell(index, 'code')">Insert Action</button>
                     </div>
 
                     <div class="notebook-cell box p-0 mb-2 is-clipped shadow-sm"
@@ -114,7 +114,7 @@
                                                     :index="index" :asRead="asRead" :lastRunIndex="lastRunIndex"
                                                     :start-edit-key="explanationEditKey[index]"
                                 @save="(content) => sendExplanationToServer(content, index)" 
-                                @redo="() => sendRedoToServer(index)" 
+                                @gencode="() => generateCode(index)" 
                                 @run="() => runCell(index)"
                                 @delete="deleteCell(index)"
                                 @moveUp="moveCell(index, -1)"
@@ -129,8 +129,8 @@
                     </div>
 
                     <div v-if="activeIndex === index" class="pb-1" style="display:flex; justify-content:center; gap:0.5rem;">
-                        <button class="button insert-cell is-success is-small py-0 px-3" @click.stop="insertCell(index, 'markdown')">Insert Comment</button>
-                        <button class="button insert-cell is-success is-small py-0 px-3" @click.stop="insertCell(index, 'code')">Insert Action</button>
+                        <button class="button insert-cell is-success is-small py-0 px-3" @click.stop="insertCell(index + 1, 'markdown')">Insert Comment</button>
+                        <button class="button insert-cell is-success is-small py-0 px-3" @click.stop="insertCell(index + 1, 'code')">Insert Action</button>
                     </div>
                 </div>
             </div>

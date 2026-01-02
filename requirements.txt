@@ -1,6 +1,6 @@
 bottle
 cherrypy
-google-generativeai
+google-genai
 ipykernel
 jupyter_client
 nbclient

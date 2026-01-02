@@ -9,7 +9,7 @@ from nbclient import NotebookClient
 from nbclient.exceptions import CellExecutionError
 import nbformat
 
-from .gemini import generate_notebook_cell
+from .gemini import gemini_generate_code
 
 
 class ExecutionError(Exception):
@@ -42,19 +42,30 @@ class NLBook(object):
         atexit.register(self._shutdown)
 
     def load_notebook(self):
-        """Loads the notebook from the specified path."""
-        with open(self.path) as f:
-            self.nb = nbformat.read(f, as_version=4)
-            # DEBUG: Adds explanations to each code cell.
-            for cell in self.nb.cells:
-                if cell.cell_type == 'code':
-                    explanation = [
-                        "This cell does something interesting.\n",
-                        " * It is nice to look at\n",
-                        " * It might be even interesting to understand\n",
-                    ]
-                    cell.metadata['explanation'] = explanation
-            self.last_executed_cell = self.nb.metadata.get('last_executed_cell', -1)
+        """Loads the notebook from the specified path. If the file is missing, create an empty notebook."""
+        try:
+            with open(self.path) as f:
+                self.nb = nbformat.read(f, as_version=4)
+        except (FileNotFoundError, OSError):
+            # Ensure parent directory exists
+            parent = os.path.dirname(self.path) or "."
+            os.makedirs(parent, exist_ok=True)
+            # Create an empty notebook and persist it
+            self.nb = nbformat.v4.new_notebook()
+            self.nb.cells = []
+            self.nb.metadata = {}
+            with open(self.path, "w") as f:
+                nbformat.write(self.nb, f)
+        # # DEBUG: Adds explanations to each code cell.
+        # for cell in self.nb.cells:
+        #     if cell.cell_type == 'code':
+        #         explanation = [
+        #             "This cell does something interesting.\n",
+        #             " * It is nice to look at\n",
+        #             " * It might be even interesting to understand\n",
+        #         ]
+        #         cell.metadata['explanation'] = explanation
+        self.last_executed_cell = self.nb.metadata.get('last_executed_cell', -1)
                     
     def _write(self):
         self.nb.metadata['last_executed_cell'] = self.last_executed_cell
@@ -276,7 +287,7 @@ class NLBook(object):
         previous_code = [self._get_cell_for_ai(i) for i in range(index)]
         return "\n".join(previous_code)
         
-    def generate_cell(self, index, api_key):
+    def generate_code_cell(self, api_key, index):
         """Generates code for the cell at index using Gemini."""
         with self._lock:
             if self.ai_request_pending:
@@ -289,7 +300,7 @@ class NLBook(object):
             previous_code = self._get_code_for_ai(index)
             # Mark that an AI request is pending
             try:
-                new_code = generate_notebook_cell(api_key, previous_code, instructions)
+                new_code = gemini_generate_code(api_key, previous_code, instructions)
                 # If we are still in a request, update the cell.
                 if self.ai_request_pending:
                     cell.source = new_code
@@ -307,5 +318,4 @@ class NLBook(object):
     def cancel_ai_request(self):
         """Cancels any ongoing AI request by interrupting the kernel."""
         self.ai_request_pending = False
-        
-        
+

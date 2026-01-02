@@ -50,8 +50,6 @@ args = parser.parse_args()
 AUTH_TOKEN = "secret" if args.debug else secrets.token_hex(32)
                     
 notebook_path = os.path.abspath(args.notebook)
-if args.debug:
-    notebook_path = os.path.join(TEST_INPUTS, 'sample_notebook.ipynb')
     
 notebook = NLBook(notebook_path)
 assert notebook.kc is not None
@@ -207,18 +205,18 @@ def interrupt_kernel():
     except Exception as e:
         return dict(status='error', message=str(e))
     
-@post('/generate_code_cell')
+@post('/generate_code')
 @require_token
 def generate_code_cell():
     data = request.json
     cell_index = data.get('cell_index')
-    instructions = data.get('instructions')
     gemini_api_key = settings.get('gemini_api_key')
     if not gemini_api_key:
         return dict(status='error', message='Gemini API key not set.')
     try:
-        new_code = notebook.generate_code_cell(gemini_api_key, cell_index, instructions)
-        return dict(status='success', new_code=new_code,
+        new_code = notebook.generate_code_cell(gemini_api_key, cell_index)
+        return dict(status='success', 
+                    code=new_code,
                     last_executed_cell=notebook.last_executed_cell)
     except Exception as e:
         return dict(status='error', message=str(e))
