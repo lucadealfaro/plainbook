@@ -386,14 +386,22 @@ createApp({
             showSettings.value = false;
         };
 
-        // 3. Trigger the fetch when the component is mounted
+        const handleClickOutside = (event) => {
+            const container = document.querySelector('.notebook-container');
+            if (container && !container.contains(event.target)) {
+                activeIndex.value = -1;
+            }
+        };
+
         onMounted(() => {
             fetchNotebook();
             window.addEventListener('keydown', handleKeydown);
+            window.addEventListener('click', handleClickOutside);
         });
 
         onBeforeUnmount(() => {
             window.removeEventListener('keydown', handleKeydown);
+            window.removeEventListener('click', handleClickOutside);
         });
 
         return { notebook, notebook_name, loading, error, sendExplanationToServer, sendCodeToServer, 
