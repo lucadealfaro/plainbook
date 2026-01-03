@@ -7,6 +7,7 @@ export default {
         const isCollapsed = ref(false);
         const isEditing = ref(false);
         const localSource = ref(Array.isArray(props.source) ? props.source.join('') : props.source);
+        const originalSource = ref(localSource.value);
         const textareaEl = ref(null);
 
         watch(() => props.isActive, (newVal) => {
@@ -51,12 +52,18 @@ export default {
             emit('save', localSource.value);
         };
 
+        const cancelEdit = () => {
+            localSource.value = originalSource.value;
+            isEditing.value = false;
+        };
+
+
         const toggleCollapse = () => {
             isCollapsed.value = !isCollapsed.value;
             if (!isCollapsed.value && isEditing.value) nextTick(autoResize);
         };
 
-        return { isCollapsed, toggleCollapse, isEditing, localSource, highlightedCode, enterEditMode, saveCode, textareaEl, autoResize };
+        return { isCollapsed, toggleCollapse, isEditing, cancelEdit, localSource, highlightedCode, enterEditMode, saveCode, textareaEl, autoResize };
     },
     template: /* html */ `
         <div class="code-cell-wrapper" style="position: relative; min-height: 1.75rem; border-bottom: 1px solid #e0e0e0;">
@@ -82,6 +89,9 @@ export default {
                         @input="autoResize"
                         @keydown.enter.shift.prevent="saveCode">
                     </textarea>
+                    <button class="button is-small" @click="cancelEdit">
+                        Cancel
+                    </button>
                     <button class="button is-small is-primary" @click="saveCode">
                         Save
                     </button>
