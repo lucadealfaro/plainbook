@@ -19,6 +19,32 @@
       /* Add scroll margin to cells so they don't hide under the navbar when scrolling */
       .notebook-cell {
         scroll-margin-top: 1rem;
+      }
+      
+      /* Insert cell button hover zone */
+      .cell-insert-zone {
+        position: relative;
+        height: 16px;
+        margin: 4px 0;
+      }
+      
+      .cell-insert-buttons {
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        transform: translate(-50%, -50%);
+        display: flex;
+        gap: 0.5rem;
+        z-index: 10;
+        white-space: nowrap;
+        opacity: 0;
+        transition: opacity 0.2s;
+        pointer-events: none;
+      }
+      
+      .cell-insert-zone:hover .cell-insert-buttons {
+        opacity: 1;
+        pointer-events: auto;
       }    </style>
   </head>
   <body class="has-navbar-fixed-top">
@@ -87,10 +113,13 @@
                     <button class="button insert-cell is-success is-small py-0 px-3" @click.stop="insertCell(0, 'markdown')">Insert Comment</button>
                     <button class="button insert-cell is-success is-small py-0 px-3" @click.stop="insertCell(0, 'code')">Insert Action</button>
                 </div>
-                <div v-for="(cell, index) in notebook.cells" :key="index">
-                    <div v-if="activeIndex === index" class="py-1" style="display:flex; justify-content:center; gap:0.5rem;">
-                        <button class="button insert-cell is-success is-small py-0 px-3" @click.stop="insertCell(index, 'markdown')">Insert Comment</button>
-                        <button class="button insert-cell is-success is-small py-0 px-3" @click.stop="insertCell(index, 'code')">Insert Action</button>
+                <template v-for="(cell, index) in notebook.cells" :key="index">
+                    <!-- Insert zone before each cell -->
+                    <div class="cell-insert-zone">
+                        <div class="cell-insert-buttons">
+                            <button class="button insert-cell is-success is-small py-0 px-3" @click.stop="insertCell(index, 'markdown')">Insert Comment</button>
+                            <button class="button insert-cell is-success is-small py-0 px-3" @click.stop="insertCell(index, 'code')">Insert Action</button>
+                        </div>
                     </div>
 
                     <div class="notebook-cell box p-0 mb-2 is-clipped shadow-sm"
@@ -132,10 +161,13 @@
                             </div>
                         </div>
                     </div>
-
-                    <div v-if="activeIndex === index" class="pb-1" style="display:flex; justify-content:center; gap:0.5rem;">
-                        <button class="button insert-cell is-success is-small py-0 px-3" @click.stop="insertCell(index + 1, 'markdown')">Insert Comment</button>
-                        <button class="button insert-cell is-success is-small py-0 px-3" @click.stop="insertCell(index + 1, 'code')">Insert Action</button>
+                </template>
+                
+                <!-- Insert zone after the last cell -->
+                <div v-if="notebook.cells.length > 0" class="cell-insert-zone">
+                    <div class="cell-insert-buttons">
+                        <button class="button insert-cell is-success is-small py-0 px-3" @click.stop="insertCell(notebook.cells.length, 'markdown')">Insert Comment</button>
+                        <button class="button insert-cell is-success is-small py-0 px-3" @click.stop="insertCell(notebook.cells.length, 'code')">Insert Action</button>
                     </div>
                 </div>
             </div>
