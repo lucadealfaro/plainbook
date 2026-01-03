@@ -34,6 +34,7 @@ const ExplanationRenderer = {
             nextTick(autoResize);
         });
 
+
         const enterEditMode = () => {
             originalSource.value = localSource.value;
             isEditing.value = true;
@@ -45,6 +46,17 @@ const ExplanationRenderer = {
 
         watch(() => props.startEditKey, () => {
             enterEditMode();
+        });
+
+        // ExplanationEditor.js - setup function
+        watch(() => props.startEditKey, (newVal) => {
+            if (newVal !== undefined) {
+                enterEditMode();
+                // Force focus after autoResize
+                nextTick(() => {
+                    if (textareaEl.value) textareaEl.value.focus();
+                });
+            }
         });
 
         const saveChanges = () => {

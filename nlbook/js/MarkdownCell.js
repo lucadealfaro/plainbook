@@ -1,13 +1,16 @@
 import { ref, watch, nextTick } from './vue.esm-browser.js';
 
 const MarkdownCell = {
-    props: ['source', 'startEditKey', 'isActive'],
+    props: ['source', 'startEditKey', 'isActive', 'index'],
     emits: ['save', 'delete', 'moveUp', 'moveDown'],
     setup(props, { emit }) {
         const md = new markdownit({ html: true });
         const localSource = ref(Array.isArray(props.source) ? props.source.join('') : props.source || '');
-        const isEditing = ref(false);
+        const originalSource = ref(localSource.value);
         const textareaEl = ref(null);
+
+        // Create a local editing state instead of using props.isEditing
+        const isEditing = ref(false);
 
         const renderContent = () => md.render(localSource.value);
         const rendered = ref(renderContent());
@@ -15,21 +18,22 @@ const MarkdownCell = {
         const refresh = () => {
             rendered.value = renderContent();
         };
-
+        
         watch(() => props.source, (val) => {
             localSource.value = Array.isArray(val) ? val.join('') : val || '';
             refresh();
         });
 
+        // Watch for the "bump" signal from the parent
         watch(() => props.startEditKey, () => {
-            isEditing.value = true;
+            isEditing.value = true; // Use local ref
             nextTick(() => { 
                 autoResize();
                 if (textareaEl.value) textareaEl.value.focus(); 
-            });
-        });
+            });    
+        });    
 
-        watch(isEditing, (newVal) => {
+        watch(() => props.isEditing, (newVal) => {
             if (newVal) {
                 nextTick(() => {
                     autoResize();
@@ -49,14 +53,32 @@ const MarkdownCell = {
             el.style.height = `${Math.max(el.scrollHeight, minHeight)}px`;
         };
 
+        const enterEditMode = () => {
+            originalSource.value = localSource.value;
+            isEditing.value = true;
+            nextTick(() => {
+                autoResize();
+                if (textareaEl.value) {
+                    textareaEl.value.focus();
+                    textareaEl.value.scrollTop = 0;
+                }   
+            });
+        };
+
+        const cancelEdit = () => {
+            localSource.value = originalSource.value;
+            isEditing.value = false;
+        };
+
         const save = () => {
             isEditing.value = false;
             emit('save', localSource.value);
             refresh();
         };
 
-        return { localSource, rendered, isEditing, textareaEl, save, autoResize };
+        return { localSource, rendered, textareaEl, enterEditMode, cancelEdit, save, autoResize, isEditing: isEditing };
     },
+
     template: /* html */ `
         <div class="markdown-body content" style="position: relative; min-height: 2.5rem;">
             <div class="p-2" v-if="!isEditing" v-html="rendered"></div>
@@ -66,7 +88,7 @@ const MarkdownCell = {
                  class="explanation-toolbar has-background-grey-lighter pl-3 pr-3"
                  style="display: flex; align-items: center; justify-content: flex-end; gap: 0.5rem;">
                 <div class="toolbar-right" style="display: flex; gap: 0.25rem;">
-                    <button class="button is-small is-info" @click.stop="isEditing = true">
+                    <button class="button is-small is-info" @click="enterEditMode">
                         Edit
                     </button>
                     <button class="button is-small is-success py-1 " title="Move Up" aria-label="Move Up" @click.stop="$emit('moveUp')"><span class="icon"><i class="fa fa-arrow-up"></i></span></button>
@@ -78,15 +100,15 @@ const MarkdownCell = {
             <div v-if="isEditing" class="p-2">
                 <textarea
                     ref="textareaEl"
-                    class="textarea is-family-monospace is-size-6 p-2"
                     v-model="localSource"
                     placeholder="Write a comment or explanation. You can use markdown."
+                    class="textarea is-family-monospace is-size-6 p-2"
                     rows="1"
                     style="overflow: hidden; resize: none; height: 0;"
                     @input="autoResize"
                 ></textarea>
                 <div class="mt-2" style="display: flex; justify-content: flex-end; gap: 0.5rem;">
-                    <button class="button is-small" @click="isEditing = false">Cancel</button>
+                    <button class="button is-small" @click="cancelEdit">Cancel</button>
                     <button class="button is-small is-primary" @click="save">Save</button>
                 </div>
             </div>
