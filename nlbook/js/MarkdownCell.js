@@ -1,4 +1,3 @@
-
 import { ref, watch, nextTick } from './vue.esm-browser.js';
 
 const MarkdownCell = {
@@ -59,20 +58,29 @@ const MarkdownCell = {
         return { localSource, rendered, isEditing, textareaEl, save, autoResize };
     },
     template: /* html */ `
-        <div class="markdown-body content p-2" style="position: relative; min-height: 2.5rem;">
-            <div v-if="!isEditing" v-html="rendered"></div>
-            <div v-if="!isEditing && isActive" 
-                 style="position: absolute; bottom: 0.1rem; right: 0.5rem; background: rgba(255, 255, 255, 0.85); display:flex; gap: 0.25rem; border-radius: 4px; padding: 0.25rem;">
-                <button class="button is-small is-info py-1 " @click.stop="isEditing = true">Edit</button>
-                <button class="button is-small is-success py-1 " title="Move Up" aria-label="Move Up" @click.stop="$emit('moveUp')"><span class="icon"><i class="fa fa-arrow-up"></i></span></button>
-                <button class="button is-small is-success py-1 " title="Move Down" aria-label="Move Down" @click.stop="$emit('moveDown')"><span class="icon"><i class="fa fa-arrow-down"></i></span></button>
-                <button class="button is-small is-danger py-1 " title="Delete" aria-label="Delete" @click.stop="$emit('delete')"><span class="icon"><i class="fa fa-trash"></i></span></button>
+        <div class="markdown-body content" style="position: relative; min-height: 2.5rem;">
+            <div class="p-2" v-if="!isEditing" v-html="rendered"></div>
+
+            <!-- bottom toolbar -->
+            <div v-if="!isEditing && isActive"
+                 class="explanation-toolbar has-background-grey-lighter pl-3 pr-3"
+                 style="display: flex; align-items: center; justify-content: flex-end; gap: 0.5rem;">
+                <div class="toolbar-right" style="display: flex; gap: 0.25rem;">
+                    <button class="button is-small is-info" @click.stop="isEditing = true">
+                        Edit
+                    </button>
+                    <button class="button is-small is-success py-1 " title="Move Up" aria-label="Move Up" @click.stop="$emit('moveUp')"><span class="icon"><i class="fa fa-arrow-up"></i></span></button>
+                    <button class="button is-small is-success py-1 " title="Move Down" aria-label="Move Down" @click.stop="$emit('moveDown')"><span class="icon"><i class="fa fa-arrow-down"></i></span></button>
+                    <button class="button is-small is-danger py-1 " title="Delete" aria-label="Delete" @click.stop="$emit('delete')"><span class="icon"><i class="fa fa-trash"></i></span></button>
+                </div>
             </div>
-            <div v-if="isEditing">
+
+            <div v-if="isEditing" class="p-2">
                 <textarea
                     ref="textareaEl"
-                    class="textarea is-family-monospace is-size-6"
+                    class="textarea is-family-monospace is-size-6 p-2"
                     v-model="localSource"
+                    placeholder="Write a comment or explanation. You can use markdown."
                     rows="1"
                     style="overflow: hidden; resize: none; height: 0;"
                     @input="autoResize"

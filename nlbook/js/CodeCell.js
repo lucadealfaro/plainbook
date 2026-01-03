@@ -74,6 +74,7 @@ export default {
                 <div v-else class="p-2">
                     <textarea 
                         ref="textareaEl"
+                        placeholder="Write the code for this action..."
                         v-model="localSource" 
                         class="textarea is-family-monospace mb-2" 
                         rows="1"

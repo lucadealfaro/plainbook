@@ -111,6 +111,7 @@ const ExplanationRenderer = {
             <textarea 
                 ref="textareaEl"
                 v-model="localSource" 
+                placeholder="Explain what should be done in this cell..."
                 class="textarea is-family-monospace mb-2" 
                 rows="1"
                 style="overflow: hidden; resize: none; height: 0;"

@@ -27,7 +27,7 @@ PARENT_FOLDER = app_path.parent
 TEST_INPUTS = os.path.join(PARENT_FOLDER, "tests/files")
 
 # Configuration file, the 'Good Citizen' way
-APP_NAME = "myapp"
+APP_NAME = "nlbook"
 CONFIG_DIR = Path.home() / ".config" / APP_NAME
 CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 SETTINGS_FILE = CONFIG_DIR / "settings.yaml"

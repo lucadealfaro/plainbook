@@ -195,7 +195,7 @@ class NLBook(object):
                 new_cell = nbformat.v4.new_markdown_cell(source="")
             else:
                 new_cell = nbformat.v4.new_code_cell(source="", execution_count=None, outputs=[])
-                new_cell.metadata['explanation'] = ["Write the explanation here.\n"]
+                new_cell.metadata['explanation'] = []
             self.nb.cells.insert(index, new_cell)
             # Inserting code cells before the last executed cell requires resetting the kernel.
             if cell_type == 'code' and index <= self.last_executed_cell:
