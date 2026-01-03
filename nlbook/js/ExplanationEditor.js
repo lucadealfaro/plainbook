@@ -2,7 +2,7 @@ import { ref, computed, watch, nextTick } from './vue.esm-browser.js';
 
 const ExplanationRenderer = {
     props: ['source', 'isActive', 'index', 'lastRunIndex', 'asRead', 'startEditKey'],
-    emits: ['update:source', 'save', 'redo', 'run', 'delete', 'moveUp', 'moveDown'],
+    emits: ['update:source', 'save', 'gencode', 'run', 'delete', 'moveUp', 'moveDown'],
     setup(props, { emit }) {
         const isEditing = ref(false);
         const localSource = ref(Array.isArray(props.source) ? props.source.join('') : props.source);
