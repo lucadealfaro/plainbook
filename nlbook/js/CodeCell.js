@@ -1,4 +1,4 @@
-import { ref, watch, nextTick } from './vue.esm-browser.js';
+import { ref, computed, watch, nextTick } from './vue.esm-browser.js';
 
 export default {
     props: ['source', 'executionCount', 'isActive'],
@@ -31,12 +31,68 @@ export default {
             el.style.height = `${el.scrollHeight}px`;
         };
        
-        const highlightedCode = () => {
-            return window.Prism.highlight(
-                localSource.value, 
-                window.Prism.languages.python, 
-                'python'
-            );
+        const highlightedCode = computed(() => {
+            const code = localSource.value || '';
+            if (!window.Prism || !window.Prism.languages || !window.Prism.languages.python) {
+                // HTML escape if Prism not available
+                return code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            }
+            try {
+                const highlighted = window.Prism.highlight(
+                    code, 
+                    window.Prism.languages.python, 
+                    'python'
+                );
+                return highlighted;
+            } catch (e) {
+                console.error('Prism highlighting error:', e);
+                // HTML escape on error
+                return code.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+            }
+        });
+
+        const handleTabKey = (e) => {
+            if (e.key === 'Tab') {
+                e.preventDefault();
+                const textarea = textareaEl.value;
+                if (!textarea) return;
+                
+                const start = textarea.selectionStart;
+                const end = textarea.selectionEnd;
+                const text = localSource.value;
+                const spaces = '    '; // 4 spaces
+                
+                if (start === end) {
+                    // No selection - just insert 4 spaces
+                    localSource.value = text.substring(0, start) + spaces + text.substring(end);
+                    nextTick(() => {
+                        textarea.selectionStart = textarea.selectionEnd = start + spaces.length;
+                        autoResize();
+                    });
+                } else {
+                    // Selection - indent all selected lines
+                    const lines = text.split('\n');
+                    const startLine = text.substring(0, start).split('\n').length - 1;
+                    const endLine = text.substring(0, end).split('\n').length - 1;
+                    
+                    for (let i = startLine; i <= endLine; i++) {
+                        if (lines[i] !== undefined) {
+                            lines[i] = spaces + lines[i];
+                        }
+                    }
+                    
+                    const newText = lines.join('\n');
+                    localSource.value = newText;
+                    
+                    nextTick(() => {
+                        const newStart = start + spaces.length;
+                        const newEnd = end + (endLine - startLine + 1) * spaces.length;
+                        textarea.selectionStart = newStart;
+                        textarea.selectionEnd = newEnd;
+                        autoResize();
+                    });
+                }
+            }
         };
 
         const enterEditMode = () => {
@@ -63,7 +119,7 @@ export default {
             if (!isCollapsed.value && isEditing.value) nextTick(autoResize);
         };
 
-        return { isCollapsed, toggleCollapse, isEditing, cancelEdit, localSource, highlightedCode, enterEditMode, saveCode, textareaEl, autoResize };
+        return { isCollapsed, toggleCollapse, isEditing, cancelEdit, localSource, highlightedCode, enterEditMode, saveCode, textareaEl, autoResize, handleTabKey };
     },
     template: /* html */ `
         <div class="code-cell-wrapper" style="position: relative; min-height: 1.75rem;">
@@ -75,7 +131,7 @@ export default {
 
             <div v-if="!isCollapsed" style="padding-left: 2.25rem;">
                 <div v-if="!isEditing" class="p-2 overflow-x-auto" @dblclick="enterEditMode">
-                    <pre class="language-python"><code v-html="highlightedCode()"></code></pre>
+                    <pre class="language-python"><code class="language-python" v-html="highlightedCode"></code></pre>
                 </div>
 
                 <div v-else class="p-2">
@@ -87,6 +143,7 @@ export default {
                         rows="1"
                         style="overflow: hidden; resize: none; height: 0;"
                         @input="autoResize"
+                        @keydown.tab.prevent="handleTabKey"
                         @keydown.enter.shift.prevent="saveCode">
                     </textarea>
                     <div style="display: flex; justify-content: flex-end; gap: 0.5rem;">
