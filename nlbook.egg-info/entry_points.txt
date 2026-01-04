@@ -1,0 +1,2 @@
+[console_scripts]
+nlbook = nlbook.main:main
