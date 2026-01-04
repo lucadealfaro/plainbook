@@ -269,6 +269,12 @@ createApp({
             }
         };
 
+        const saveExplanationAndRun = async (content, cellIndex) => {
+            await sendExplanationToServer(content, cellIndex);
+            await generateCode(cellIndex);
+            await runCell(cellIndex);
+        };
+
         // Runs all cells in the notebook.
         const runAllCells = async () => {
             asRead.value = false;
@@ -407,7 +413,8 @@ createApp({
             window.removeEventListener('click', handleClickOutside);
         });
 
-        return { notebook, notebook_name, loading, error, sendExplanationToServer, sendCodeToServer, 
+        return { notebook, notebook_name, loading, error, sendExplanationToServer, 
+            sendCodeToServer, saveExplanationAndRun,
             sendMarkdownToServer, generateCode, activeIndex, reloadNotebook,
             setActiveCell, runCell, running, lastRunIndex, asRead, runAllCells, 
             interruptKernel, showSettings, openSettings, closeSettings, insertCell, markdownEditKey, 

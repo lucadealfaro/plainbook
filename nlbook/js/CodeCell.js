@@ -4,7 +4,7 @@ export default {
     props: ['source', 'executionCount', 'isActive'],
     emits: ['save', 'update:source'],
     setup(props, { emit }) {
-        const isCollapsed = ref(false);
+        const isCollapsed = ref(true);
         const isEditing = ref(false);
         const localSource = ref(Array.isArray(props.source) ? props.source.join('') : props.source);
         const originalSource = ref(localSource.value);
