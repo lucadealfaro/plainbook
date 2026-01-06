@@ -93,7 +93,7 @@ const ExplanationRenderer = {
         </div>
         <div v-if="!isEditing && isActive"
                 class="explanation-toolbar has-background-grey-lighter pl-3 pr-3"
-                style="display: flex; align-items: center; justify-content: space-between; gap: 0.5rem">
+                style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem">
             <div class="toolbar-left">
                 <button class="button run-button is-small is-primary mr-1" @click.stop="runCell">
                     <template v-if="lastRunIndex === index">
@@ -112,7 +112,7 @@ const ExplanationRenderer = {
                     <span v-else>Up to date</span>
                 </button>
             </div>
-            <div class="toolbar-right" style="display: flex; gap: 0.25rem;">
+            <div class="toolbar-right" style="display: flex; flex-wrap: wrap; gap: 0.25rem;">
                 <button class="button is-small is-info" @click.stop="enterEditMode">
                     Edit
                 </button>
@@ -161,4 +161,3 @@ const ExplanationRenderer = {
 };
 
 export default ExplanationRenderer;
-
