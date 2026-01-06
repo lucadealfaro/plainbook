@@ -28,6 +28,8 @@ For a list of command-lien options, do:
 nlbook --help
 ```
 
+If you want to be able to generate or check code from explanations, you need to add a Gemini API key in the settings (click on the gear icon in the top-right corner of the web interface).
+
 ## Development
 
 Run with: 
