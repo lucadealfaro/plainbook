@@ -123,12 +123,14 @@ const ExplanationRenderer = {
                     <span class="icon"><i class="fa fa-arrow-down"></i></span>
                 </button>
                 <button class="button is-small is-success" @click.stop="generateCode">
-                <span class="icon"><i class="fa fa-repeat"></i></span> <span>Regenerate Code</span>
+                    <span class="icon"><i class="fa fa-repeat"></i></span> <span>Regenerate Code</span>
                 </button>
                 <button class="button is-small is-success" @click.stop="validateCode">
-                <span class="icon"><i class="fa fa-check"></i></span> <span>Validate Code</span>
+                    <span class="icon"><i class="fa fa-check"></i></span> <span>Validate Code</span>
                 </button>
-                <button class="button is-small is-danger py-1 " title="Delete" aria-label="Delete" @click.stop="$emit('delete')"><span class="icon"><i class="fa fa-trash"></i></span></button>
+                <button class="button is-small is-danger py-1 " title="Delete" aria-label="Delete" @click.stop="$emit('delete')">
+                    <span class="icon"><i class="fa fa-trash"></i></span>
+                </button>
             </div>
         </div>
 
