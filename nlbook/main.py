@@ -223,6 +223,22 @@ def generate_code_cell():
     except Exception as e:
         return dict(status='error', message=str(e))
     
+@post('/validate_code')
+@require_token
+def validate_code_cell():
+    data = request.json
+    cell_index = data.get('cell_index')
+    gemini_api_key = settings.get('gemini_api_key')
+    if not gemini_api_key:
+        return dict(status='error', message='Gemini API key not set.')
+    try:
+        validation_result = notebook.validate_code_cell(gemini_api_key, cell_index)
+        return dict(status='success', 
+                    validation=validation_result,
+                    last_executed_cell=notebook.last_executed_cell)
+    except Exception as e:
+        return dict(status='error', message=str(e))
+    
 @post('/cancel_ai_request')
 @require_token
 def cancel_ai_request():

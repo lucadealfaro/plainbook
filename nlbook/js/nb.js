@@ -22,6 +22,7 @@ createApp({
         const activeIndex = ref(-1);
         const markdownEditKey = ref({});
         const explanationEditKey = ref({});
+        const isLocked = ref(false);
 
         // Configure global error handler
         const app = getCurrentInstance().appContext.app;
@@ -53,9 +54,10 @@ createApp({
                 notebook_name.value = r.nb_name;
                 lastRunIndex.value = r.last_executed_cell || -1;
                 geminiApiKey.value = r.gemini_api_key || '';
+                isLocked.value = r.nb?.metadata?.is_locked || false;
             } catch (err) {
                 error.value = err.message;
-                console.error("Fetch error:", err);
+                throw new Error("Error in loading notebook: " + err.message);
             } finally {
                 loading.value = false;
                 asRead.value = true;
@@ -164,6 +166,43 @@ createApp({
         const regenerateAndRunAllCode = async () => {
             await regenerateAllCode();
             await runAllCells();
+        };
+
+        const validateCode = async (cellIndex) => {
+            asRead.value = false;
+            try {
+                const response = await fetch(`/validate_code?token=${authToken}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ cell_index: cellIndex })
+                });
+                if (!response.ok) throw new Error('Failed to validate code for cell:' + cellIndex);
+                const r = await response.json();
+                if (notebook.value && notebook.value.cells[cellIndex]) {
+                    notebook.value.cells[cellIndex].validation = r.validation;
+                    console.log('Code validation received for cell:', cellIndex, r.validation);
+                }
+            } catch (err) {
+                throw new Error('Failed to validate code: ' + err.message);
+            }
+        };
+
+        const dismissValidation = async (cellIndex) => {
+            try {
+                const response = await fetch(`/dismiss_validation?token=${authToken}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    
+                    body: JSON.stringify({ cell_index: cellIndex })
+                });
+                if (!response.ok) throw new Error('Failed to dismiss validation');
+                console.log('Validation dismissed:', cellIndex);
+                if (notebook.value && notebook.value.cells[cellIndex]) {
+                    notebook.value.cells[cellIndex].validation.is_hidden = true;
+                }
+            } catch (err) {
+                throw new Error('Failed to dismiss validation: ' + err.message);
+            }
         };
 
         const setActiveCell = (idx, shouldScroll = false) => { 
@@ -452,10 +491,11 @@ createApp({
             window.removeEventListener('click', handleClickOutside);
         });
 
-        return { notebook, notebook_name, loading, error, sendExplanationToServer, 
+        return { notebook, notebook_name, loading, error, isLocked, sendExplanationToServer, 
             sendCodeToServer, saveExplanationAndRun,
             sendMarkdownToServer, generateCode, activeIndex, reloadNotebook,
             regenerateAllCode, regenerateAndRunAllCode,
+            validateCode, dismissValidation, 
             setActiveCell, runCell, running, lastRunIndex, asRead, runAllCells, 
             interruptKernel, insertCell, markdownEditKey, 
             openSettings, closeSettings, showSettings, 

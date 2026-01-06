@@ -40,3 +40,40 @@ def gemini_generate_code(api_key, previous_code, instructions):
 
 # Usage
 # new_code = generate_notebook_cell(api_key, previous_code, "Plot a sine wave with numpy")
+
+
+def gemini_validate_code(api_key, previous_code, code_to_validate, instructions):
+    client = genai.Client(api_key=api_key)
+    
+    prompt = f"""
+    CONTEXT (Existing Notebook Code):
+    {previous_code}
+
+    CODE TO VALIDATE:
+    {code_to_validate}
+
+    INSTRUCTIONS for Validation:
+    {instructions}
+    
+    Validation Result:
+    """
+
+    response = client.models.generate_content(
+        model="gemini-2.0-flash", 
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            system_instruction="You are an assistant that validates Python code for Jupyter cells. "
+                               "Your task is to check whether the provided code meets the given instructions. "
+                               "The code of the previous cells is also included as context. "
+                               "You should return the words YES (if the code meets the instructions) or NO (if it does not), "
+                               "followed by a brief explanation."
+        )   
+    )
+    r = response.text.strip()
+    if r.upper().startswith("YES"):
+        validation_result = dict(valid=True, message=r[3:].strip())
+    elif r.upper().startswith("NO"):
+        validation_result = dict(valid=False, message=r[2:].strip())
+    else:
+        validation_result = dict(valid=False, message=r)
+    return validation_result

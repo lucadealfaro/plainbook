@@ -9,7 +9,7 @@ from nbclient import NotebookClient
 from nbclient.exceptions import CellExecutionError
 import nbformat
 
-from .gemini import gemini_generate_code
+from .gemini import gemini_generate_code, gemini_validate_code
 
 
 class ExecutionError(Exception):
@@ -312,4 +312,22 @@ class NLBook(object):
     def cancel_ai_request(self):
         """Cancels any ongoing AI request by interrupting the kernel."""
         self.ai_request_pending = False
+        
+    def validate_code_cell(self, api_key, index):
+        """Validates the code in the cell at index using Gemini."""
+        with self._lock:
+            if self.ai_request_pending:
+                raise RuntimeError("An AI request is already pending.")
+            self.ai_request_pending = True
+            assert 0 <= index < len(self.nb.cells)
+            cell = self.nb.cells[index]
+            assert cell.cell_type == 'code'
+            code_to_validate = cell.source
+            instructions = cell.metadata.get('explanation')
+            previous_code = self._get_code_for_ai(index)
+            try:
+                validation_result = gemini_validate_code(api_key, previous_code, code_to_validate, instructions)
+                return validation_result
+            finally:
+                self.ai_request_pending = False
 

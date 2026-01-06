@@ -1,7 +1,7 @@
 import { ref, computed, watch, nextTick } from './vue.esm-browser.js';
 
 const ExplanationRenderer = {
-    props: ['source', 'isActive', 'index', 'lastRunIndex', 'asRead', 'startEditKey'],
+    props: ['source', 'isActive', 'index', 'lastRunIndex', 'asRead', 'startEditKey', 'isLocked'],
     emits: ['update:source', 'save', 'saveandrun', 'gencode', 'validate', 
             'run', 'delete', 'moveUp', 'moveDown'],
     setup(props, { emit }) {
@@ -69,21 +69,10 @@ const ExplanationRenderer = {
             isEditing.value = false;
         };
 
-        const generateCode = () => {
-            emit('gencode');
-        };
-
-        const runCell = () => {
-            emit('run');
-        }
-
-        const validateCode = () => {
-            emit('validate');
-        }
-
         return { isEditing, localSource, rendered, enterEditMode, saveChanges, 
-            cancelEdit, textareaEl, autoResize, saveAndRun, generateCode, runCell, validateCode };
+            cancelEdit, textareaEl, autoResize, saveAndRun, };
     },
+
     template: /* html */ `
         <div class="explanation-container pt-3 pl-4 pr-4 pb-1">
             <div v-if="!isEditing" 
@@ -95,15 +84,16 @@ const ExplanationRenderer = {
                 class="explanation-toolbar has-background-grey-lighter pl-3 pr-3"
                 style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem">
             <div class="toolbar-left">
-                <button class="button run-button is-small is-primary mr-1" @click.stop="runCell">
+                <button class="button run-button is-small is-primary mr-1" 
+                        title="Run this cell and all necessary preceding cells" @click.stop="emit('run')">
                     <template v-if="lastRunIndex === index">
-                        <span class="icon"><i class="fa fa-repeat"></i></span> <span>Re-Run</span>
+                        <span class="icon"><i class="fa fa-repeat"></i></span><span>Re-Run</span>
                     </template>
                     <template v-else-if="lastRunIndex < index">
-                        <span class="icon"><i class="fa fa-step-forward"></i></span> <span>Run Up To Here</span>
+                        <span class="icon"><i class="fa fa-step-forward"></i></span><span>Run Up To Here</span>
                     </template>
                     <template v-else>
-                        <span class="icon"><i class="fa fa-step-forward"></i></span> <span>Run From Start To Here</span>
+                        <span class="icon"><i class="fa fa-step-forward"></i></span><span>Run From Start To Here</span>
                     </template>
                 </button>
                 <button class="button is-small" style="opacity: 0.6;">
@@ -113,22 +103,28 @@ const ExplanationRenderer = {
                 </button>
             </div>
             <div class="toolbar-right" style="display: flex; flex-wrap: wrap; gap: 0.25rem;">
-                <button class="button is-small is-info" @click.stop="enterEditMode">
-                    Edit
+                <button class="button is-small is-info" title="Edit action description" @click.stop="enterEditMode">
+                    <span class="icon"><i class="fa fa-pencil"></i></span><span>Edit</span>
                 </button>
-                <button class="button is-small is-info py-1 " title="Move Up" aria-label="Move Up" @click.stop="$emit('moveUp')">
+                <button class="button is-small is-info py-1 " 
+                        :disabled="isLocked"
+                        title="Move cell up" aria-label="Move Up" @click.stop="$emit('moveUp')">
                     <span class="icon"><i class="fa fa-arrow-up"></i></span>
                 </button>
-                <button class="button is-small is-info py-1 " title="Move Down" aria-label="Move Down" @click.stop="$emit('moveDown')">
+                <button class="button is-small is-info py-1 " 
+                        :disabled="isLocked"
+                        title="Move cell down" aria-label="Move Down" @click.stop="$emit('moveDown')">
                     <span class="icon"><i class="fa fa-arrow-down"></i></span>
                 </button>
-                <button class="button is-small is-success" @click.stop="generateCode">
+                <button class="button is-small is-success" title="Regenerate code from description" 
+                        :disabled="isLocked" @click.stop="$emit('gencode')">
                     <span class="icon"><i class="fa fa-repeat"></i></span> <span>Regenerate Code</span>
                 </button>
-                <button class="button is-small is-success" @click.stop="validateCode">
+                <button class="button is-small is-success" title="Validate code against description" @click.stop="$emit('validate')">
                     <span class="icon"><i class="fa fa-check"></i></span> <span>Validate Code</span>
                 </button>
-                <button class="button is-small is-danger py-1 " title="Delete" aria-label="Delete" @click.stop="$emit('delete')">
+                <button class="button is-small is-danger py-1 " title="Delete cell" aria-label="Delete" 
+                        :disabled="isLocked" @click.stop="$emit('delete')">
                     <span class="icon"><i class="fa fa-trash"></i></span>
                 </button>
             </div>
