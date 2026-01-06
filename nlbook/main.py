@@ -238,9 +238,11 @@ def find_free_port(start_port):
     port = start_port
     while True:
         with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
-            if s.connect_ex(('localhost', port)) != 0:
+            try:
+                s.bind(('localhost', port))
                 return port
-            port += 2
+            except OSError:
+                port += 2
             
 def logger_middleware(app):
     def wrapper(environ, start_response):
