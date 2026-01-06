@@ -10,6 +10,8 @@ const ExplanationRenderer = {
         const originalSource = ref(localSource.value);
         const md = new markdownit({ html: true });
         const textareaEl = ref(null);
+        const localIsLocked = ref(props.isLocked);
+
 
         const rendered = computed(() => md.render(localSource.value));
 
@@ -32,6 +34,14 @@ const ExplanationRenderer = {
         watch(() => props.isActive, (newVal) => {
             if (!newVal && isEditing.value) {
                 saveChanges();
+            }
+        });
+
+        watch(() => props.isLocked, (newVal) => {
+            console.log("Lock status changed:", newVal);
+            localIsLocked.value = newVal;
+            if (newVal) {
+                cancelEdit();
             }
         });
 
@@ -70,7 +80,7 @@ const ExplanationRenderer = {
         };
 
         return { isEditing, localSource, rendered, enterEditMode, saveChanges, 
-            cancelEdit, textareaEl, autoResize, saveAndRun, };
+            cancelEdit, textareaEl, autoResize, saveAndRun, localIsLocked};
     },
 
     template: /* html */ `
@@ -103,28 +113,29 @@ const ExplanationRenderer = {
                 </button>
             </div>
             <div class="toolbar-right" style="display: flex; flex-wrap: wrap; gap: 0.25rem;">
-                <button class="button is-small is-info" title="Edit action description" @click.stop="enterEditMode">
+                <button class="button is-small is-info" title="Edit action description" 
+                        :disabled="localIsLocked" @click.stop="enterEditMode">
                     <span class="icon"><i class="fa fa-pencil"></i></span><span>Edit</span>
                 </button>
                 <button class="button is-small is-info py-1 " 
-                        :disabled="isLocked"
+                        :disabled="localIsLocked"
                         title="Move cell up" aria-label="Move Up" @click.stop="$emit('moveUp')">
                     <span class="icon"><i class="fa fa-arrow-up"></i></span>
                 </button>
                 <button class="button is-small is-info py-1 " 
-                        :disabled="isLocked"
+                        :disabled="localIsLocked"
                         title="Move cell down" aria-label="Move Down" @click.stop="$emit('moveDown')">
                     <span class="icon"><i class="fa fa-arrow-down"></i></span>
                 </button>
                 <button class="button is-small is-success" title="Regenerate code from description" 
-                        :disabled="isLocked" @click.stop="$emit('gencode')">
+                        :disabled="localIsLocked" @click.stop="$emit('gencode')">
                     <span class="icon"><i class="fa fa-repeat"></i></span> <span>Regenerate Code</span>
                 </button>
                 <button class="button is-small is-success" title="Validate code against description" @click.stop="$emit('validate')">
                     <span class="icon"><i class="fa fa-check"></i></span> <span>Validate Code</span>
                 </button>
                 <button class="button is-small is-danger py-1 " title="Delete cell" aria-label="Delete" 
-                        :disabled="isLocked" @click.stop="$emit('delete')">
+                        :disabled="localIsLocked" @click.stop="$emit('delete')">
                     <span class="icon"><i class="fa fa-trash"></i></span>
                 </button>
             </div>
@@ -145,10 +156,10 @@ const ExplanationRenderer = {
                 <button class="button is-small" @click="cancelEdit">
                     Cancel
                 </button>
-                <button class="button is-small is-info" @click="saveChanges">
+                <button class="button is-small is-info" :disabled="localIsLocked" @click="saveChanges">
                     Save
                 </button>
-                <button class="button is-small is-primary" @click="saveAndRun">
+                <button class="button is-small is-primary" :disabled="localIsLocked" @click="saveAndRun">
                     Save and Run
                 </button>
             </div>

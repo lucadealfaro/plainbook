@@ -94,6 +94,22 @@ createApp({
             }
         };
 
+        const lockNotebook = async (shouldLock) => {
+            try {
+                const response = await fetch(`/lock_notebook?token=${authToken}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ is_locked: shouldLock })
+                });
+                if (!response.ok) throw new Error('Failed to lock notebook');
+                console.log('Notebook locked:', shouldLock);
+                isLocked.value = shouldLock;
+                notebook.value.metadata.is_locked = shouldLock;
+            } catch (err) {
+                throw new Error('Failed to lock notebook: ' + err.message);
+            }
+        };
+
         const sendCodeToServer = async (content, cellIndex) => {
             asRead.value = false;
             try {
@@ -179,7 +195,7 @@ createApp({
                 if (!response.ok) throw new Error('Failed to validate code for cell:' + cellIndex);
                 const r = await response.json();
                 if (notebook.value && notebook.value.cells[cellIndex]) {
-                    notebook.value.cells[cellIndex].validation = r.validation;
+                    notebook.value.cells[cellIndex].metadata.validation = r.validation;
                     console.log('Code validation received for cell:', cellIndex, r.validation);
                 }
             } catch (err) {
@@ -189,16 +205,15 @@ createApp({
 
         const dismissValidation = async (cellIndex) => {
             try {
-                const response = await fetch(`/dismiss_validation?token=${authToken}`, {
+                const response = await fetch(`/set_validation_visibility?token=${authToken}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    
-                    body: JSON.stringify({ cell_index: cellIndex })
+                    body: JSON.stringify({ cell_index: cellIndex, is_hidden: true })
                 });
                 if (!response.ok) throw new Error('Failed to dismiss validation');
                 console.log('Validation dismissed:', cellIndex);
                 if (notebook.value && notebook.value.cells[cellIndex]) {
-                    notebook.value.cells[cellIndex].validation.is_hidden = true;
+                    notebook.value.cells[cellIndex].metadata.validation.is_hidden = true;
                 }
             } catch (err) {
                 throw new Error('Failed to dismiss validation: ' + err.message);
@@ -491,7 +506,8 @@ createApp({
             window.removeEventListener('click', handleClickOutside);
         });
 
-        return { notebook, notebook_name, loading, error, isLocked, sendExplanationToServer, 
+        return { notebook, notebook_name, loading, error, isLocked, lockNotebook,
+            sendExplanationToServer, 
             sendCodeToServer, saveExplanationAndRun,
             sendMarkdownToServer, generateCode, activeIndex, reloadNotebook,
             regenerateAllCode, regenerateAndRunAllCode,

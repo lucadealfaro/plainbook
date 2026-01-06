@@ -38,12 +38,21 @@
             <div class="navbar-start">
                 <div class="navbar-item">
                     <div class="buttons">
+                        <!-- Locking -->
+                        <button v-if="isLocked" class="button is-warning" title="Unlock Notebook" @click="lockNotebook(false)">
+                            <span class="icon"><i class="fa fa-lock"></i></span>
+                        </button>
+                        <button v-else class="button is-light" title="Lock Notebook" @click="lockNotebook(true)">
+                            <span class="icon"><i class="fa fa-unlock"></i></span>
+                        </button>
+                        <!-- Interrupt execution -->
                         <button v-if="running && notebook"
                                 @click="interruptKernel"
                                 class="button is-danger" title="Interrupt Execution">
                             <span class="icon"><i class="fa fa-stop"></i></span>
                             <span>Running...</span>
                         </button>
+                        <!-- Running -->
                         <button v-if="!running && notebook"
                             @click="reloadNotebook"
                             class="button is-light" title="Reload Notebook">
@@ -85,7 +94,7 @@
                         <!-- <button id="btn-info" class="button is-danger" @click="genError">
                             <span class="icon"><i class="fa fa-exclamation"></i></span>
                         </button> -->
-                        <button id="btn-info" class="button is-light" @click="openInfo"> title="About NLBook">
+                        <button id="btn-info" class="button is-light" @click="openInfo" title="About NLBook">
                             <span class="icon"><i class="fa fa-info"></i></span>
                         </button>
                         <button id="btn-settings" class="button is-light" @click="openSettings" title="Settings">
@@ -106,12 +115,6 @@
 
     <div class="section notebook-area">
         <h1 class="title">
-            <button v-if="isLocked" class="button is-light" title="Unlock Notebook" @click="lockNotebook(false)">
-                <span class="icon"><i class="fa fa-lock"></i></span>
-            </button>
-            <button v-else class="button is-light" title="Lock Notebook" @click="lockNotebook(true)">
-                <span class="icon"><i class="fa fa-unlock"></i></span>
-            </button>
             {{ notebook_name }}
         </h1>
         <div class="notebook-container px-2 py-2">
@@ -241,6 +244,10 @@
                             and the output is displayed below the cell.</li>
                         <li><strong>Markdown cells</strong> for writing explanations, comments, and documentation in rich text format.</li>
                     </ul>
+                    <p>If you lock a notebook, editing of cells and generation of code will be disabled 
+                        to prevent accidental changes.  However, you can still validate the code against
+                        its description, and you can still run the notebook.
+                        Unlock it to be able to edit again.</p>
                     <p><a href="https://github.com/lucadealfaro/nlbook" target="_blank">NLBook Home Page</a></p>
                 </div>
             </section>

@@ -9,6 +9,7 @@ export default {
         const localSource = ref(Array.isArray(props.source) ? props.source.join('') : props.source);
         const originalSource = ref(localSource.value);
         const textareaEl = ref(null);
+        const localIsLocked = ref(props.isLocked);
 
         watch(() => props.isActive, (newVal) => {
             if (!newVal && isEditing.value) {
@@ -19,6 +20,14 @@ export default {
         watch(() => props.source, (val) => {
             localSource.value = Array.isArray(val) ? val.join('') : val;
             nextTick(autoResize);
+        });
+
+        watch(() => props.isLocked, (newVal) => {
+            console.log("Lock status changed:", newVal);
+            localIsLocked.value = newVal;
+            if (newVal) {
+                cancelEdit();
+            }
         });
         
         const autoResize = () => {
@@ -96,6 +105,7 @@ export default {
         };
 
         const enterEditMode = () => {
+            if (localIsLocked.value) return;
             isEditing.value = true;
             nextTick(() => {
                 autoResize();
@@ -112,7 +122,6 @@ export default {
             localSource.value = originalSource.value;
             isEditing.value = false;
         };
-
 
         const toggleCollapse = () => {
             isCollapsed.value = !isCollapsed.value;
@@ -150,7 +159,7 @@ export default {
                         <button class="button is-small" @click="cancelEdit">
                             Cancel
                         </button>
-                        <button class="button is-small is-primary" @click="saveCode">
+                        <button class="button is-small is-primary" :disabled="localIsLocked" @click="saveCode">
                             Save
                         </button>
                     </div>

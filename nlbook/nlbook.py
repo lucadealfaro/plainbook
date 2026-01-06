@@ -179,6 +179,12 @@ class NLBook(object):
                 pass
 
     # Cell insertion, deletion, and movement methods
+    
+    def lock(self, is_locked):
+        """Locks or unlocks the notebook."""
+        with self._lock:
+            self.nb.metadata['is_locked'] = is_locked
+            self._write()
 
     def insert_cell(self, index, cell_type):
         """Insert a new cell at index with given type ('markdown' or 'code'). Returns the cell json."""
@@ -327,7 +333,21 @@ class NLBook(object):
             previous_code = self._get_code_for_ai(index)
             try:
                 validation_result = gemini_validate_code(api_key, previous_code, code_to_validate, instructions)
+                # For uniformity, usesless to have the various AI code take care of this.
+                validation_result['is_hidden'] = False
+                cell.metadata['validation'] = validation_result
+                self._write() # For persistence
                 return validation_result
             finally:
                 self.ai_request_pending = False
 
+    def set_validation_visibility(self, cell_index, is_hidden):
+        """Sets the visibility of the validation message for a given cell."""
+        with self._lock:
+            assert 0 <= cell_index < len(self.nb.cells)
+            cell = self.nb.cells[cell_index]
+            assert cell.cell_type == 'code'
+            if 'validation' not in cell.metadata:
+                cell.metadata['validation'] = {}
+            cell.metadata['validation']['is_hidden'] = is_hidden
+            self._write()

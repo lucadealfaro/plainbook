@@ -238,6 +238,15 @@ def validate_code_cell():
                     last_executed_cell=notebook.last_executed_cell)
     except Exception as e:
         return dict(status='error', message=str(e))
+
+@post('/set_validation_visibility')
+@require_token
+def set_validation_visibility():
+    data = request.json
+    cell_index = data.get('cell_index')
+    is_hidden = data.get('is_hidden', False)
+    notebook.set_validation_visibility(cell_index, is_hidden)
+    return dict(status='success')
     
 @post('/cancel_ai_request')
 @require_token
@@ -247,6 +256,16 @@ def cancel_ai_request():
         return dict(status='success')
     except Exception as e:
         return dict(status='error', message=str(e))
+    
+@post('/lock_notebook')
+@require_token
+def lock_notebook():
+    data = request.json
+    is_locked = data.get('is_locked', False)
+    notebook.lock(is_locked)
+    return dict(status='success')
+
+
 
 
 ################################

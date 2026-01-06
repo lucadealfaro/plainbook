@@ -1,5 +1,13 @@
+import re
+import string
+
 from google import genai
 from google.genai import types
+
+SPACES_AND_PUNCTUATION_PATTERN = f"^[{re.escape(string.punctuation + string.whitespace)}]+"
+
+def clean_start(text):
+    return re.sub(SPACES_AND_PUNCTUATION_PATTERN, '', text)
 
 def gemini_generate_code(api_key, previous_code, instructions):
     # 1. Initialize the Client
@@ -71,9 +79,9 @@ def gemini_validate_code(api_key, previous_code, code_to_validate, instructions)
     )
     r = response.text.strip()
     if r.upper().startswith("YES"):
-        validation_result = dict(valid=True, message=r[3:].strip())
+        validation_result = dict(is_valid=True, message=clean_start(r[3:]))
     elif r.upper().startswith("NO"):
-        validation_result = dict(valid=False, message=r[2:].strip())
+        validation_result = dict(is_valid=False, message=clean_start(r[2:]))
     else:
-        validation_result = dict(valid=False, message=r)
+        validation_result = dict(is_valid=False, message=r)
     return validation_result
