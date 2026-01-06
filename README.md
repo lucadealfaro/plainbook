@@ -1,6 +1,32 @@
-# NLBook
+# NLBook: Natural Language Notebooks. 
 
-Natural Language Notebooks. 
+Authors: 
+
+Luca de Alfaro, dealfaro@acm.org
+
+## Overview
+
+Natural Language Notebooks (NLBook) allow you to create notebooks where the cells are written in natural language. 
+The natural language is automatically converted to code via AI, and executed.
+The natural language is retained, so you can edit it, improve it, and so forth. 
+
+Differently from other notebook systems, NLBooks are executed from start to end: random cell execution order, as in Jupyter notebooks, is not allowed.  This ensures that the results are obtained in the same order in which a human reader would read the notebook.
+
+This project is in an early stage of development.
+
+## Running NLBook
+
+```bash
+
+nlbook path/to/notebook.nlb
+``` 
+
+(where `.nlb` is a Natural Language Notebook file; you can use other extensions if you wish). 
+For a list of command-lien options, do: 
+
+```bash
+nlbook --help
+```
 
 ## Development
 
@@ -11,3 +37,5 @@ python -m nlbook.main --debug
 ```
 
 Running with the VSCode launch.json does not work, due to a VScode bug/quirk. 
+See DEVELOP.md for development instructions, and see TODO.md for planned features.
+
