@@ -152,6 +152,9 @@ createApp({
         };
 
         const generateCode = async (cellIndex) => {
+            if (!geminiApiKey.value) {
+                throw new Error('Gemini API key is not set. Please set it in the settings.');
+            };
             asRead.value = false;
             try {
                 const response = await fetch(`/generate_code?token=${authToken}`, {
@@ -172,6 +175,9 @@ createApp({
         };
 
         const regenerateAllCode = async () => {
+            if (!geminiApiKey.value) {
+                throw new Error('Gemini API key is not set. Please set it in the settings.');
+            };
             for (let i = 0; i < notebook.value.cells.length; i++) {
                 if (notebook.value.cells[i].cell_type === 'code') {
                     await generateCode(i);
@@ -185,6 +191,9 @@ createApp({
         };
 
         const validateCode = async (cellIndex) => {
+            if (!geminiApiKey.value) {
+                throw new Error('Gemini API key is not set. Please set it in the settings.');
+            };
             asRead.value = false;
             try {
                 const response = await fetch(`/validate_code?token=${authToken}`, {
