@@ -1,12 +1,13 @@
 import { createApp, ref, onMounted, onBeforeUnmount, nextTick, getCurrentInstance } from './vue.esm-browser.js';
 
+import AppNavbar from './AppNavbar.js';
 import NotebookCell from './NotebookCell.js';
 import CellInsertionZone from './CellInsertionZone.js';
 import SettingsModal from './SettingsModal.js';
 import InfoModal from './InfoModal.js';
 
 createApp({
-    components: { NotebookCell, CellInsertionZone, SettingsModal, InfoModal },
+    components: { AppNavbar, NotebookCell, CellInsertionZone, SettingsModal, InfoModal },
     setup() {
         // Extract token from URL
         const urlParams = new URLSearchParams(window.location.search);

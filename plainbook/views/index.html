@@ -33,82 +33,22 @@
     <div id="app"></div>
     
     <script type="text/x-template" id="app-template">
-    <nav class="navbar is-dark is-fixed-top" role="navigation" aria-label="main navigation">
-        <div id="the-navbar-menu" class="navbar-menu">
-            <div class="navbar-start">
-                <div class="navbar-item">
-                    <div class="buttons">
-                        <!-- Locking -->
-                        <button v-if="isLocked" class="button is-warning" title="Unlock Notebook" @click="lockNotebook(false)">
-                            <span class="icon"><i class="fa fa-lock"></i></span>
-                        </button>
-                        <button v-else class="button is-light" title="Lock Notebook" @click="lockNotebook(true)">
-                            <span class="icon"><i class="fa fa-unlock"></i></span>
-                        </button>
-                        <!-- Reload notebook -->
-                        <button v-if="!running && notebook"
-                            @click="reloadNotebook"
-                            class="button is-light" title="Reload Notebook">
-                            <span class="icon"><i class="fa fa-refresh"></i></span>
-                            <span>Refresh</span>
-                        </button>
-                        <!-- Interrupt execution -->
-                        <button v-if="running && notebook"
-                                @click="interruptKernel"
-                                class="button is-danger" title="Interrupt Execution">
-                            <span class="icon"><i class="fa fa-stop"></i></span>
-                            <span>Running...</span>
-                        </button>
-                        <!-- Status -->
-                        <button v-if="!running && notebook && lastRunIndex >= notebook.cells.length - 1"
-                                class="button is-light" title="All cells have been run">
-                            <span class="icon"><i class="fa fa-check-circle"></i></span>
-                            <span>Up to Date</span>
-                        </button>
-                        <!-- Running -->
-                        <!-- <button v-if="!running && notebook"
-                            :disabled="notebook.cells.length === 0 || isLocked"
-                            @click="regenerateAndRunAllCode" title="Regenerate all code from descriptions and run it all"
-                            class="button is-success">
-                            <span class="icon"><i class="fa fa-repeat"></i></span>
-                            <span class="icon"><i class="fa fa-play"></i></span>
-                        </button> -->
-                        <button v-if="!running && notebook"
-                            :disabled="notebook.cells.length === 0 || isLocked"
-                            @click="regenerateAllCode" title="Regenerate all code from descriptions"
-                            class="button is-success">
-                            <span class="icon"><i class="fa fa-repeat"></i></span>
-                            <span>Regenerate All</span>
-                        </button>
-                        <button v-if="!running && notebook"
-                            :disabled="notebook.cells.length === 0"
-                            @click="resetAndRunAllCells" title="Reset and run all cells"
-                            class="button is-primary">
-                            <span class="icon"><i class="fa fa-play"></i></span>
-                            <span>Reset and Run All</span>
-                        </button>
-                    </div>
-                </div>
-            </div>
-            <div class="navbar-end">
-                <div class="navbar-item">
-                    <div class="buttons">
-                        <!-- <button id="btn-info" class="button is-danger" @click="genError">
-                            <span class="icon"><i class="fa fa-exclamation"></i></span>
-                        </button> -->
-                        <button id="btn-info" class="button is-light" @click="showInfo = true" title="About Plainbook">
-                            <span class="icon"><i class="fa fa-info"></i></span>
-                        </button>
-                        <button id="btn-settings" class="button" :class="geminiApiKey ? 'is-light' : 'is-warning'" 
-                                 @click="showSettings = true" title="Settings">
-                            <span class="icon"><i :class="geminiApiKey ? 'fa fa-cog' : 'fa fa-warning'"></i></span>
-                            <span>Settings</span>
-                        </button>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </nav>
+
+    <app-navbar 
+        :is-locked="isLocked"
+        :running="running"
+        :has-notebook="!!notebook"
+        :last-run-index="lastRunIndex"
+        :cell-count="notebook ? notebook.cells.length : 0"
+        :has-api-key="!!geminiApiKey"
+        @lock="lockNotebook"
+        @refresh="reloadNotebook"
+        @interrupt="interruptKernel"
+        @regenerate-all="regenerateAllCode"
+        @reset-run-all="resetAndRunAllCells"
+        @open-info="showInfo = true"
+        @open-settings="showSettings = true"
+    />    
 
     <div v-if="uiError" class="notification mb-0 mt-0 px-4 pl-2 pr-6 has-text-danger has-background-danger-light" 
         style="width: 100%; border-radius: 0; align-items: center; justify-content: space-between;">
