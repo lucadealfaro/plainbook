@@ -128,7 +128,8 @@ export default {
             if (!isCollapsed.value && isEditing.value) nextTick(autoResize);
         };
 
-        return { isCollapsed, toggleCollapse, isEditing, cancelEdit, localSource, highlightedCode, enterEditMode, saveCode, textareaEl, autoResize, handleTabKey };
+        return { isCollapsed, toggleCollapse, isEditing, cancelEdit, localSource, 
+            localIsLocked, highlightedCode, enterEditMode, saveCode, textareaEl, autoResize, handleTabKey };
     },
     template: /* html */ `
         <div class="code-cell-wrapper" style="position: relative; min-height: 1.75rem;">
