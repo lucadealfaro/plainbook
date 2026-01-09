@@ -1,13 +1,9 @@
 import { createApp, ref, onMounted, onBeforeUnmount, nextTick, getCurrentInstance } from './vue.esm-browser.js';
 
-import MarkdownCell from './MarkdownCell.js';
-import OutputRenderer from './OutputRenderer.js';
-import CodeCell from './CodeCell.js';
-import ExplanationEditor from './ExplanationEditor.js';
-import ValidationCell from './ValidationCell.js';
+import NotebookCell from './NotebookCell.js';
 
 createApp({
-    components: { MarkdownCell, CodeCell, ExplanationEditor, OutputRenderer, ValidationCell },
+    components: { NotebookCell },
     setup() {
         // Extract token from URL
         const urlParams = new URLSearchParams(window.location.search);

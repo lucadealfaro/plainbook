@@ -1,7 +1,7 @@
 import { ref, computed, watch, nextTick } from './vue.esm-browser.js';
 
 const ExplanationRenderer = {
-    props: ['source', 'isActive', 'index', 'lastRunIndex', 'asRead', 'startEditKey', 'isLocked'],
+    props: ['source', 'isActive', 'needsRunning', 'asRead', 'startEditKey', 'isLocked'],
     emits: ['update:source', 'save', 'saveandrun', 'gencode', 'validate', 
             'run', 'delete', 'moveUp', 'moveDown'],
     setup(props, { emit }) {
@@ -95,19 +95,11 @@ const ExplanationRenderer = {
             <div class="toolbar-left">
                 <button class="button run-button is-small is-primary mr-1" 
                         title="Run this cell and all necessary preceding cells" @click.stop="$emit('run')">
-                    <template v-if="lastRunIndex === index">
-                        <span class="icon"><i class="fa fa-repeat"></i></span><span>Re-Run</span>
-                    </template>
-                    <template v-else-if="lastRunIndex < index">
-                        <span class="icon"><i class="fa fa-step-forward"></i></span><span>Run Up To Here</span>
-                    </template>
-                    <template v-else>
-                        <span class="icon"><i class="fa fa-step-forward"></i></span><span>Run From Start To Here</span>
-                    </template>
+                    <span class="icon"><i class="fa fa-step-forward"></i></span><span>Run</span>
                 </button>
                 <button class="button is-small" style="opacity: 0.6;">
                     <span v-if="asRead">Unmodified</span>
-                    <span v-else-if="lastRunIndex < index">Needs running</span>
+                    <span v-else-if="needsRunning">Needs running</span>
                     <span v-else>Up to date</span>
                 </button>
             </div>

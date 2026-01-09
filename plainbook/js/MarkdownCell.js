@@ -1,7 +1,7 @@
 import { ref, watch, nextTick } from './vue.esm-browser.js';
 
 const MarkdownCell = {
-    props: ['source', 'startEditKey', 'isActive', 'index', 'isLocked'],
+    props: ['source', 'startEditKey', 'isActive', 'isLocked'],
     emits: ['save', 'delete', 'moveUp', 'moveDown'],
     setup(props, { emit }) {
         const md = new markdownit({ html: true });

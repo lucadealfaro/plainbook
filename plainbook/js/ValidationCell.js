@@ -1,7 +1,7 @@
 import {ref, watch, nextTick, computed} from './vue.esm-browser.js';
 
 export default {
-    props: ['validation', 'index'],
+    props: ['validation'],
     emits: ['dismiss_validation'],
     
     setup(props, { emit }) {
@@ -25,7 +25,7 @@ export default {
             if (is_hidden.value) {
                 is_hidden.value = true;
             }
-            emit('dismiss_validation', props.index);
+            emit('dismiss_validation');
         };
         return { dismiss, renderedMarkdown, message, is_valid, is_hidden };
     },

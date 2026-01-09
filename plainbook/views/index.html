@@ -133,6 +133,7 @@
                     <button class="button insert-cell is-info is-small py-0 px-3" @click.stop="insertCell(0, 'markdown')">Insert Comment</button>
                     <button class="button insert-cell is-info is-small py-0 px-3" @click.stop="insertCell(0, 'code')">Insert Action</button>
                 </div>
+
                 <template v-for="(cell, index) in notebook.cells" :key="index">
                     <!-- Insert zone before each cell -->
                     <div v-if="!isLocked" class="cell-insert-zone">
@@ -142,55 +143,32 @@
                         </div>
                     </div>
 
-                    <div class="notebook-cell box p-0 mb-2 is-clipped shadow-sm"
-                         @click="setActiveCell(index)"
-                         :style="{
-                            border: activeIndex === index ? '2px solid #1d4ed8' : '1px solid transparent',
-                            cursor: 'pointer'
-                         }">
-                        <markdown-cell v-if="cell.cell_type === 'markdown'" :source="cell.source" 
-                                       :is-active="activeIndex === index"
-                                       :start-edit-key="markdownEditKey[index]"
-                                       :index="index"
-                                       :isLocked="isLocked" 
-                                       @save="(content) => sendMarkdownToServer(content, index)"
-                                       @delete="deleteCell(index)"
-                                       @moveUp="moveCell(index, -1)"
-                                       @moveDown="moveCell(index, 1)" />
+                    <notebook-cell 
+                        :cell="cell"
+                        :is-active="activeIndex === index"
+                        :needs-running="index > lastRunIndex"
+                        :is-locked="isLocked"
+                        :last-run-index="lastRunIndex"
+                        :as-read="asRead"
+                        :markdown-edit-key="markdownEditKey[index]"
+                        :explanation-edit-key="explanationEditKey[index]"
+                        @click="setActiveCell(index)"
+                        
+                        @save-markdown="(content) => sendMarkdownToServer(content, index)"
+                        @save-explanation="(content) => sendExplanationToServer(content, index)"
+                        @save-code="(content) => sendCodeToServer(content, index)"
+                        @save-and-run="(content) => saveExplanationAndRun(content, index)"
+                        
+                        @run-cell="runCell(index)"
+                        @generate-code="generateCode(index)"
+                        @validate-code="validateCode(index)"
+                        @dismiss-validation="dismissValidation(index)"
+                        
+                        @delete="deleteCell(index)"
+                        @move-up="moveCell(index, -1)"
+                        @move-down="moveCell(index, 1)"
+                    />
 
-                        <div v-if="cell.cell_type === 'code'">
-                            <div v-if="cell.metadata?.explanation" class="has-background-light p-0 border-bottom">
-                                <explanation-editor :source="cell.metadata.explanation" 
-                                                    :isActive="activeIndex === index" 
-                                                    :isLocked="isLocked" 
-                                                    :index="index" :asRead="asRead" 
-                                                    :lastRunIndex="lastRunIndex"
-                                                    :start-edit-key="explanationEditKey[index]"
-                                @save="(content) => sendExplanationToServer(content, index)" 
-                                @gencode="() => generateCode(index)" 
-                                @validate="() => validateCode(index)"
-                                @run="() => runCell(index)"
-                                @saveandrun="(content) => saveExplanationAndRun (content, index)"
-                                @delete="deleteCell(index)"
-                                @moveUp="moveCell(index, -1)"
-                                @moveDown="moveCell(index, 1)" />
-                            </div>
-                            <div v-if="cell.metadata?.validation && !cell.metadata?.validation.is_hidden">
-                                <validation-cell :validation="cell.metadata.validation" 
-                                                 :index="index"
-                                                 @dismiss_validation="dismissValidation" />
-                            </div>
-                            <code-cell  :source="cell.source" 
-                                        :execution-count="cell.execution_count" 
-                                        :is-active="activeIndex === index"
-                                        :is-locked="isLocked"
-                                        @save="(content) => sendCodeToServer(content, index)" />
-                            
-                            <div v-if="cell.outputs?.length" class="p-2 border-top has-background-white">
-                                <output-renderer v-for="(out, oIdx) in cell.outputs" :key="oIdx" :output="out" />
-                            </div>
-                        </div>
-                    </div>
                 </template>
                 
                 <!-- Insert zone after the last cell -->
