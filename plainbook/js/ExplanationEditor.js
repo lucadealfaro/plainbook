@@ -151,7 +151,8 @@ const ExplanationRenderer = {
                     Save
                 </button>
                 <button class="button is-small is-primary" :disabled="localIsLocked" @click="saveAndRun">
-                    Save and Run
+                    <span class="icon"><i class="fa fa-play"></i></span> 
+                    <span>Save and Run</span>
                 </button>
             </div>
         </div>
