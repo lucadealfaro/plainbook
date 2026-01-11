@@ -71,12 +71,14 @@
             </div>
             <div v-else="notebook">
 
-                <cell-insertion-zone v-if="!isLocked"
-                    @insert="(celltype) => insertCell(0, celltype)" 
-                />
-
+                
                 <template v-for="(cell, index) in notebook.cells" :key="index">
 
+                    <cell-insertion-zone v-if="!isLocked"
+                        :is-last="false"
+                        @insert="(celltype) => insertCell(index, celltype)" 
+                    />
+                    
                     <notebook-cell 
                         :cell="cell"
                         :is-active="activeIndex === index"
@@ -103,12 +105,14 @@
                         @move-down="moveCell(index, 1)"
                     />
 
-                    <cell-insertion-zone v-if="!isLocked"
-                        @insert="(celltype) => insertCell(index + 1, celltype)" 
-                    />
-
+                    
                 </template>
                 
+                <cell-insertion-zone v-if="!isLocked"
+                    :is-last="true"
+                    @insert="(celltype) => insertCell(index + 1, celltype)" 
+                />
+
             </div>
         </div>
     </div>

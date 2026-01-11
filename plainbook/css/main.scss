@@ -122,6 +122,11 @@ pre[class*="language-"] {
   pointer-events: none;
 }
 
+.last-cell-insert-zone .cell-insert-buttons {
+  opacity: 1;
+  pointer-events: auto;
+}
+
 .cell-insert-zone:hover .cell-insert-buttons {
   opacity: 1;
   pointer-events: auto;
