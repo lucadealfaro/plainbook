@@ -59,6 +59,23 @@ export default {
             selectedFiles.delete(path);
         };
 
+        const syncSelectedFiles = async () => {
+            // Convert Map values to a plain array of file objects
+            const filesArray = Array.from(selectedFiles.values());
+            
+            try {
+                await fetch(`/set-files?token=${props.authToken}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ files: filesArray })
+                });
+            } catch (err) {
+                throw new Error("Failed to sync files with notebook:", err);
+            }
+        };
+
+        watch(selectedFiles, syncSelectedFiles, { deep: true });
+
         const toggleCollapse = () => isCollapsed.value = !isCollapsed.value;
 
                 // Get home dir on load
@@ -112,7 +129,7 @@ export default {
                                        @change="toggleSelection(item)">
                                 
                                 <span v-if="item.type === 'directory'" style="color: #f39c12;">📁</span>
-                                <span v-else style="color: #7f8c8d;">📄</span>
+                                <span v-else style="color: #656565ff;">📄</span>
 
                                 <span v-if="item.type === 'directory'" 
                                       @click="openFolder(item)"
@@ -132,9 +149,7 @@ export default {
                         <ul style="list-style: none; margin: 0; padding: 0;">
                             <li v-for="[path, file] in selectedFiles" :key="path" 
                                 style="display: flex; align-items: center; margin-bottom: 4px; font-size: 0.85rem; background: white; padding: 4px; border-radius: 3px; border: 1px solid #eee;">
-                                <button @click="removeSelected(path)" 
-                                        style="border: none; background: #ff3860; color: white; border-radius: 50%; width: 18px; height: 18px; line-height: 1; cursor: pointer; margin-right: 8px;">
-                                    &times;
+                                <button @click="removeSelected(path)" class="delete has-background-danger is-small mr-2">
                                 </button>
                                 <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="path">
                                     {{ file.name }}

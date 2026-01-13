@@ -27,6 +27,8 @@ class Plainbook(object):
         self._lock = threading.Lock()
         self.last_executed_cell = -1
         self.load_notebook()
+        # Context for notebook processing.
+        self.input_files = []
         # Starts the kernel.
         self.km = KernelManager()
         self.km.start_kernel()
@@ -346,10 +348,11 @@ class Plainbook(object):
             cell = self.nb.cells[index]
             assert cell.cell_type == 'code'
             instructions = cell.metadata.get('explanation')
+            context = self._get_ai_context()
             previous_code = self._get_code_for_ai(index)
             # Mark that an AI request is pending
             try:
-                new_code = gemini_generate_code(api_key, previous_code, instructions)
+                new_code = gemini_generate_code(api_key, previous_code, context, instructions)
                 # If we are still in a request, update the cell.
                 if self.ai_request_pending:
                     cell.source = new_code
@@ -400,3 +403,18 @@ class Plainbook(object):
                 cell.metadata['validation'] = {}
             cell.metadata['validation']['is_hidden'] = is_hidden
             self._write()
+
+    def set_input_files(self, files):
+        """Sets the input files for the notebook."""
+        self.input_files = files
+        
+    def _get_ai_context(self):
+        """Builds the AI context including input files."""
+        context_parts = [
+            "The user may mention input files."
+            "Here is a list of file names and paths; to access a file, the full path should be used:"
+            ]
+        for file in self.input_files:
+            context_parts.append(f"* File name: {file['name']} path: {file['path']}\n")
+        return "\n".join(context_parts) + "\n"
+    

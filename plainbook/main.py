@@ -300,6 +300,14 @@ def file_list():
 
     except PermissionError:
         raise HTTPError(403, 'Permission denied')
+    
+@post('/set-files')
+@require_token
+def set_files():
+    data = request.json
+    files = data.get('files', [])
+    notebook.set_input_files(files)
+    return dict(status='success')
 
 
 ################################
