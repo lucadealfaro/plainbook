@@ -166,6 +166,9 @@ createApp({
                 });
                 if (!response.ok) throw new Error('Failed to generate code');
                 const r = await response.json();
+                if (r.status !== 'success') {
+                    throw new Error(r.message || 'Code generation failed');
+                }
                 lastRunIndex.value = r.last_executed_cell;
                 if (notebook.value && notebook.value.cells[cellIndex]) {
                     notebook.value.cells[cellIndex].source = r.code;

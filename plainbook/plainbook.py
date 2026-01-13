@@ -411,8 +411,8 @@ class Plainbook(object):
     def _get_ai_context(self):
         """Builds the AI context including input files."""
         context_parts = [
-            "The user may mention input files."
-            "Here is a list of file names and paths; to access a file, the full path should be used:"
+            "Here is a list of file names and paths. "
+            "The user may mention input files; to access them, the full path should be used."
             ]
         for file in self.input_files:
             context_parts.append(f"* File name: {file['name']} path: {file['path']}\n")

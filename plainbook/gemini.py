@@ -9,7 +9,7 @@ SPACES_AND_PUNCTUATION_PATTERN = f"^[{re.escape(string.punctuation + string.whit
 def clean_start(text):
     return re.sub(SPACES_AND_PUNCTUATION_PATTERN, '', text)
 
-def gemini_generate_code(api_key, previous_code, instructions):
+def gemini_generate_code(api_key, previous_code, files_context, instructions):
     # 1. Initialize the Client
     # The new SDK uses a centralized client for all model interactions
     client = genai.Client(api_key=api_key)
@@ -18,6 +18,9 @@ def gemini_generate_code(api_key, previous_code, instructions):
     prompt = f"""
     CONTEXT (Existing Notebook Code):
     {previous_code}
+
+    CONTEXT (Known files):
+    {files_context}
 
     INSTRUCTIONS for New Cell:
     {instructions}
