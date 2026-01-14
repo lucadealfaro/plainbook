@@ -406,19 +406,21 @@ createApp({
                 const r = await response.json();
                 if (r.status === 'error') {
                     throw new Error(r.message || 'Execution failed');
-                } else if (r.details !== 'ok') {
+                } 
+                // Update outputs in the notebook model
+                if (notebook.value && notebook.value.cells[cellIndex]) {
+                    notebook.value.cells[cellIndex].outputs = r.outputs;
+                }                
+                console.log('Cell executed:', cellIndex, r.details);
+                if (r.details !== 'ok') {
+                    // The cell executed, but we have to stop other further
+                    // cells from executing.
                     throw new Error('Cell execution error');
                 } else {
-                    console.log('Cell executed:', cellIndex, r.details);
-                    // Update outputs in the notebook model
-                    if (notebook.value && notebook.value.cells[cellIndex]) {
-                        notebook.value.cells[cellIndex].outputs = r.outputs;
-                    }
                     // Update lastRunIndex from server response
                     if (r.last_executed_cell !== undefined && r.last_executed_cell !== null) {
                         lastRunIndex.value = r.last_executed_cell;
                     }
-                    // 
                 }
             } catch (err) {
                 running.value = false; // No longer running.

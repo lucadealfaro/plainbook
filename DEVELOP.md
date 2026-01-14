@@ -8,6 +8,11 @@ From the git repo:
 pip install --no-cache-dir --force-reinstall git+ssh://git@github.com/lucadealfaro/plainbook.git
 ```
 
+## Branches
+
+- `main`: Stable release branch.
+- `develop`: Active development branch.
+
 ## Building the package
 
 To build the package, run:

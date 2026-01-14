@@ -1,3 +1,5 @@
+import { computed } from './vue.esm-browser.js';
+
 // NotebookCell.js
 import MarkdownCell from './MarkdownCell.js';
 import CodeCell from './CodeCell.js';
@@ -14,6 +16,15 @@ export default {
         'validate-code', 'dismiss-validation', 
         'delete', 'move-up', 'move-down'
     ],
+    setup(props, { emit }) {
+        const hasError = computed(() => {
+            if (props.cell.cell_type !== 'code') return false;
+            if (!props.cell.outputs) return false;
+            return props.cell.outputs.some(out => out.output_type === 'error');
+        });
+
+        return { hasError };
+    },
     template: /* html */ `
         <div class="notebook-cell box p-0 mb-2 is-clipped shadow-sm"
              :style="{
@@ -40,6 +51,7 @@ export default {
                         :isLocked="isLocked" 
                         :asRead="asRead"
                         :codegen="cell.metadata?.codegen || false" 
+                        :hasError="hasError"
                         :needs-running="needsRunning"
                         :start-edit-key="explanationEditKey"
                         @save="$emit('save-explanation', $event)" 

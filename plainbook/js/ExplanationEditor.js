@@ -1,10 +1,10 @@
 import { ref, computed, watch, nextTick } from './vue.esm-browser.js';
 
 const ExplanationRenderer = {
-    props: ['source', 'isActive', 'codegen', 'needsRunning', 'asRead', 'startEditKey', 'isLocked'],
+    props: ['source', 'isActive', 'codegen', 'needsRunning', 'hasError','asRead', 'startEditKey', 'isLocked'],
     emits: ['update:source', 'save', 'saveandrun', 'gencode', 'validate', 
             'run', 'delete', 'moveUp', 'moveDown'],
-    setup(props, { emit }) {
+    setup(props, { emit }) {    
         const isEditing = ref(false);
         const localSource = ref(Array.isArray(props.source) ? props.source.join('') : props.source);
         const originalSource = ref(localSource.value);
@@ -120,9 +120,13 @@ const ExplanationRenderer = {
                         title="Move cell down" aria-label="Move Down" @click.stop="$emit('moveDown')">
                     <span class="icon"><i class="fa fa-arrow-down"></i></span>
                 </button>
-                <button class="button is-small is-success" title="Regenerate code from description" 
+                <button class="button is-small"
+                        :class="hasError ? 'is-warning' : 'is-success'" 
+                        title="Regenerate code from description" 
                         :disabled="localIsLocked" @click.stop="$emit('gencode')">
-                    <span class="icon"><i class="fa fa-repeat"></i></span> <span>Regenerate Code</span>
+                    <span class="icon"><i class="fa fa-repeat"></i></span> 
+                    <span v-if="hasError">Fix Code</span>
+                    <span v-else>Regenerate Code</span>
                 </button>
                 <button :disabled="!codegen" class="button is-small is-success" title="Validate code against description" @click.stop="$emit('validate')">
                     <span class="icon"><i class="fa fa-check"></i></span> <span>Validate Code</span>
