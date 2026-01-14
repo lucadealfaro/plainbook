@@ -16,6 +16,20 @@ class ExecutionError(Exception):
     """Custom exception for execution errors in Plainbook."""
     pass
 
+def getlist(value):
+    """Utility to ensure a value is a list."""
+    if isinstance(value, list):
+        return value
+    else:
+        return [value]
+
+def normalize_newlines(text):
+    if isinstance(text, str):
+        return text.splitlines(keepends=True)
+    elif isinstance(text, list):
+        return text
+    
+    
 class Plainbook(object):
     """This class implements an Plainbook and its operations."""
     
@@ -300,7 +314,7 @@ class Plainbook(object):
         with self._lock:
             assert 0 <= index < len(self.nb.cells)
             cell = self.nb.cells[index]
-            cell.source = source
+            cell.source = normalize_newlines(source)
             if cell.cell_type == 'code':
                 cell.metadata['codegen'] = False
                 # Reset outputs and execution count on code cell edit
@@ -316,7 +330,7 @@ class Plainbook(object):
             assert 0 <= index < len(self.nb.cells)
             cell = self.nb.cells[index]
             assert cell.cell_type == 'code'
-            cell.metadata['explanation'] = explanation
+            cell.metadata['explanation'] = normalize_newlines(explanation)
             cell.metadata['codegen'] = False
             self._write()
             
@@ -327,15 +341,16 @@ class Plainbook(object):
         Needs to be called with the lock held."""
         cell = self.nb.cells[index]
         if cell.cell_type == 'code':
-            explanation = cell.metadata.get('explanation', [])
+            explanation = getlist(cell.metadata.get('explanation', []))
             explanation = ["# " + line for line in explanation]
-            explanation_text = "\n".join(explanation) + "\n"
-            code_text = "\n".join(cell.source)
+            explanation_text = "".join(explanation) + "\n"
+            source_code = getlist(cell.source)
+            code_text = "".join(source_code) + "\n"
             return explanation_text + code_text
         elif cell.cell_type == 'markdown':
-            return "\n".join(["# " + line for line in cell.source])
+            return "".join(["# " + line for line in cell.source]) + "\n"
         else:
-            return ""
+            return "\n"
 
     def _get_code_for_ai(self, index):
         """Returns the concatenated source code of all previous code cells for context."""
@@ -352,11 +367,14 @@ class Plainbook(object):
             cell = self.nb.cells[index]
             assert cell.cell_type == 'code'
             instructions = cell.metadata.get('explanation')
-            context = self._get_ai_context()
+            files_context = self._get_files_context()
+            error_context = self._get_error_context(index)
             previous_code = self._get_code_for_ai(index)
             # Mark that an AI request is pending
             try:
-                new_code = gemini_generate_code(api_key, previous_code, context, instructions)
+                new_code = gemini_generate_code(
+                    api_key, previous_code=previous_code, instructions=instructions,
+                    file_context=files_context, error_context=error_context)
                 # If we are still in a request, update the cell.
                 if self.ai_request_pending:
                     cell.source = new_code
@@ -413,7 +431,7 @@ class Plainbook(object):
         """Sets the input files for the notebook."""
         self.input_files = files
         
-    def _get_ai_context(self):
+    def _get_files_context(self):
         """Builds the AI context including input files."""
         context_parts = [
             "Here is a list of file names and paths. "
@@ -422,4 +440,18 @@ class Plainbook(object):
         for file in self.input_files:
             context_parts.append(f"* File name: {file['name']} path: {file['path']}\n")
         return "\n".join(context_parts) + "\n"
+    
+    def _get_error_context(self, cell_index):
+        """If the cell has an error, include its traceback as context."""
+        context_parts = [
+            "The previous attempt to run this cell resulted in this error traceback:"
+        ]
+        cell = self.nb.cells[cell_index]
+        if cell.cell_type != 'code':
+            return None
+        for output in reversed(getlist(cell.get('outputs', []))):
+            if output.output_type == 'error':
+                traceback = context_parts + getlist(output.get('traceback', []))
+                return "\n".join(traceback)
+        return None
     

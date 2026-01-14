@@ -9,24 +9,42 @@ SPACES_AND_PUNCTUATION_PATTERN = f"^[{re.escape(string.punctuation + string.whit
 def clean_start(text):
     return re.sub(SPACES_AND_PUNCTUATION_PATTERN, '', text)
 
-def gemini_generate_code(api_key, previous_code, files_context, instructions):
+def gemini_generate_code(
+    api_key, previous_code=None, instructions=None,
+    file_context=None, error_context=None):
     # 1. Initialize the Client
     # The new SDK uses a centralized client for all model interactions
     client = genai.Client(api_key=api_key)
     
     # 2. Create the prompt
     prompt = f"""
-    CONTEXT (Existing Notebook Code):
-    {previous_code}
+CONTEXT (Existing Notebook Code):
+{previous_code}
 
-    CONTEXT (Known files):
-    {files_context}
-
-    INSTRUCTIONS for New Cell:
-    {instructions}
+"""
     
-    Code:
-    """
+    if error_context:
+        prompt += f"""
+ERROR CONTEXT:
+{error_context}
+
+"""
+
+    if file_context:
+        prompt += f"""
+FILE CONTEXT:
+{file_context}
+
+"""    
+
+    prompt += f"""    
+INSTRUCTIONS for New Cell:
+{instructions}
+
+Code:
+"""
+
+    print("Prompt:", prompt)
 
     # 3. Generate content
     # Note: System instructions are now passed inside the config argument
@@ -47,6 +65,7 @@ def gemini_generate_code(api_key, previous_code, files_context, instructions):
         code = code[len("```python"):].strip()
     if code.endswith("```"):
         code = code[:-3].strip()
+    print("Generated Code:", code)
     return code
 
 # Usage
@@ -57,17 +76,17 @@ def gemini_validate_code(api_key, previous_code, code_to_validate, instructions)
     client = genai.Client(api_key=api_key)
     
     prompt = f"""
-    CONTEXT (Existing Notebook Code):
-    {previous_code}
+CONTEXT (Existing Notebook Code):
+{previous_code}
 
-    CODE TO VALIDATE:
-    {code_to_validate}
+CODE TO VALIDATE:
+{code_to_validate}
 
-    INSTRUCTIONS for Validation:
-    {instructions}
-    
-    Validation Result:
-    """
+INSTRUCTIONS for Validation:
+{instructions}
+
+Validation Result:
+"""
 
     response = client.models.generate_content(
         model="gemini-2.0-flash", 
