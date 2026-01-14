@@ -23,12 +23,14 @@ def getlist(value):
     else:
         return [value]
 
-def normalize_newlines(text):
-    if isinstance(text, str):
-        return text.splitlines(keepends=True)
-    elif isinstance(text, list):
-        return text
-    
+def tostring(value):
+    """Utility to ensure a value is a string."""
+    if isinstance(value, str):
+        return value
+    elif isinstance(value, list):
+        return "".join(value)
+    else:
+        return str(value)
     
 class Plainbook(object):
     """This class implements an Plainbook and its operations."""
@@ -40,7 +42,7 @@ class Plainbook(object):
         self.nb = None
         self._lock = threading.Lock()
         self.last_executed_cell = -1
-        self.load_notebook()
+        self._load_notebook()
         # Context for notebook processing.
         self.input_files = []
         # Starts the kernel.
@@ -57,11 +59,20 @@ class Plainbook(object):
         # Register the cleanup function
         atexit.register(self._shutdown)
 
-    def load_notebook(self):
+    def _load_notebook(self):
         """Loads the notebook from the specified path. If the file is missing, create an empty notebook."""
         try:
             with open(self.path) as f:
                 self.nb = nbformat.read(f, as_version=4)
+                for cell in self.nb.cells:
+                    cell.source = tostring(cell.source)
+                    if cell.cell_type == 'code':
+                        if 'explanation' not in cell.metadata:
+                            cell.metadata['explanation'] = ""
+                        else:
+                            cell.metadata['explanation'] = tostring(cell.metadata['explanation'])
+                        if 'codegen' not in cell.metadata:
+                            cell.metadata['codegen'] = False                        
         except (FileNotFoundError, OSError):
             # Ensure parent directory exists
             parent = os.path.dirname(self.path) or "."
@@ -314,7 +325,7 @@ class Plainbook(object):
         with self._lock:
             assert 0 <= index < len(self.nb.cells)
             cell = self.nb.cells[index]
-            cell.source = normalize_newlines(source)
+            cell.source = source
             if cell.cell_type == 'code':
                 cell.metadata['codegen'] = False
                 # Reset outputs and execution count on code cell edit
@@ -330,7 +341,7 @@ class Plainbook(object):
             assert 0 <= index < len(self.nb.cells)
             cell = self.nb.cells[index]
             assert cell.cell_type == 'code'
-            cell.metadata['explanation'] = normalize_newlines(explanation)
+            cell.metadata['explanation'] = explanation
             cell.metadata['codegen'] = False
             self._write()
             
@@ -341,14 +352,14 @@ class Plainbook(object):
         Needs to be called with the lock held."""
         cell = self.nb.cells[index]
         if cell.cell_type == 'code':
-            explanation = getlist(cell.metadata.get('explanation', []))
-            explanation = ["# " + line for line in explanation]
+            explanation = cell.metadata.get('explanation', "")
+            explanation = ["# " + line for line in explanation.splitlines(keepends=True)]
             explanation_text = "".join(explanation) + "\n"
-            source_code = getlist(cell.source)
-            code_text = "".join(source_code) + "\n"
-            return explanation_text + code_text
+            source_code = cell.source + "\n"
+            return explanation_text + source_code
         elif cell.cell_type == 'markdown':
-            return "".join(["# " + line for line in cell.source]) + "\n"
+            commented_lines = ["# " + line for line in cell.source.splitlines(keepends=True)]
+            return "".join(commented_lines) + "\n"
         else:
             return "\n"
 
