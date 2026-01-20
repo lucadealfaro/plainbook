@@ -416,7 +416,7 @@ createApp({
                     // The cell executed, but we have to stop other further
                     // cells from executing.
                     if(r.outputs[0].ename === 'ModuleNotFoundError') {
-                        throw new Error('A package is required by this code cell. Please install the necessary packages via this command on your local environment and restart the app: pip install ' + r.outputs[0].evalue.split("'")[1]);
+                        throw new Error('A package is required by this code cell. Please install the necessary packages via this command on your local environment: pip install ' + r.outputs[0].evalue.split("'")[1]);
                     } else {
                         throw new Error('Execution halted at cell ' + cellIndex + ': ' + r.outputs[0].ename);
                     }
