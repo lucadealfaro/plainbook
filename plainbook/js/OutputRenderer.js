@@ -48,7 +48,11 @@ export default {
                 </div>  
 
                 <div v-else-if="output.data">
-                    <div v-if="output.data['text/html']" v-html="join(output.data['text/html'])"></div>
+                    <div v-if="output.data['text/html']"
+                        class="html-output"
+                        v-html="join(output.data['text/html'])"
+                        style="overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%;">
+                    </div>
                     <figure v-else-if="output.data['image/png']" class="image output-image"
                             style="display: inline-block; max-width: 100%; width: auto;">
                         <img :src="'data:image/png;base64,' + output.data['image/png']"
