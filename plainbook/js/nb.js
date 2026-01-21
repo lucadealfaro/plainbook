@@ -162,26 +162,25 @@ createApp({
                 throw new Error('Gemini API key is not set. Please set it in the settings.');
             };
             asRead.value = false;
-            try {
-                const response = await fetch(`/generate_code?token=${authToken}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ cell_index: cellIndex })
-                });
-                if (!response.ok) throw new Error('Failed to generate code');
-                const r = await response.json();
-                if (r.status !== 'success') {
-                    throw new Error(r.message || 'Code generation failed');
-                }
-                lastRunIndex.value = r.last_executed_cell;
+            const response = await fetch(`/generate_code?token=${authToken}`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ cell_index: cellIndex })
+            });
+            const r = await response.json();
+            if (!response.ok) throw new Error('Failed to generate code');
+            lastRunIndex.value = r.last_executed_cell;
+            if (r.status == 'success') {
                 if (notebook.value && notebook.value.cells[cellIndex]) {
                     const cell = notebook.value.cells[cellIndex];
                     cell.source = r.code;
                     cell.metadata.codegen = true;
                     console.log('Code generated for cell:', cellIndex);
                 }
-            } catch (err) {
-                throw new Error('Failed to generate code: ' + err.message);
+            } else if (r.status == 'cancelled') {
+                console.log('Code generation cancelled for cell:', cellIndex);
+            } else {
+                throw new Error(r.message || 'Code generation failed');
             }
         };
 

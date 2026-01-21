@@ -397,6 +397,7 @@ class Plainbook(object):
                     self._write()
                     return new_code, True
                 else:
+                    # The request was cancelled, return the current code. 
                     return None, False
             finally:
                 self.ai_request_pending = False
