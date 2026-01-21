@@ -162,6 +162,7 @@ createApp({
                 throw new Error('Gemini API key is not set. Please set it in the settings.');
             };
             asRead.value = false;
+            const cell = notebook.value.cells[cellIndex];
             const response = await fetch(`/generate_code?token=${authToken}`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -416,8 +417,10 @@ createApp({
                     // cells from executing.
                     if(r.outputs[0].ename === 'ModuleNotFoundError') {
                         throw new Error('A package is required by this code cell. Please install the necessary packages via this command on your local environment: pip install ' + r.outputs[0].evalue.split("'")[1]);
+                    } else if (r.outputs[0].ename === 'FileNotFoundError') {
+                        throw new Error('The notebook cannot find a file it needs. Please select all the required input files using the selector at the top, so that the AI knows where to find them, and re-generate the code. If the files are already selected, you might want to refer to them in a more precise way, for instance citing their full name.');
                     } else {
-                        throw new Error('Execution halted at cell ' + cellIndex + ': ' + r.outputs[0].ename);
+                        throw new Error(r.outputs[0].ename);
                     }
                 } else {
                     // Update lastRunIndex from server response
