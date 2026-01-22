@@ -131,3 +131,9 @@ pre[class*="language-"] {
   opacity: 1;
   pointer-events: auto;
 }
+
+/* Style for pandas dataframes */
+
+.dataframe {
+  @extend .table, .is-narrow, .is-striped, .is-size-6;
+}

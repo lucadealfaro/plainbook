@@ -8,6 +8,7 @@ from jupyter_client import KernelManager
 from nbclient import NotebookClient
 from nbclient.exceptions import CellExecutionError
 import nbformat
+from nbclient.util import run_sync
 
 from .gemini import gemini_generate_code, gemini_validate_code
 
@@ -31,6 +32,27 @@ def tostring(value):
         return "".join(value)
     else:
         return str(value)
+    
+VARIABLE_INSPECTION_CODE = """
+import json
+import pandas as pd
+
+var_info = {}
+# Filter out internal/private variables
+for name in [v for v in dir() if not v.startswith('_')]:
+    obj = globals()[name]
+    info = {"type": str(type(obj))}
+    
+    # Add specific details for Pandas DataFrames
+    if isinstance(obj, pd.DataFrame):
+        info["columns"] = obj.columns.tolist()
+        info["shape"] = obj.shape
+    
+    var_info[name] = info
+
+print(json.dumps(var_info))
+"""
+
     
 class Plainbook(object):
     """This class implements an Plainbook and its operations."""
@@ -362,6 +384,35 @@ class Plainbook(object):
             return "".join(commented_lines) + "\n"
         else:
             return "\n"
+        
+    def _get_variables_for_ai(self):
+        """Returns the list of currently defined variables in the kernel."""
+
+        # Execute the inspection code and capture output
+        # We use the internal kernel client (kc) to run the code
+        self._heal_client()
+        self.client.kc.execute(VARIABLE_INSPECTION_CODE)
+        # Wait for the reply and grab the 'stream' output (STDOUT)
+        while True:
+            msg = self.client.kc.get_iopub_msg()
+            if msg['msg_type'] == 'stream' and msg['content']['name'] == 'stdout':
+                result_json = msg['content']['text']
+                break
+            if msg['msg_type'] == 'status' and msg['content']['execution_state'] == 'idle':
+                break
+
+        # 5. Parse and view your variables
+        return result_json
+        # import json
+        # variables = json.loads(result_json)
+        # return variables
+        # for name, details in variables.items():
+        #     print(f"Variable: {name}")
+        #     print(f"  Type: {details['type']}")
+        #     if 'columns' in details:
+        #         print(f"  Columns: {details['columns']}")
+        #     print("-" * 20)
+
 
     def _get_code_for_ai(self, index):
         """Returns the concatenated source code of all previous code cells for context."""
