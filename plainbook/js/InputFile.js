@@ -103,7 +103,14 @@ export default {
         <div class="input-file-wrapper" style="background-color: #f5f5f5; border: 1px solid #dbdbdb; border-radius: 4px;">
             <button style="width: 100%; text-align: left; background: transparent; border: none; padding: 0.75rem; cursor: pointer;"
                     @click="toggleCollapse">
-                {{ isCollapsed ? '▶ &nbsp;Select Input Files' : '▼ &nbsp;You can mention selected files by name in the plainbook, the code generator will know where to find them.' }}
+                <span v-if="isCollapsed">
+                    ▶ 
+                    <span style="display: inline-block; background: gray; color: white; border-radius: 999px; padding: 0.12rem 0.45rem; margin-left: 0.5rem; font-size: 0.8rem; font-weight: 600;">
+                        {{ selectedFiles.size }}
+                    </span>
+                    <span class="ml-2">Select Input Files</span>
+                </span>
+                <span v-else>▼ &nbsp;You can mention selected files by name in the plainbook, the code generator will know where to find them.</span>
             </button>
 
             <div v-if="!isCollapsed" style="display: flex; border-top: 1px solid #dbdbdb; height: 400px; background: white;">
