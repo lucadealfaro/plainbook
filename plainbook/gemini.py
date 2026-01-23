@@ -6,6 +6,21 @@ from google.genai import types
 
 SPACES_AND_PUNCTUATION_PATTERN = f"^[{re.escape(string.punctuation + string.whitespace)}]+"
 
+SYSTEM_INSTRUCTIONS = """
+You are an assistant that writes Python code for Jupyter cells.
+Return ONLY the code, no markdown formatting or explanations.
+To display Pandas dataframes, you can simply return the dataframe variable name,
+and the notebook will render it appropriately.
+"""
+
+CHECKING_INSTRUCTIONS = """
+You are an assistant that validates Python code for Jupyter cells. 
+Your task is to check whether the provided code meets the given instructions. 
+The code of the previous cells is also included as context. 
+You should return the words YES (if the code meets the instructions) or NO (if it does not), 
+followed by a brief explanation.
+"""
+
 def clean_start(text):
     return re.sub(SPACES_AND_PUNCTUATION_PATTERN, '', text)
 
@@ -52,8 +67,7 @@ Code:
         model="gemini-2.0-flash", 
         contents=prompt,
         config=types.GenerateContentConfig(
-            system_instruction="You are an assistant that writes Python code for Jupyter cells. "
-                               "Return ONLY the code, no markdown formatting or explanations."
+            system_instruction=SYSTEM_INSTRUCTIONS
         )
     )
 
@@ -92,11 +106,7 @@ Validation Result:
         model="gemini-2.0-flash", 
         contents=prompt,
         config=types.GenerateContentConfig(
-            system_instruction="You are an assistant that validates Python code for Jupyter cells. "
-                               "Your task is to check whether the provided code meets the given instructions. "
-                               "The code of the previous cells is also included as context. "
-                               "You should return the words YES (if the code meets the instructions) or NO (if it does not), "
-                               "followed by a brief explanation."
+            system_instruction=CHECKING_INSTRUCTIONS
         )   
     )
     r = response.text.strip()
