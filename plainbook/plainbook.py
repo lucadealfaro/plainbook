@@ -65,8 +65,7 @@ class Plainbook(object):
         self._lock = threading.Lock()
         self.last_executed_cell = -1
         self._load_notebook()
-        # Context for notebook processing.
-        self.input_files = []
+        self._filter_input_files()
         # Starts the kernel.
         self.km = KernelManager()
         self.km.start_kernel()
@@ -103,9 +102,20 @@ class Plainbook(object):
             self.nb = nbformat.v4.new_notebook()
             self.nb.cells = []
             self.nb.metadata = {}
+            self.nb.metadata['input_files'] = []
+            self.nb.metadata['is_locked'] = False
             with open(self.path, "w") as f:
                 nbformat.write(self.nb, f)
         self.last_executed_cell = self.nb.metadata.get('last_executed_cell', -1)
+                  
+    def _filter_input_files(self):
+        """Filters the input files from notebook metadata."""
+        if 'input_files' in self.nb.metadata:
+            input_files = self.nb.metadata['input_files']
+            # Keeps only files whose path exists. 
+            input_files = [f for f in input_files 
+                                if os.path.isfile(f.get('path', ''))]
+            self.nb.metadata['input_files'] = input_files
                     
     def _write(self):
         self.nb.metadata['last_executed_cell'] = self.last_executed_cell
@@ -492,7 +502,14 @@ class Plainbook(object):
 
     def set_input_files(self, files):
         """Sets the input files for the notebook."""
-        self.input_files = files
+        with self._lock:
+            self.nb.metadata['input_files'] = files
+            self._write()
+        
+    def get_input_files(self):
+        """Returns the input files for the notebook."""
+        with self._lock:
+            return self.nb.metadata.get('input_files', [])
         
     def _get_files_context(self):
         """Builds the AI context including input files."""
@@ -500,7 +517,7 @@ class Plainbook(object):
             "Here is a list of file names and paths. "
             "The user may mention input files; to access them, the full path should be used."
             ]
-        for file in self.input_files:
+        for file in self.nb.metadata.get('input_files', []):
             context_parts.append(f"* File name: {file['name']} path: {file['path']}\n")
         return "\n".join(context_parts) + "\n"
     

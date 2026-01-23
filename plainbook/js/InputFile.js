@@ -78,14 +78,32 @@ export default {
 
         const toggleCollapse = () => isCollapsed.value = !isCollapsed.value;
 
-                // Get home dir on load
+        // Load selected files mapping from server and populate `selectedFiles`
+        const loadSelectedFiles = async () => {
+            try {
+                const res = await fetch(`/get-files?token=${props.authToken}`);
+                if (!res.ok) return;
+                const data = await res.json();
+                // Clear existing selection and repopulate
+                selectedFiles.clear();
+                data.files.forEach(f => {
+                    selectedFiles.set(f.path, f);
+                });
+            } catch (err) {
+                console.warn('Failed to load selected input files:', err);
+            }
+        };
+
+        // Get home dir on load
         const initialize = async () => {
             try {
                 const res = await fetch(`/home-dir?token=${props.authToken}`);
                 const data = await res.json();
-                fetchFiles(data.path);
+                await fetchFiles(data.path);
+                await loadSelectedFiles();
             } catch (err) {
-                fetchFiles('/'); 
+                await fetchFiles('/');
+                await loadSelectedFiles();
             }
         };
 

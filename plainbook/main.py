@@ -315,6 +315,11 @@ def set_files():
     notebook.set_input_files(files)
     return dict(status='success')
 
+@get('/get-files')
+@require_token
+def get_files():
+    return dict(files=notebook.get_input_files())
+
 
 ################################
 # Server startup
