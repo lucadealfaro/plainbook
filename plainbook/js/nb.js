@@ -77,7 +77,6 @@ createApp({
         const sendExplanationToServer = async (content, cellIndex) => {
             asRead.value = false;
             const cell = notebook.value.cells[cellIndex];
-            cell.metadata.codegen = false;
             try {
                 const response = await fetch(`/edit_explanation?token=${authToken}`, {
                     method: 'POST',
@@ -117,7 +116,6 @@ createApp({
         const sendCodeToServer = async (content, cellIndex) => {
             asRead.value = false;
             const cell = notebook.value.cells[cellIndex];
-            cell.metadata.codegen = false;
             try {
                 const response = await fetch(`/edit_code?token=${authToken}`, {
                     method: 'POST',
@@ -130,6 +128,8 @@ createApp({
                 console.log('Code saved:', cellIndex);
                 const r = await response.json();
                 lastRunIndex.value = r.last_executed_cell;
+                // There is code for the cell now. 
+                cell.metadata.codegen = true;
             } catch (err) {
                 throw new Error('Failed to save code: ' + err.message);
             }
