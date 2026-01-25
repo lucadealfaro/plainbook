@@ -125,7 +125,7 @@ export default {
             isCollapsed, toggleCollapse, currentPath, 
             currentPath, fileList, isLoading,
             selectedFiles, missingFiles, filterQuery, filteredFiles,
-            openFolder, goUp, toggleSelection, removeSelected
+            openFolder, goUp, toggleSelection, removeSelected, removeMissing
         };
     },
     template: /* html */ `
