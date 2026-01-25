@@ -113,9 +113,15 @@ class Plainbook(object):
         if 'input_files' in self.nb.metadata:
             input_files = self.nb.metadata['input_files']
             # Keeps only files whose path exists. 
-            input_files = [f for f in input_files 
-                                if os.path.isfile(f.get('path', ''))]
-            self.nb.metadata['input_files'] = input_files
+            present_input_files = []
+            missing_input_files = []
+            for f in input_files:
+                if os.path.isfile(f.get('path', '')):
+                    present_input_files.append(f)
+                else:
+                    missing_input_files.append(f)
+            self.nb.metadata['input_files'] = present_input_files
+            self.nb.metadata['missing_input_files'] = missing_input_files
                     
     def _write(self):
         self.nb.metadata['last_executed_cell'] = self.last_executed_cell
@@ -500,16 +506,20 @@ class Plainbook(object):
             cell.metadata['validation']['is_hidden'] = is_hidden
             self._write()
 
-    def set_input_files(self, files):
+    def set_input_files(self, files, missing_files=[]):
         """Sets the input files for the notebook."""
         with self._lock:
             self.nb.metadata['input_files'] = files
+            self.nb.metadata['missing_input_files'] = missing_files
             self._write()
         
     def get_input_files(self):
         """Returns the input files for the notebook."""
         with self._lock:
-            return self.nb.metadata.get('input_files', [])
+            return dict(
+                input_files=self.nb.metadata.get('input_files', []),
+                missing_input_files=self.nb.metadata.get('missing_input_files', [])
+            )
         
     def _get_files_context(self):
         """Builds the AI context including input files."""

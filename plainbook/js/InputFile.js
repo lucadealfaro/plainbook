@@ -7,6 +7,7 @@ export default {
         const currentPath = ref('/'); // Root path
         const fileList = ref([]);     // Files in the current directory
         const selectedFiles = reactive(new Map()); // Path -> File object mapping
+        const missingFiles = reactive(new Map()); // Path -> File object mapping for missing files
         const isLoading = ref(false);
         const filterQuery = ref(''); // Search state
         
@@ -59,15 +60,20 @@ export default {
             selectedFiles.delete(path);
         };
 
+        const removeMissing = (path) => {
+            missingFiles.delete(path);
+        }
+
         const syncSelectedFiles = async () => {
             // Convert Map values to a plain array of file objects
-            const filesArray = Array.from(selectedFiles.values());
-            
             try {
                 await fetch(`/set-files?token=${props.authToken}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ files: filesArray })
+                    body: JSON.stringify({ 
+                        files: Array.from(selectedFiles.values()),
+                        missing_files: Array.from(missingFiles.values())
+                    })
                 });
             } catch (err) {
                 throw new Error("Failed to sync files with notebook:", err);
@@ -75,6 +81,7 @@ export default {
         };
 
         watch(selectedFiles, syncSelectedFiles, { deep: true });
+        watch(missingFiles,  syncSelectedFiles, { deep: true });
 
         const toggleCollapse = () => isCollapsed.value = !isCollapsed.value;
 
@@ -88,6 +95,10 @@ export default {
                 selectedFiles.clear();
                 data.files.forEach(f => {
                     selectedFiles.set(f.path, f);
+                });
+                missingFiles.clear();
+                data.missing_files.forEach(f => {
+                    missingFiles.set(f.path, f);
                 });
             } catch (err) {
                 console.warn('Failed to load selected input files:', err);
@@ -113,7 +124,7 @@ export default {
         return {
             isCollapsed, toggleCollapse, currentPath, 
             currentPath, fileList, isLoading,
-            selectedFiles, filterQuery, filteredFiles,
+            selectedFiles, missingFiles, filterQuery, filteredFiles,
             openFolder, goUp, toggleSelection, removeSelected
         };
     },
@@ -125,6 +136,9 @@ export default {
                     ▶ 
                     <span style="display: inline-block; background: gray; color: white; border-radius: 999px; padding: 0.12rem 0.45rem; margin-left: 0.5rem; font-size: 0.8rem; font-weight: 600;">
                         {{ selectedFiles.size }}
+                    </span>
+                    <span class="has-background-danger" style="display: inline-block; color: white; border-radius: 999px; padding: 0.12rem 0.45rem; margin-left: 0.5rem; font-size: 0.8rem; font-weight: 600;">
+                        {{ missingFiles.size }}
                     </span>
                     <span class="ml-2">Select Input Files</span>
                 </span>
@@ -181,6 +195,20 @@ export default {
                             </li>
                         </ul>
                     </div>
+                    <div v-if="missingFiles.size > 0" style="padding: 0.5rem; font-weight: bold; background: #eee;" class="has-text-danger">Missing Files ({{ missingFiles.size }})</div>
+                    <div v-if="missingFiles.size > 0" style="overflow-y: auto; flex: 1; padding: 0.5rem;">
+                        <ul style="list-style: none; margin: 0; padding: 0;">
+                            <li v-for="[path, file] in missingFiles" :key="path" 
+                                style="display: flex; align-items: center; margin-bottom: 4px; font-size: 0.85rem; background: white; padding: 4px; border-radius: 3px; border: 1px solid #eee;">
+                                <button @click="removeMissing(path)" class="delete has-background-danger is-small mr-2">
+                                </button>
+                                <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="path">
+                                    {{ file.name }}
+                                </span>
+                            </li>
+                        </ul>
+                    </div>
+
                 </div>
 
             </div>

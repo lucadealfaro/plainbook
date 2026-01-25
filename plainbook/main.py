@@ -312,13 +312,15 @@ def file_list():
 def set_files():
     data = request.json
     files = data.get('files', [])
-    notebook.set_input_files(files)
+    missing_files = data.get('missing_files', [])
+    notebook.set_input_files(files, missing_files)
     return dict(status='success')
 
 @get('/get-files')
 @require_token
 def get_files():
-    return dict(files=notebook.get_input_files())
+    d = notebook.get_input_files()
+    return dict(files=d['input_files'], missing_files=d['missing_input_files'])
 
 
 ################################
