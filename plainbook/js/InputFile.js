@@ -137,7 +137,7 @@ export default {
                     <span style="display: inline-block; background: gray; color: white; border-radius: 999px; padding: 0.12rem 0.45rem; margin-left: 0.5rem; font-size: 0.8rem; font-weight: 600;">
                         {{ selectedFiles.size }}
                     </span>
-                    <span class="has-background-danger" style="display: inline-block; color: white; border-radius: 999px; padding: 0.12rem 0.45rem; margin-left: 0.5rem; font-size: 0.8rem; font-weight: 600;">
+                    <span v-if="missingFiles.size > 0" class="has-background-danger" style="display: inline-block; color: white; border-radius: 999px; padding: 0.12rem 0.45rem; margin-left: 0.5rem; font-size: 0.8rem; font-weight: 600;">
                         {{ missingFiles.size }}
                     </span>
                     <span class="ml-2">Select Input Files</span>
