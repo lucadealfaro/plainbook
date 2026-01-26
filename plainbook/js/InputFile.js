@@ -185,13 +185,18 @@ export default {
                     <div style="overflow-y: auto; flex: 1; padding: 0.5rem;">
                         <div v-if="selectedFiles.size === 0" style="color: #ccc; font-style: italic;">No files selected</div>
                         <ul style="list-style: none; margin: 0; padding: 0;">
-                            <li v-for="[path, file] in selectedFiles" :key="path" 
-                                style="display: flex; align-items: center; margin-bottom: 4px; font-size: 0.85rem; background: white; padding: 4px; border-radius: 3px; border: 1px solid #eee;">
-                                <button @click="removeSelected(path)" class="delete has-background-danger is-small mr-2">
+                            <li v-for="[path, file] in selectedFiles" :key="path"
+                                style="display: flex; align-items: flex-start; gap: 8px; margin-bottom: 6px; font-size: 0.95rem; background: white; padding: 6px; border-radius: 4px; border: 1px solid #eee;">
+                                <button @click="removeSelected(path)" class="delete has-background-danger is-small" style="margin-top: 4px;">
                                 </button>
-                                <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="path">
-                                    {{ file.name }}
-                                </span>
+                                <div style="display: flex; flex-direction: column; min-width: 0;">
+                                    <div style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; color: #222;" :title="path">
+                                        {{ file.name }}
+                                    </div>
+                                    <div style="color: #3273dc; font-size: 0.8rem; margin-top: 2px; white-space: normal; word-break: break-all;">
+                                        {{ path }}
+                                    </div>
+                                </div>
                             </li>
                         </ul>
                     </div>
