@@ -50,6 +50,8 @@ createApp({
         // For running a notebook.
         const running = ref(false);
         const lastRunIndex = ref(-1);
+        const lastValidCodeCell = ref(-1);
+        const lastValidOutput = ref(-1);
         const asRead = ref(true);
 
         // For settings modal
@@ -58,20 +60,42 @@ createApp({
         // For info modal
         const showInfo = ref(false);
 
+        const updateState = (state) => {
+            if (!state) return;
+            notebook_name.value = state.name;
+            lastRunIndex.value = state.last_executed_cell;
+            lastValidCodeCell.value = state.last_valid_code_cell;
+            lastValidOutput.value = state.last_valid_output;
+            isLocked.value = state.is_locked;
+            if (notebook.value && notebook.value.metadata) {
+                notebook.value.metadata.is_locked = state.is_locked;
+            }
+        };
+
+        const apiCall = async (url, method = 'GET', body = null) => {
+            const options = {
+                method,
+                headers: { 'Content-Type': 'application/json' }
+            };
+            if (body) options.body = JSON.stringify(body);
+            
+            const separator = url.includes('?') ? '&' : '?';
+            const response = await fetch(`${url}${separator}token=${authToken}`, options);
+            if (!response.ok) throw new Error(`API Error: ${response.statusText}`);
+            
+            const r = await response.json();
+            if (r.state) updateState(r.state);
+            return r;
+        };
+
         // 2. Define the fetch logic
         const fetchNotebook = async () => {
             try {
                 loading.value = true;
-                // Replace this URL with your actual callback endpoint
-                const response = await fetch(`/get_notebook?token=${authToken}`);
-                if (!response.ok) throw new Error('Failed to fetch notebook');
-                const r = await response.json();
+                const r = await apiCall('/get_notebook');
                 notebook.value = r.nb;
-                notebook_name.value = r.nb_name;
-                lastRunIndex.value = r.last_executed_cell || -1;
                 geminiApiKey.value = r.gemini_api_key || '';
                 debug.value = r.debug || false;
-                isLocked.value = r.nb?.metadata?.is_locked || false;
             } catch (err) {
                 error.value = err.message;
                 throw new Error("Error in loading notebook", { cause: err });
@@ -91,11 +115,7 @@ createApp({
 
         const sendDebugRequest = async () => {
             try {
-                const response = await fetch(`/debug_request?token=${authToken}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }
-                });
-                if (!response.ok) throw new Error('Failed to send debug request');
+                await apiCall('/debug_request', 'POST', { notebook: notebook.value });
                 console.log('Debug request sent');
             } catch (err) {
                 throw new Error('Debug request error', { cause: err });
@@ -104,22 +124,15 @@ createApp({
 
         const sendExplanationToServer = async (content, cellIndex) => {
             asRead.value = false;
-            const cell = notebook.value.cells[cellIndex];
             try {
-                const response = await fetch(`/edit_explanation?token=${authToken}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        cell_index: cellIndex, 
-                        explanation: content })
+                await apiCall('/edit_explanation', 'POST', { 
+                    cell_index: cellIndex, 
+                    explanation: content 
                 });
-                if (!response.ok) throw new Error('Failed to save the explanation');
                 if (notebook.value && notebook.value.cells[cellIndex]) {
                     notebook.value.cells[cellIndex].metadata.explanation = content;
                 }
                 console.log('Explanation saved:', cellIndex);
-                const r = await response.json();
-                lastRunIndex.value = r.last_executed_cell;
             } catch (err) {
                 throw new Error('Failed to save explanation', { cause: err });
             }
@@ -127,15 +140,8 @@ createApp({
 
         const lockNotebook = async (shouldLock) => {
             try {
-                const response = await fetch(`/lock_notebook?token=${authToken}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ is_locked: shouldLock })
-                });
-                if (!response.ok) throw new Error('Failed to lock notebook');
+                await apiCall('/lock_notebook', 'POST', { is_locked: shouldLock });
                 console.log('Notebook locked:', shouldLock);
-                isLocked.value = shouldLock;
-                notebook.value.metadata.is_locked = shouldLock;
             } catch (err) {
                 throw new Error('Failed to lock notebook', { cause: err });
             }
@@ -145,17 +151,11 @@ createApp({
             asRead.value = false;
             const cell = notebook.value.cells[cellIndex];
             try {
-                const response = await fetch(`/edit_code?token=${authToken}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        cell_index: cellIndex, 
-                        source: content })
+                await apiCall('/edit_code', 'POST', { 
+                    cell_index: cellIndex, 
+                    source: content 
                 });
-                if (!response.ok) throw new Error('Failed to save the code');
                 console.log('Code saved:', cellIndex);
-                const r = await response.json();
-                lastRunIndex.value = r.last_executed_cell;
                 // There is code for the cell now. 
                 cell.metadata.codegen = true;
             } catch (err) {
@@ -166,17 +166,11 @@ createApp({
         const sendMarkdownToServer = async (content, cellIndex) => {
             asRead.value = false;
             try {
-                const response = await fetch(`/edit_markdown?token=${authToken}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
-                        cell_index: cellIndex, 
-                        source: content })
+                await apiCall('/edit_markdown', 'POST', { 
+                    cell_index: cellIndex, 
+                    source: content 
                 });
-                if (!response.ok) throw new Error('Failed to save markdown');
                 console.log('Markdown saved:', cellIndex);
-                const r = await response.json();
-                lastRunIndex.value = r.last_executed_cell;
                 if (notebook.value && notebook.value.cells[cellIndex]) {
                     notebook.value.cells[cellIndex].source = content;
                 }
@@ -190,15 +184,7 @@ createApp({
                 throw new Error('Gemini API key is not set. Please set it in the settings.');
             };
             asRead.value = false;
-            const cell = notebook.value.cells[cellIndex];
-            const response = await fetch(`/generate_code?token=${authToken}`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ cell_index: cellIndex })
-            });
-            const r = await response.json();
-            if (!response.ok) throw new Error('Failed to generate code');
-            lastRunIndex.value = r.last_executed_cell;
+            const r = await apiCall('/generate_code', 'POST', { cell_index: cellIndex });
             if (r.status == 'success') {
                 if (notebook.value && notebook.value.cells[cellIndex]) {
                     const cell = notebook.value.cells[cellIndex];
@@ -235,13 +221,7 @@ createApp({
             };
             asRead.value = false;
             try {
-                const response = await fetch(`/validate_code?token=${authToken}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ cell_index: cellIndex })
-                });
-                if (!response.ok) throw new Error('Failed to validate code for cell:' + cellIndex);
-                const r = await response.json();
+                const r = await apiCall('/validate_code', 'POST', { cell_index: cellIndex });
                 if (notebook.value && notebook.value.cells[cellIndex]) {
                     notebook.value.cells[cellIndex].metadata.validation = r.validation;
                     console.log('Code validation received for cell:', cellIndex, r.validation);
@@ -253,12 +233,7 @@ createApp({
 
         const dismissValidation = async (cellIndex) => {
             try {
-                const response = await fetch(`/set_validation_visibility?token=${authToken}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ cell_index: cellIndex, is_hidden: true })
-                });
-                if (!response.ok) throw new Error('Failed to dismiss validation');
+                await apiCall('/set_validation_visibility', 'POST', { cell_index: cellIndex, is_hidden: true });
                 console.log('Validation dismissed:', cellIndex);
                 if (notebook.value && notebook.value.cells[cellIndex]) {
                     notebook.value.cells[cellIndex].metadata.validation.is_hidden = true;
@@ -283,14 +258,10 @@ createApp({
         const insertCell = async (position, cellType) => {
             asRead.value = false;
             try {
-                const response = await fetch(`/insert_cell?token=${authToken}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ cell_type: cellType, index: position })
+                const r = await apiCall('/insert_cell', 'POST', { 
+                    cell_type: cellType, 
+                    index: position 
                 });
-                if (!response.ok) throw new Error('Failed to insert cell');
-                const r = await response.json();
-                lastRunIndex.value = r.last_executed_cell;
                 if (r.status !== 'success') throw new Error(r.message || 'Insert failed');
                 const { cell, index } = r;
                 if (notebook.value) {
@@ -313,14 +284,7 @@ createApp({
         const deleteCell = async (cellIndex) => {
             asRead.value = false;
             try {
-                const response = await fetch(`/delete_cell?token=${authToken}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ cell_index: cellIndex })
-                });
-                if (!response.ok) throw new Error('Failed to delete cell');
-                const r = await response.json();
-                lastRunIndex.value = r.last_executed_cell;
+                const r = await apiCall('/delete_cell', 'POST', { cell_index: cellIndex });
                 if (r.status !== 'success') throw new Error(r.message || 'Delete failed');
                 if (notebook.value) {
                     notebook.value.cells.splice(cellIndex, 1);
@@ -343,14 +307,7 @@ createApp({
             const total = notebook.value?.cells?.length ?? 0;
             if (newIndex < 0 || newIndex >= total) return;
             try {
-                const response = await fetch(`/move_cell?token=${authToken}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ cell_index: cellIndex, new_index: newIndex })
-                });
-                if (!response.ok) throw new Error('Failed to move cell');
-                const r = await response.json();
-                lastRunIndex.value = r.last_executed_cell;
+                const r = await apiCall('/move_cell', 'POST', { cell_index: cellIndex, new_index: newIndex });
                 if (r.status !== 'success') throw new Error(r.message || 'Move failed');
                 if (notebook.value) {
                     const [cell] = notebook.value.cells.splice(cellIndex, 1);
@@ -424,14 +381,7 @@ createApp({
             const cell = notebook.value.cells[cellIndex];
             if (cell.cell_type !== 'code') return; // Only run code cells
             asRead.value = false;
-//            try {
-                const response = await fetch(`/execute_cell?token=${authToken}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ cell_index: cellIndex })
-                });
-                if (!response.ok) throw new Error('Failed to run cell');
-                const r = await response.json();
+            const r = await apiCall('/execute_cell', 'POST', { cell_index: cellIndex });
                 if (r.status === 'error') {
                     throw new Error(r.message || 'Execution failed');
                 } 
@@ -450,25 +400,11 @@ createApp({
                     } else {
                         throw new Error("Execution error: " + r.outputs[0].ename);
                     }
-                } else {
-                    // Update lastRunIndex from server response
-                    if (r.last_executed_cell !== undefined && r.last_executed_cell !== null) {
-                        lastRunIndex.value = r.last_executed_cell;
-                    }
-                }
-            // } catch (err) {
-            //     running.value = false;
-            //     throw new Error('Execution error', { cause: err });
-            // }
         };
 
         const interruptKernel = async () => {
             try {
-                const response = await fetch(`/interrupt_kernel?token=${authToken}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }
-                });
-                if (!response.ok) throw new Error('Failed to interrupt kernel');
+                await apiCall('/interrupt_kernel', 'POST');
                 console.log('Kernel interrupted');
                 running.value = false;
             } catch (err) {
@@ -478,13 +414,8 @@ createApp({
 
         const resetKernel = async () => {
             try {
-                const response = await fetch(`/reset_kernel?token=${authToken}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' }
-                });
-                if (!response.ok) throw new Error('Failed to reset kernel');
+                await apiCall('/reset_kernel', 'POST');
                 console.log('Kernel reset');
-                lastRunIndex.value = -1;
             } catch (err) {
                 throw new Error('Reset error', { cause: err });
             }
@@ -515,16 +446,8 @@ createApp({
         const saveSettings = async (newKey) => {
             // Save the Gemini API key to the server
             try {
-                const response = await fetch(`/set_key?token=${authToken}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ gemini_api_key: geminiApiKey.value })
-                });
-                if (response.ok) {
-                    console.log('API key saved successfully');
-                } else {
-                    throw new Error('Failed to save API key');
-                }
+                await apiCall('/set_key', 'POST', { gemini_api_key: geminiApiKey.value });
+                console.log('API key saved successfully');
             } catch (err) {
                 throw new Error('Error saving API key', { cause: err });
             }
@@ -564,7 +487,7 @@ createApp({
             regenerateAllCode, regenerateAndRunAllCode,
             validateCode, dismissValidation, resetAndRunAllCells,
             setActiveCell, runCell, running, lastRunIndex, asRead, runAllCells, 
-            interruptKernel, insertCell, markdownEditKey, 
+            interruptKernel, insertCell, markdownEditKey, lastValidCodeCell, lastValidOutput,
             saveSettings, showSettings, showInfo, 
             genError, uiError, closeUiError, debug, sendDebugRequest,
             explanationEditKey, deleteCell, moveCell, geminiApiKey };

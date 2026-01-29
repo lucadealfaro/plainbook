@@ -3,6 +3,8 @@ import asyncio
 import json
 import os
 import threading
+from functools import wraps
+from types import SimpleNamespace
 
 # Notebook imports
 from jupyter_client import KernelManager
@@ -13,6 +15,13 @@ from nbclient.util import run_sync
 
 from .gemini import gemini_generate_code, gemini_validate_code
 
+def add_state(func):
+    @wraps(func)
+    def wrapper(self, *args, **kwargs):
+        r = func(self, *args, **kwargs)
+        s = self.get_state()
+        return SimpleNamespace(r=r, s=s)
+    return wrapper
 
 class ExecutionError(Exception):
     """Custom exception for execution errors in Plainbook."""
@@ -83,7 +92,11 @@ class Plainbook(object):
         self.name = os.path.splitext(os.path.basename(notebook_path))[0]
         self.nb = None
         self._lock = threading.Lock()
+        # Status variables. 
         self.last_executed_cell = -1
+        self.last_valid_code_cell = -1
+        self.last_valid_output = -1
+        # Loads the notebook from disk.
         self._load_notebook()
         self._filter_input_files()
         # Starts the kernel.
@@ -129,6 +142,8 @@ class Plainbook(object):
             with open(self.path, "w") as f:
                 nbformat.write(self.nb, f)
         self.last_executed_cell = self.nb.metadata.get('last_executed_cell', -1)
+        self.last_valid_code_cell = self.nb.metadata.get('last_valid_code_cell', -1) 
+        self.last_valid_output = self.nb.metadata.get('last_valid_output', -1)
                   
     def _filter_input_files(self):
         """Filters the input files from notebook metadata."""
@@ -147,8 +162,22 @@ class Plainbook(object):
                     
     def _write(self):
         self.nb.metadata['last_executed_cell'] = self.last_executed_cell
+        self.nb.metadata['last_valid_code_cell'] = self.last_valid_code_cell
+        self.nb.metadata['last_valid_output'] = self.last_valid_output
         with open(self.path, "w") as f:
             nbformat.write(self.nb, f)
+            
+    def get_state(self):
+        """Returns a dictionary representing the notebook state."""
+        return {
+            'name': self.name,
+            'path': self.path,
+            'num_cells': len(self.nb.cells),
+            'last_executed_cell': self.last_executed_cell,
+            'last_valid_code_cell': self.last_valid_code_cell,
+            'last_valid_output': self.last_valid_output,
+            'is_locked': self.nb.metadata.get('is_locked', False),
+        }
                 
     def get_cell_json(self, index):
         """Returns the JSON representation of a cell by index."""
@@ -179,7 +208,27 @@ class Plainbook(object):
         # This re-binds the internal managers used by async_execute_cell
         if not hasattr(self.client, 'km') or self.client.km is None:
             self.client.km = self.km
-                                
+            
+    def _get_variables(self):
+        """Returns a dictionary of variables and their information in the kernel."""
+        self._heal_client()
+        self.client.kc.execute(VARIABLE_INSPECTION_CODE)
+        
+        result_json = ""
+        try:
+            while True:
+                msg = self.client.kc.get_iopub_msg(timeout=5)
+                if msg['msg_type'] == 'stream' and msg['content']['name'] == 'stdout':
+                    result_json += msg['content']['text']
+                if msg['msg_type'] == 'status' and msg['content']['execution_state'] == 'idle':
+                    break
+        except Exception:
+            pass
+        try:
+            return json.loads(result_json)
+        except (json.JSONDecodeError, TypeError):
+            return {}
+    
     def execute_cell(self, index):
         """Executes a code cell by index and returns the output."""
         with self._lock:
@@ -199,6 +248,10 @@ class Plainbook(object):
             self._heal_client()
             self.client.execute_cell(cell, index)
             self.last_executed_cell = index
+            self.last_valid_output = index
+            # Saves the information about the variables. 
+            # This is used for AI context if we need to regenerate code.
+            cell.metadata['variables'] = self._get_variables()
             self._write()
             return cell.outputs, 'ok'
             
@@ -211,7 +264,8 @@ class Plainbook(object):
             
     def _reset_kernel(self):        
         self._heal_client()
-        print("Resetting kernel and creating new client...")
+        if self.debug:
+            print("Resetting kernel and creating new client...")
         # 1. Properly stop and discard the old client
         if self.kc:
             try:
@@ -247,10 +301,15 @@ class Plainbook(object):
         # 7. Re-initialize the internal async state
         self.client.setup_kernel()
         self.last_executed_cell = -1
+        # Note that we do not reset last_valid_code_cell or last_valid_output,
+        # as the code is still valid, just not executed.
+        if self.debug:
+            print("Kernel reset complete.")
             
     def interrupt_kernel(self):
         if self.km and self.km.is_alive():
-            print("Interrupting kernel...")
+            if self.debug:
+                print("Interrupting kernel...")
             self.km.interrupt_kernel()
                         
     def _old_shutdown(self):
@@ -321,6 +380,7 @@ class Plainbook(object):
         with self._lock:
             self.nb.metadata['is_locked'] = is_locked
             self._write()
+            
 
     def insert_cell(self, index, cell_type):
         """Insert a new cell at index with given type ('markdown' or 'code'). Returns the cell json."""
@@ -335,10 +395,14 @@ class Plainbook(object):
                 new_cell.metadata['codegen'] = False
             self.nb.cells.insert(index, new_cell)
             # Inserting code cells before the last executed cell requires resetting the kernel.
-            if cell_type == 'code' and index <= self.last_executed_cell:
-                self._reset_kernel()
+            if cell_type == 'code':
+                if index <= self.last_executed_cell:
+                    self._reset_kernel()
+                self.last_valid_code_cell = min(self.last_valid_code_cell, index - 1)
+                self.last_valid_output = min(self.last_valid_output, index - 1)
             self._write()
             return new_cell, index
+    
     
     def delete_cell(self, index):
         """Delete the cell at the given index."""
@@ -346,15 +410,25 @@ class Plainbook(object):
             if index < 0 or index >= len(self.nb.cells):
                 raise IndexError("Cell index out of range")
             cell = self.nb.cells[index]
-            if self.last_executed_cell >= index:
+            # Update execution pointer: reset kernel if code was executed, otherwise shift index
+            if index <= self.last_executed_cell:
                 if cell.cell_type == 'code':
-                    # Deleting a code cell that has been executed requires a reset.
                     self._reset_kernel()
                 else:
-                    # Adjust the last executed cell index
                     self.last_executed_cell -= 1
+            # Update validation pointer: cap if code cell, shift if markdown cell
+            if cell.cell_type == 'code':
+                self.last_valid_code_cell = min(self.last_valid_code_cell, index - 1)
+                self.last_valid_output = min(self.last_valid_output, index - 1)
+            else:
+                if index <= self.last_valid_code_cell:
+                    self.last_valid_code_cell -= 1
+                if index <= self.last_valid_output:
+                    self.last_valid_output -= 1
+            # Finally, delete the cell
             del self.nb.cells[index]
             self._write()
+            
 
     def move_cell(self, index, new_index):
         """Move a cell from index to new_index."""
@@ -365,17 +439,30 @@ class Plainbook(object):
             cell = self.nb.cells.pop(index)
             self.nb.cells.insert(new_index, cell)
             if cell.cell_type == 'code':
-                if self.last_executed_cell >= min(index, new_index):
+                affected_idx = min(index, new_index)
+                if self.last_executed_cell >= affected_idx:
                     # Moving a code cell that has been executed may require a reset.
                     # TODO: More fine-grained logic could be applied here, to check if all 
                     # intervening cells are non-code.
                     self._reset_kernel()
+                self.last_valid_code_cell = min(self.last_valid_code_cell, affected_idx - 1)
+                self.last_valid_output = min(self.last_valid_output, affected_idx - 1)
             else:
-                # Adjust the last executed cell index if needed.
+                # Adjust pointers for markdown cell movement
                 if self.last_executed_cell >= index:
                     self.last_executed_cell -= 1
                 if self.last_executed_cell >= new_index:
                     self.last_executed_cell += 1
+                # Adjust validation pointer
+                if self.last_valid_code_cell >= index:
+                    self.last_valid_code_cell -= 1
+                if self.last_valid_code_cell >= new_index:
+                    self.last_valid_code_cell += 1
+                # Adjusts output pointer. 
+                if self.last_valid_output >= index:
+                    self.last_valid_output -= 1
+                if self.last_valid_output >= new_index:
+                    self.last_valid_output += 1
             self._write()
             
     # Cell editing methods
@@ -393,7 +480,14 @@ class Plainbook(object):
                 if index <= self.last_executed_cell:
                     # We need to restart. 
                     self._reset_kernel()
+                # The user has updated the code.  We will assume this 
+                # cell to be valid, if it was before. 
+                # However, any following code cells are now invalid.
+                self.last_valid_code_cell = min(self.last_valid_code_cell, index)
+                # The output is now stale. 
+                self.last_valid_output = min(self.last_valid_output, index - 1)
             self._write()
+
 
     def set_cell_explanation(self, index, explanation):
         """Sets the explanation of a code cell at the given index."""
@@ -403,7 +497,11 @@ class Plainbook(object):
             assert cell.cell_type == 'code'
             cell.metadata['explanation'] = explanation
             cell.metadata['codegen'] = False
+            # The cell code is now considered stale. 
+            self.last_valid_code_cell = min(self.last_valid_code_cell, index - 1)
+            self.last_valid_output = min(self.last_valid_output, index - 1)
             self._write()
+            
             
     # Methods to support AI
     
@@ -422,31 +520,24 @@ class Plainbook(object):
             return "".join(commented_lines) + "\n"
         else:
             return "\n"
-        
-    def _get_variables(self):
-        """Returns a dictionary of variables and their information in the kernel."""
-        self._heal_client()
-        self.client.kc.execute(VARIABLE_INSPECTION_CODE)
-        
-        result_json = ""
-        try:
-            while True:
-                msg = self.client.kc.get_iopub_msg(timeout=5)
-                if msg['msg_type'] == 'stream' and msg['content']['name'] == 'stdout':
-                    result_json += msg['content']['text']
-                if msg['msg_type'] == 'status' and msg['content']['execution_state'] == 'idle':
-                    break
-        except Exception:
-            pass
-        try:
-            return json.loads(result_json)
-        except (json.JSONDecodeError, TypeError):
-            return {}
-        
-    def _get_variables_for_ai(self):
-        """Returns a formatted text summary of variables in the kernel for AI context."""
+                
+    def _get_variables_for_ai(self, index):
+        """Returns a formatted text summary of variables in the kernel 
+        that are defined just _before_ the cell at index is executed. 
+        This is used to provide context for the code at the current cell."""
 
-        variables = self._get_variables()
+        assert 0 <= index < len(self.nb.cells)
+        # Finds the last code cell before index.
+        prev_code_cell_idx = -1
+        for i in range(index - 1, -1, -1):
+            cell = self.nb.cells[i]
+            if cell.cell_type == 'code':
+                prev_code_cell_idx = i
+                break
+        if prev_code_cell_idx == -1:
+            # There are no previous code cells, so no variables.
+            return ""
+        variables = self.nb.cells[prev_code_cell_idx].metadata.get('variables', {})
         lines = []
         for name, info in variables.items():
             # Skip default variables. 
@@ -460,36 +551,51 @@ class Plainbook(object):
                 details.append(f"length: {info['len']}")
             if 'dtype' in info:
                 details.append(f"dtype: {info['dtype']}")
-            
             summary = f"- {name} ({v_type}" + (f", {', '.join(details)}" if details else "") + ")"
             lines.append(summary)
-            
             if 'columns' in info:
                 lines.append("  Columns:")
                 for col in info['columns']:
                     lines.append(f"  * {col['name']} ({col['dtype']})")
-        
         return "\n".join(lines)
     
     
-    def debug_request(self):
-        print(self._get_variables_for_ai())
+    def debug_request(self, nb):
+        with self._lock:
+            self.nb = nbformat.reads(nb, as_version=4)
+            
 
     def _get_code_for_ai(self, index):
         """Returns the concatenated source code of all previous code cells for context."""
         previous_code = [self._get_cell_for_ai(i) for i in range(index)]
         return "\n".join(previous_code)
         
+
     def generate_code_cell(self, api_key, index):
         """Generates code for the cell at index using Gemini."""
         with self._lock:
             assert 0 <= index < len(self.nb.cells)
             cell = self.nb.cells[index]
             assert cell.cell_type == 'code'
+            # We can generate code only when: 
+            # - Execution is up to date for the previous code cell.
+            # - The code itself is up to date at least for the previous code cell.
+            # To check this, let's find the last code cell before index.
+            last_code_cell_idx = -1
+            for i in range(index - 1, -1, -1):
+                if self.nb.cells[i].cell_type == 'code':
+                    last_code_cell_idx = i
+                    break
+            if self.last_valid_code_cell < last_code_cell_idx:
+                raise RuntimeError("Cannot generate code: previous code must all be valid.")
+            if self.last_executed_cell < last_code_cell_idx:
+                raise RuntimeError("Cannot generate code: the previous code cell was not executed.")
+                        
+            # TODO: We need also to get the previous outputs. 
             instructions = cell.metadata.get('explanation')
             files_context = self._get_files_context()
             error_context = self._get_error_context(index)
-            variable_context = self._get_variables_for_ai()
+            variable_context = self._get_variables_for_ai(index)
             previous_code = self._get_code_for_ai(index)
             # Mark that an AI request is pending
             if self.ai_request_pending:
@@ -510,6 +616,8 @@ class Plainbook(object):
                     if index <= self.last_executed_cell:
                         self._reset_kernel()
                     self._write()
+                    # Sets last valid code cell to this cell. 
+                    self.last_valid_code_cell = index
                     return new_code, True
                 else:
                     # The request was cancelled, return the current code. 
@@ -517,9 +625,11 @@ class Plainbook(object):
             finally:
                 self.ai_request_pending = False
 
+
     def cancel_ai_request(self):
         """Cancels any ongoing AI request by interrupting the kernel."""
         self.ai_request_pending = False
+
         
     def validate_code_cell(self, api_key, index):
         """Validates the code in the cell at index using Gemini."""
@@ -533,7 +643,7 @@ class Plainbook(object):
             code_to_validate = cell.source
             instructions = cell.metadata.get('explanation')
             previous_code = self._get_code_for_ai(index)
-            variable_context = self._get_variables_for_ai()
+            variable_context = self._get_variables_for_ai(index)
             try:
                 validation_result = gemini_validate_code(api_key, previous_code, code_to_validate, 
                                                          instructions, variable_context=variable_context,
@@ -546,6 +656,7 @@ class Plainbook(object):
             finally:
                 self.ai_request_pending = False
 
+
     def set_validation_visibility(self, cell_index, is_hidden):
         """Sets the visibility of the validation message for a given cell."""
         with self._lock:
@@ -556,6 +667,7 @@ class Plainbook(object):
                 cell.metadata['validation'] = {}
             cell.metadata['validation']['is_hidden'] = is_hidden
             self._write()
+            
 
     def set_input_files(self, files, missing_files=[]):
         """Sets the input files for the notebook."""
@@ -564,6 +676,7 @@ class Plainbook(object):
             self.nb.metadata['missing_input_files'] = missing_files
             self._write()
         
+        
     def get_input_files(self):
         """Returns the input files for the notebook."""
         with self._lock:
@@ -571,6 +684,7 @@ class Plainbook(object):
                 input_files=self.nb.metadata.get('input_files', []),
                 missing_input_files=self.nb.metadata.get('missing_input_files', [])
             )
+        
         
     def _get_files_context(self):
         """Builds the AI context including input files."""
@@ -581,6 +695,7 @@ class Plainbook(object):
         for file in self.nb.metadata.get('input_files', []):
             context_parts.append(f"* File name: {file['name']} path: {file['path']}\n")
         return "\n".join(context_parts) + "\n"
+    
     
     def _get_error_context(self, cell_index):
         """If the cell has an error, include its traceback as context."""

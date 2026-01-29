@@ -92,8 +92,7 @@ def index():
 def get_notebook():
     return dict(
         nb=notebook.get_json(),
-        nb_name=os.path.basename(notebook_path),
-        last_executed_cell=notebook.last_executed_cell,
+        state=notebook.get_state(),
         gemini_api_key=settings.get('gemini_api_key'),
         debug=args.debug
     )
@@ -119,8 +118,7 @@ def edit_explanation():
     cell_index = data.get('cell_index')
     explanation = data.get('explanation')
     notebook.set_cell_explanation(cell_index, explanation)
-    return dict(status='success', 
-                last_executed_cell=notebook.last_executed_cell)
+    return dict(status='success', state=notebook.get_state())
 
 @post('/edit_code')
 @require_token
@@ -129,8 +127,7 @@ def edit_code():
     cell_index = data.get('cell_index')
     source = data.get('source')
     notebook.set_cell_source(cell_index, source)
-    return dict(status='success', 
-                last_executed_cell=notebook.last_executed_cell)
+    return dict(status='success', state=notebook.get_state())
 
 @post('/edit_markdown')
 @require_token
@@ -139,8 +136,7 @@ def edit_markdown():
     cell_index = data.get('cell_index')
     source = data.get('source')
     notebook.set_cell_source(cell_index, source)
-    return dict(status='success', 
-                last_executed_cell=notebook.last_executed_cell)
+    return dict(status='success', state=notebook.get_state())
 
 @post('/insert_cell')
 @require_token
@@ -149,8 +145,7 @@ def insert_cell():
     cell_type = data.get('cell_type')
     index = data.get('index')
     new_cell, idx = notebook.insert_cell(index, cell_type)
-    return dict(status='success', cell=new_cell, index=idx, 
-                last_executed_cell=notebook.last_executed_cell)
+    return dict(status='success', cell=new_cell, index=idx, state=notebook.get_state())
 
 @post('/delete_cell')
 @require_token
@@ -158,8 +153,7 @@ def delete_cell():
     data = request.json
     cell_index = data.get('cell_index')
     notebook.delete_cell(cell_index)
-    return dict(status='success', 
-                last_executed_cell=notebook.last_executed_cell)
+    return dict(status='success', state=notebook.get_state())
 
 @post('/move_cell')
 @require_token
@@ -168,14 +162,12 @@ def move_cell():
     cell_index = data.get('cell_index')
     new_index = data.get('new_index')
     notebook.move_cell(cell_index, new_index)
-    return dict(status='success', 
-                last_executed_cell=notebook.last_executed_cell)
+    return dict(status='success', state=notebook.get_state())
 
-@get('/last_valid_cell')
+@get('/state')
 @require_token
-def last_valid_cell():
-    last_valid = notebook.last_executed_cell
-    return dict(last_valid_cell=last_valid)
+def get_notebook_state():
+    return dict(state=notebook.get_state())
 
 @post('/execute_cell')
 @require_token
@@ -185,13 +177,12 @@ def execute_cell():
     print(f"Executing cell {cell_index}")
     try:
         outputs, details = notebook.execute_cell(cell_index)
-        return dict(status="ok", details=details, 
-                    outputs=outputs, last_executed_cell=notebook.last_executed_cell)
+        return dict(status="ok", details=details, outputs=outputs, state=notebook.get_state())
     except CellExecutionError as e:
         # The execution error is already captured in the cell outputs. 
         return dict(status="ok", details="CellExecutionError", 
-                    outputs=notebook.nb.cells[cell_index].get('outputs', []),
-                    last_executed_cell=notebook.last_executed_cell)
+                    state=notebook.get_state(),
+                    outputs=notebook.nb.cells[cell_index].get('outputs', []))
     except ExecutionError as e:
         return dict(status='error', message=str(e))
 
@@ -199,14 +190,14 @@ def execute_cell():
 @require_token
 def reset_kernel():
     notebook.reset_kernel()
-    return dict(status='success')
+    return dict(status='success', state=notebook.get_state())
 
 @post('/interrupt_kernel')
 @require_token
 def interrupt_kernel():
     try:
         notebook.interrupt_kernel()
-        return dict(status='success')
+        return dict(status='success', state=notebook.get_state())
     except Exception as e:
         return dict(status='error', message=str(e))
     
@@ -220,14 +211,11 @@ def generate_code_cell():
         return dict(status='error', message='Gemini API key not set.')
     new_code, success = notebook.generate_code_cell(gemini_api_key, cell_index)
     if success:
-        return dict(status='success', 
-                    code=new_code,
-                    last_executed_cell=notebook.last_executed_cell)
+        return dict(status='success', code=new_code, state=notebook.get_state())
     else:
         # The request was cancelled, we need to avoid updating the code.
-        return dict(status='cancelled',
-                    code=None,
-                    last_executed_cell=notebook.last_executed_cell)
+        return dict(status='cancelled', code=None, state=notebook.get_state())
+    
     
 @post('/validate_code')
 @require_token
@@ -238,9 +226,7 @@ def validate_code_cell():
     if not gemini_api_key:
         return dict(status='error', message='Gemini API key not set.')
     validation_result = notebook.validate_code_cell(gemini_api_key, cell_index)
-    return dict(status='success', 
-                validation=validation_result,
-                last_executed_cell=notebook.last_executed_cell)
+    return dict(status='success', validation=validation_result, state=notebook.get_state())
 
 @post('/set_validation_visibility')
 @require_token
@@ -249,14 +235,14 @@ def set_validation_visibility():
     cell_index = data.get('cell_index')
     is_hidden = data.get('is_hidden', False)
     notebook.set_validation_visibility(cell_index, is_hidden)
-    return dict(status='success')
+    return dict(status='success', state=notebook.get_state())
     
 @post('/cancel_ai_request')
 @require_token
 def cancel_ai_request():
     try:
         notebook.cancel_ai_request()
-        return dict(status='success')
+        return dict(status='success', state=notebook.get_state())
     except Exception as e:
         return dict(status='error', message=str(e))
     
@@ -266,7 +252,7 @@ def lock_notebook():
     data = request.json
     is_locked = data.get('is_locked', False)
     notebook.lock(is_locked)
-    return dict(status='success')
+    return dict(state=notebook.get_state())
 
 @get('/home_dir')
 @require_token
@@ -309,7 +295,7 @@ def set_files():
     files = data.get('files', [])
     missing_files = data.get('missing_files', [])
     notebook.set_input_files(files, missing_files)
-    return dict(status='success')
+    return dict(status='success', state=notebook.get_state())
 
 @get('/get_files')
 @require_token
@@ -321,7 +307,10 @@ def get_files():
 @require_token
 def debug_request():
     try:
-        notebook.debug_request()
+        data = request.json
+        nb = data.get('notebook', None)
+        if nb is not None:
+            notebook.debug_request(nb)
         return dict(status='success')
     except Exception as e:
         return dict(status='error', message=str(e))
