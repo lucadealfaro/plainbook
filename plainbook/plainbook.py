@@ -586,10 +586,10 @@ class Plainbook(object):
                 if self.nb.cells[i].cell_type == 'code':
                     last_code_cell_idx = i
                     break
-            if self.last_valid_code_cell < last_code_cell_idx:
-                raise RuntimeError("Cannot generate code: previous code must all be valid.")
-            if self.last_executed_cell < last_code_cell_idx:
-                raise RuntimeError("Cannot generate code: the previous code cell was not executed.")
+            # if self.last_valid_code_cell < last_code_cell_idx:
+            #     raise RuntimeError("Cannot generate code: previous code must all be valid.")
+            # if self.last_executed_cell < last_code_cell_idx:
+            #     raise RuntimeError("Cannot generate code: the previous code cell was not executed.")
                         
             # TODO: We need also to get the previous outputs. 
             instructions = cell.metadata.get('explanation')

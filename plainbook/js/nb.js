@@ -342,6 +342,7 @@ createApp({
                 } else {
                     // We run from the last run cell to the current one. 
                     for (let i = lastRunIndex.value + 1; i <= cellIndex; i++) {
+                        await generateCode(i);
                         await runOneCell(i);
                     }
                     lastRunIndex.value = cellIndex;
