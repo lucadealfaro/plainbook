@@ -81,6 +81,16 @@ def require_token(func):
         return func(*args, **kwargs)
     return wrapper
 
+# Stateful decorator
+def stateful(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        r = func(*args, **kwargs)
+        s = notebook.get_state()
+        r['state'] = s
+        return r
+    return wrapper
+
 # Main routes
 @get('/')
 @require_token
@@ -88,11 +98,11 @@ def index():
     return static_file('index.html', root=os.path.join(APP_FOLDER, 'views'))
 
 @get('/get_notebook')
+@stateful
 @require_token
 def get_notebook():
     return dict(
         nb=notebook.get_json(),
-        state=notebook.get_state(),
         gemini_api_key=settings.get('gemini_api_key'),
         debug=args.debug
     )
@@ -112,64 +122,73 @@ def set_key():
         return dict(status='error', message=str(e))
     
 @post('/edit_explanation')
+@stateful
 @require_token
 def edit_explanation():
     data = request.json
     cell_index = data.get('cell_index')
     explanation = data.get('explanation')
     notebook.set_cell_explanation(cell_index, explanation)
-    return dict(status='success', state=notebook.get_state())
+    return dict(status='success')
 
 @post('/edit_code')
+@stateful
 @require_token
 def edit_code():
     data = request.json
     cell_index = data.get('cell_index')
     source = data.get('source')
     notebook.set_cell_source(cell_index, source)
-    return dict(status='success', state=notebook.get_state())
+    return dict(status='success')
 
 @post('/edit_markdown')
+@stateful
 @require_token
 def edit_markdown():
     data = request.json
     cell_index = data.get('cell_index')
     source = data.get('source')
     notebook.set_cell_source(cell_index, source)
-    return dict(status='success', state=notebook.get_state())
+    return dict(status='success')
 
 @post('/insert_cell')
+@stateful
 @require_token
 def insert_cell():
     data = request.json
     cell_type = data.get('cell_type')
     index = data.get('index')
     new_cell, idx = notebook.insert_cell(index, cell_type)
-    return dict(status='success', cell=new_cell, index=idx, state=notebook.get_state())
+    return dict(status='success', cell=new_cell, index=idx)
 
 @post('/delete_cell')
+@stateful
 @require_token
 def delete_cell():
     data = request.json
     cell_index = data.get('cell_index')
     notebook.delete_cell(cell_index)
-    return dict(status='success', state=notebook.get_state())
+    return dict(status='success')
 
 @post('/move_cell')
+@stateful
 @require_token
 def move_cell():
     data = request.json
     cell_index = data.get('cell_index')
     new_index = data.get('new_index')
     notebook.move_cell(cell_index, new_index)
-    return dict(status='success', state=notebook.get_state())
+    return dict(status='success')
+
 
 @get('/state')
+@stateful
 @require_token
 def get_notebook_state():
-    return dict(state=notebook.get_state())
+    return {}
 
 @post('/execute_cell')
+@stateful
 @require_token
 def execute_cell():
     data = request.json
@@ -177,31 +196,34 @@ def execute_cell():
     print(f"Executing cell {cell_index}")
     try:
         outputs, details = notebook.execute_cell(cell_index)
-        return dict(status="ok", details=details, outputs=outputs, state=notebook.get_state())
+        return dict(status="ok", details=details, outputs=outputs)
     except CellExecutionError as e:
         # The execution error is already captured in the cell outputs. 
         return dict(status="ok", details="CellExecutionError", 
-                    state=notebook.get_state(),
                     outputs=notebook.nb.cells[cell_index].get('outputs', []))
     except ExecutionError as e:
         return dict(status='error', message=str(e))
 
 @post('/reset_kernel')
+@stateful
 @require_token
 def reset_kernel():
     notebook.reset_kernel()
-    return dict(status='success', state=notebook.get_state())
+    return dict(status='success')
 
 @post('/interrupt_kernel')
+@stateful
 @require_token
 def interrupt_kernel():
     try:
         notebook.interrupt_kernel()
-        return dict(status='success', state=notebook.get_state())
+        return dict(status='success')
     except Exception as e:
         return dict(status='error', message=str(e))
     
+    
 @post('/generate_code')
+@stateful
 @require_token
 def generate_code_cell():
     data = request.json
@@ -211,13 +233,14 @@ def generate_code_cell():
         return dict(status='error', message='Gemini API key not set.')
     new_code, success = notebook.generate_code_cell(gemini_api_key, cell_index)
     if success:
-        return dict(status='success', code=new_code, state=notebook.get_state())
+        return dict(status='success', code=new_code)
     else:
         # The request was cancelled, we need to avoid updating the code.
-        return dict(status='cancelled', code=None, state=notebook.get_state())
+        return dict(status='cancelled', code=None)
     
     
 @post('/validate_code')
+@stateful
 @require_token
 def validate_code_cell():
     data = request.json
@@ -226,33 +249,40 @@ def validate_code_cell():
     if not gemini_api_key:
         return dict(status='error', message='Gemini API key not set.')
     validation_result = notebook.validate_code_cell(gemini_api_key, cell_index)
-    return dict(status='success', validation=validation_result, state=notebook.get_state())
+    return dict(status='success', validation=validation_result)
+
 
 @post('/set_validation_visibility')
+@stateful
 @require_token
 def set_validation_visibility():
     data = request.json
     cell_index = data.get('cell_index')
     is_hidden = data.get('is_hidden', False)
     notebook.set_validation_visibility(cell_index, is_hidden)
-    return dict(status='success', state=notebook.get_state())
+    return dict(status='success')
+    
     
 @post('/cancel_ai_request')
+@stateful
 @require_token
 def cancel_ai_request():
     try:
         notebook.cancel_ai_request()
-        return dict(status='success', state=notebook.get_state())
+        return dict(status='success')
     except Exception as e:
         return dict(status='error', message=str(e))
     
+    
 @post('/lock_notebook')
+@stateful
 @require_token
 def lock_notebook():
     data = request.json
     is_locked = data.get('is_locked', False)
     notebook.lock(is_locked)
-    return dict(state=notebook.get_state())
+    return {}
+
 
 @get('/home_dir')
 @require_token
@@ -288,6 +318,7 @@ def file_list():
     except PermissionError:
         raise HTTPError(403, 'Permission denied')
     
+    
 @post('/set_files')
 @require_token
 def set_files():
@@ -297,14 +328,17 @@ def set_files():
     notebook.set_input_files(files, missing_files)
     return dict(status='success', state=notebook.get_state())
 
+
 @get('/get_files')
 @require_token
 def get_files():
     d = notebook.get_input_files()
     return dict(files=d['input_files'], missing_files=d['missing_input_files'])
 
+
 @post('/debug_request')
 @require_token
+@stateful
 def debug_request():
     try:
         data = request.json

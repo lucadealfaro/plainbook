@@ -3,8 +3,6 @@ import asyncio
 import json
 import os
 import threading
-from functools import wraps
-from types import SimpleNamespace
 
 # Notebook imports
 from jupyter_client import KernelManager
@@ -15,13 +13,6 @@ from nbclient.util import run_sync
 
 from .gemini import gemini_generate_code, gemini_validate_code
 
-def add_state(func):
-    @wraps(func)
-    def wrapper(self, *args, **kwargs):
-        r = func(self, *args, **kwargs)
-        s = self.get_state()
-        return SimpleNamespace(r=r, s=s)
-    return wrapper
 
 class ExecutionError(Exception):
     """Custom exception for execution errors in Plainbook."""
