@@ -37,14 +37,14 @@ export default {
                             <span>Up to Date</span>
                         </button>
 
-                        <button v-if="!running && hasNotebook"
+                        <!-- <button v-if="!running && hasNotebook"
                             :disabled="cellCount === 0 || isLocked"
                             @click="$emit('regenerate-all')" 
                             title="Regenerate all code from descriptions"
                             class="button is-success">
                             <span class="icon"><i class="fa fa-repeat"></i></span>
                             <span>Regenerate All</span>
-                        </button>
+                        </button> -->
 
                         <button v-if="!running && hasNotebook"
                             :disabled="cellCount === 0"

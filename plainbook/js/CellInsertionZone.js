@@ -1,9 +1,9 @@
 // CellInsertionZone.js
 export default {
-    props: ['isLast'],
+    props: ['isActive'],
     emits: ['insert'],
     template: /* html */ `
-        <div class="cell-insert-zone" :class="{'last-cell-insert-zone': isLast }">
+        <div class="cell-insert-zone" :class="{'show-cell-insert-zone': isActive }">
             <div class="cell-insert-buttons">
                 <button 
                     class="button insert-cell is-info is-small py-0 px-3" 
