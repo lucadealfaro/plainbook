@@ -158,9 +158,23 @@ class Plainbook(object):
         with open(self.path, "w") as f:
             nbformat.write(self.nb, f)
             
+            
     def get_state(self):
-        """Returns a dictionary representing the notebook state."""
-        return {
+        """Returns a dictionary representing the notebook state.
+        This function is called to update the frontend at the end
+        of most method calls."""
+        try:
+            assert self.last_valid_code_cell >= self.last_executed_cell, \
+                f"last_valid_code_cell {self.last_valid_code_cell} < last_executed_cell {self.last_executed_cell}"
+            assert self.last_valid_output >= self.last_executed_cell, \
+                f"last_valid_output {self.last_valid_output} < last_executed_cell {self.last_executed_cell}"
+            assert self.last_valid_code_cell >= self.last_valid_output, \
+                f"last_valid_code_cell {self.last_valid_code_cell} < last_valid_output {self.last_valid_output}"
+        except AssertionError as e:
+            print(f"Invariant violation: {e}")
+            if not self.debug:
+                raise e
+        state = {
             'name': self.name,
             'path': self.path,
             'num_cells': len(self.nb.cells),
@@ -169,6 +183,10 @@ class Plainbook(object):
             'last_valid_output': self.last_valid_output,
             'is_locked': self.nb.metadata.get('is_locked', False),
         }
+        if self.debug:
+            print("State: ", json.dumps(state, indent=2))
+        return state
+    
                 
     def get_cell_json(self, index):
         """Returns the JSON representation of a cell by index."""
@@ -606,6 +624,8 @@ class Plainbook(object):
                     cell.outputs = []
                     if index <= self.last_executed_cell:
                         self._reset_kernel()
+                    # No output is valid after this. 
+                    self.last_valid_output = min(self.last_valid_output, index - 1)
                     self._write()
                     # Sets last valid code cell to this cell. 
                     self.last_valid_code_cell = index
