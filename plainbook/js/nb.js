@@ -28,9 +28,9 @@ createApp({
         const debug = ref(false);
         // For running a notebook.
         const running = ref(false);
-        const lastRunIndex = ref(-1);
-        const lastValidCodeCell = ref(-1);
-        const lastValidOutput = ref(-1);
+        const last_executed_cell_index = ref(-1);
+        const last_valid_code_cell_index = ref(-1);
+        const last_valid_output_cell_index = ref(-1);
         const asRead = ref(true);
         // For settings modal
         const showSettings = ref(false);
@@ -43,6 +43,7 @@ createApp({
 
         app.config.errorHandler = (err, instance, info) => {
             console.error("Global error:", err, instance, info);
+            running.value = false;
             
             const formatError = (e) => {
                 const msg = e.message || String(e);
@@ -61,10 +62,11 @@ createApp({
 
         const updateState = (state) => {
             if (!state) return;
+            console.log('Updating state:', state);
             notebook_name.value = state.name;
-            lastRunIndex.value = state.last_executed_cell;
-            lastValidCodeCell.value = state.last_valid_code_cell;
-            lastValidOutput.value = state.last_valid_output;
+            last_executed_cell_index.value = state.last_executed_cell;
+            last_valid_code_cell_index.value = state.last_valid_code_cell;
+            last_valid_output_cell_index.value = state.last_valid_output_cell;
             isLocked.value = state.is_locked;
             if (notebook.value && notebook.value.metadata) {
                 notebook.value.metadata.is_locked = state.is_locked;
@@ -155,8 +157,6 @@ createApp({
                     source: content 
                 });
                 console.log('Code saved:', cellIndex);
-                // There is code for the cell now. 
-                cell.metadata.codegen = true;
             } catch (err) {
                 throw new Error('Failed to save code', { cause: err });
             }
@@ -178,41 +178,6 @@ createApp({
             }
         };
 
-        const generateCode = async (cellIndex) => {
-            if (!geminiApiKey.value) {
-                throw new Error('Gemini API key is not set. Please set it in the settings.');
-            };
-            asRead.value = false;
-            const r = await apiCall('/generate_code', 'POST', { cell_index: cellIndex });
-            if (r.status == 'success') {
-                if (notebook.value && notebook.value.cells[cellIndex]) {
-                    const cell = notebook.value.cells[cellIndex];
-                    cell.source = r.code;
-                    cell.metadata.codegen = true;
-                    console.log('Code generated for cell:', cellIndex);
-                }
-            } else if (r.status == 'cancelled') {
-                console.log('Code generation cancelled for cell:', cellIndex);
-            } else {
-                throw new Error(r.message || 'Code generation failed');
-            }
-        };
-
-        const regenerateAllCode = async () => {
-            if (!geminiApiKey.value) {
-                throw new Error('Gemini API key is not set. Please set it in the settings.');
-            };
-            for (let i = 0; i < notebook.value.cells.length; i++) {
-                if (notebook.value.cells[i].cell_type === 'code') {
-                    await generateCode(i);
-                }
-            }
-        };
-
-        const regenerateAndRunAllCode = async () => {
-            await regenerateAllCode();
-            await runAllCells();
-        };
 
         const validateCode = async (cellIndex) => {
             if (!geminiApiKey.value) {
@@ -324,70 +289,84 @@ createApp({
             return el.isContentEditable || tag === 'TEXTAREA' || tag === 'INPUT' || tag === 'SELECT' || tag === 'OPTION';
         };
 
-        // Runs cells up to the present one. 
-        const runCell = async (cellIndex) => {
+        
+        // Generate code up to the current cell. 
+        const generateCode = async (cellIndex) => {
+            if (!geminiApiKey.value) {
+                throw new Error('Gemini API key is not set. Please set it in the settings.');
+            };
             asRead.value = false;
-            if (!running.value) {
-                running.value = true;
-                if (lastRunIndex.value === cellIndex) {
-                    // We rerun the same cell.
-                    await runOneCell(cellIndex);
-                } else if (lastRunIndex.value > cellIndex) {
-                    // We need to run from the start up to cellIndex
-                    await resetKernel();
-                    for (let i = 0; i <= cellIndex; i++) {
-                        await runOneCell(i);
-                    }
-                    lastRunIndex.value = cellIndex;
-                } else {
-                    // We run from the last run cell to the current one. 
-                    for (let i = lastRunIndex.value + 1; i <= cellIndex; i++) {
-                        await runOneCell(i);
-                    }
-                    lastRunIndex.value = cellIndex;
+            for (let i = last_valid_code_cell_index.value + 1; i <= cellIndex; i++) {
+                if (!running.value) return; // Stop if running has been cancelled
+                await generateCodeOneCell(i);
+            }
+        };
+        
+        
+        // Function in charge of generating code for one cell.
+        const generateCodeOneCell = async (cellIndex, force = false) => {
+            const cell = notebook.value.cells[cellIndex];
+            if (cell.cell_type !== 'code') return; // Only code cells
+            if (!force && last_valid_code_cell_index.value >= cellIndex) return; // Already valid code
+            // If I don't have valid outputs for the previous cell, I need to run it first. 
+            // Those outputs are needed as context for code generation.
+            if (last_valid_output_cell_index.value < cellIndex - 1 && cellIndex > 0) {
+                await runCells(cellIndex - 1);
+            }
+            if (!running.value) return; // Stop if running has been cancelled
+            asRead.value = false;
+            const r = await apiCall('/generate_code', 'POST', { cell_index: cellIndex });
+            if (r.status == 'success') {
+                if (notebook.value && notebook.value.cells[cellIndex]) {
+                    cell.source = r.code;
+                    console.log('Code generated for cell:', cellIndex);
                 }
-                running.value = false;
+            } else if (r.status == 'cancelled') {
+                console.log('Code generation cancelled for cell:', cellIndex);
+            } else {
+                throw new Error(r.message || 'Code generation failed');
             }
         };
 
-        const saveExplanationAndRun = async (content, cellIndex) => {
-            await sendExplanationToServer(content, cellIndex);
-            await generateCode(cellIndex);
-            await runCell(cellIndex);
-        };
 
-        // Runs all cells in the notebook.
-        const runAllCells = async () => {
+        // Executes cells up to the current cell. 
+        const runCells = async (cellIndex) => {
             asRead.value = false;
-            if (!running.value) {
-                running.value = true;
-                for (let i = lastRunIndex.value + 1; i < notebook.value.cells.length && running.value; i++) {
+            if (last_executed_cell_index.value === cellIndex) {
+                // We rerun the same cell.
+                await runOneCell(cellIndex);
+            } else if (last_executed_cell_index.value > cellIndex) {
+                // We need to run from the start up to cellIndex
+                await ui_resetKernel();
+                await runCells(cellIndex);
+            } else {
+                // We run from the last run cell to the current one. 
+                for (let i = last_executed_cell_index.value + 1; i <= cellIndex; i++) {
+                    if (!running.value) return; // Stop if running has been cancelled
+                    // If the code is not valid, generate it first.
+                    if (last_valid_code_cell_index.value < i) {
+                        await generateCode(i);
+                    }
+                    if (!running.value) return; // Stop if running has been cancelled
+                    // Runs this specific cell. 
                     await runOneCell(i);
                 }
-                running.value = false;
-                lastRunIndex.value = notebook.value.cells.length - 1;
             }
         };
 
-        const resetAndRunAllCells = async () => {
-            await resetKernel();
-            await runAllCells();
-        };
 
         // Function in charge of running one cell in the notebook.
         const runOneCell = async (cellIndex) => {
             if (cellIndex < 0 || cellIndex >= notebook.value.cells.length) return;
             const cell = notebook.value.cells[cellIndex];
             if (cell.cell_type !== 'code') return; // Only run code cells
+            if (!running.value) return; // Stop if running has been cancelled
             asRead.value = false;
             const r = await apiCall('/execute_cell', 'POST', { cell_index: cellIndex });
                 if (r.status === 'error') {
                     throw new Error(r.message || 'Execution failed');
                 } 
-                // Update outputs in the notebook model
-                if (notebook.value && notebook.value.cells[cellIndex]) {
-                    notebook.value.cells[cellIndex].outputs = r.outputs;
-                }                
+                cell.outputs = r.outputs;
                 console.log('Cell executed:', cellIndex, r.details);
                 if (r.details === 'CellExecutionError') {
                     // The cell executed, but we have to stop other further
@@ -402,17 +381,64 @@ createApp({
                 }
         };
 
-        const interruptKernel = async () => {
+
+        // These are the UI functions that cause the "running" to display. 
+        // The important fact is that these cannot be re-entrant.
+
+        const ui_saveExplanationAndRun = async (content, cellIndex) => {
+            await sendExplanationToServer(content, cellIndex);
+            if (!running.value) {
+                running.value = true;
+                await generateCode(cellIndex);
+                await runCells(cellIndex);
+                running.value = false;
+            }
+        };
+
+
+        const ui_runCell = async (cellIndex) => {
+            if (!running.value) {
+                running.value = true;
+                await runCells(cellIndex);
+                running.value = false;
+            }
+        };
+
+
+        const ui_resetAndRunAllCells = async () => {
+            asRead.value = false;
+            if (!running.value) {
+                running.value = true;
+                await ui_resetKernel();
+                await runCells(notebook.value.cells.length - 1);
+                running.value = false;
+            }
+        };
+
+
+        const ui_forceRegenerateCellCode = async (cellIndex) => {
+            asRead.value = false;
+            if (!running.value) {
+                running.value = true;
+                await generateCodeOneCell(cellIndex, true);
+                running.value = false;
+            }
+            await generateCodeOneCell(cellIndex, true);
+        };
+
+
+        const ui_interruptKernel = async () => {
             try {
+                running.value = false;
                 await apiCall('/interrupt_kernel', 'POST');
                 console.log('Kernel interrupted');
-                running.value = false;
             } catch (err) {
                 throw new Error('Interrupt error', { cause: err });
             }
         };
 
-        const resetKernel = async () => {
+
+        const ui_resetKernel = async () => {
             try {
                 await apiCall('/reset_kernel', 'POST');
                 console.log('Kernel reset');
@@ -420,6 +446,7 @@ createApp({
                 throw new Error('Reset error', { cause: err });
             }
         };
+
 
         const handleKeydown = (e) => {
             const total = notebook.value?.cells?.length ?? 0;
@@ -482,12 +509,12 @@ createApp({
 
         return { notebook, notebook_name, loading, error, isLocked, lockNotebook,
             sendExplanationToServer, authToken,
-            sendCodeToServer, saveExplanationAndRun,
+            sendCodeToServer, ui_saveExplanationAndRun,
             sendMarkdownToServer, generateCode, activeIndex, reloadNotebook,
-            regenerateAllCode, regenerateAndRunAllCode,
-            validateCode, dismissValidation, resetAndRunAllCells,
-            setActiveCell, runCell, running, lastRunIndex, asRead, runAllCells, 
-            interruptKernel, insertCell, markdownEditKey, lastValidCodeCell, lastValidOutput,
+            validateCode, dismissValidation, ui_resetAndRunAllCells, ui_forceRegenerateCellCode,
+            setActiveCell, ui_runCell, running, asRead,
+            ui_interruptKernel, insertCell, markdownEditKey,
+            last_executed_cell_index, last_valid_code_cell_index, last_valid_output_cell_index,
             saveSettings, showSettings, showInfo, 
             genError, uiError, closeUiError, debug, sendDebugRequest,
             explanationEditKey, deleteCell, moveCell, geminiApiKey };

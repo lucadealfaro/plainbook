@@ -86,7 +86,7 @@ class Plainbook(object):
         # Status variables. 
         self.last_executed_cell = -1
         self.last_valid_code_cell = -1
-        self.last_valid_output = -1
+        self.last_valid_output_cell = -1
         # Loads the notebook from disk.
         self._load_notebook()
         self._filter_input_files()
@@ -118,8 +118,6 @@ class Plainbook(object):
                             cell.metadata['explanation'] = ""
                         else:
                             cell.metadata['explanation'] = tostring(cell.metadata['explanation'])
-                        if 'codegen' not in cell.metadata:
-                            cell.metadata['codegen'] = False                        
         except (FileNotFoundError, OSError):
             # Ensure parent directory exists
             parent = os.path.dirname(self.path) or "."
@@ -134,7 +132,7 @@ class Plainbook(object):
                 nbformat.write(self.nb, f)
         self.last_executed_cell = self.nb.metadata.get('last_executed_cell', -1)
         self.last_valid_code_cell = self.nb.metadata.get('last_valid_code_cell', -1) 
-        self.last_valid_output = self.nb.metadata.get('last_valid_output', -1)
+        self.last_valid_output_cell = self.nb.metadata.get('last_valid_output', -1)
                   
     def _filter_input_files(self):
         """Filters the input files from notebook metadata."""
@@ -154,7 +152,7 @@ class Plainbook(object):
     def _write(self):
         self.nb.metadata['last_executed_cell'] = self.last_executed_cell
         self.nb.metadata['last_valid_code_cell'] = self.last_valid_code_cell
-        self.nb.metadata['last_valid_output'] = self.last_valid_output
+        self.nb.metadata['last_valid_output'] = self.last_valid_output_cell
         with open(self.path, "w") as f:
             nbformat.write(self.nb, f)
             
@@ -164,14 +162,12 @@ class Plainbook(object):
         This function is called to update the frontend at the end
         of most method calls."""
         try:
-            assert self.last_valid_code_cell >= self.last_executed_cell, \
-                f"last_valid_code_cell {self.last_valid_code_cell} < last_executed_cell {self.last_executed_cell}"
-            assert self.last_valid_output >= self.last_executed_cell, \
-                f"last_valid_output {self.last_valid_output} < last_executed_cell {self.last_executed_cell}"
-            assert self.last_valid_code_cell >= self.last_valid_output, \
-                f"last_valid_code_cell {self.last_valid_code_cell} < last_valid_output {self.last_valid_output}"
+            assert self.last_valid_code_cell >= self.last_valid_output_cell >= self.last_executed_cell, (
+                f"last_valid_code_cell {self.last_valid_code_cell}, "
+                f"last_valid_output {self.last_valid_output_cell}, "
+                f"last_executed_cell {self.last_executed_cell}")
         except AssertionError as e:
-            print(f"Invariant violation: {e}")
+            print(f"State violation: {e}")
             if not self.debug:
                 raise e
         state = {
@@ -180,7 +176,7 @@ class Plainbook(object):
             'num_cells': len(self.nb.cells),
             'last_executed_cell': self.last_executed_cell,
             'last_valid_code_cell': self.last_valid_code_cell,
-            'last_valid_output': self.last_valid_output,
+            'last_valid_output_cell': self.last_valid_output_cell,
             'is_locked': self.nb.metadata.get('is_locked', False),
         }
         if self.debug:
@@ -257,7 +253,7 @@ class Plainbook(object):
             self._heal_client()
             self.client.execute_cell(cell, index)
             self.last_executed_cell = index
-            self.last_valid_output = index
+            self.last_valid_output_cell = index
             # Saves the information about the variables. 
             # This is used for AI context if we need to regenerate code.
             cell.metadata['variables'] = self._get_variables()
@@ -401,14 +397,13 @@ class Plainbook(object):
             else:
                 new_cell = nbformat.v4.new_code_cell(source="", execution_count=None, outputs=[])
                 new_cell.metadata['explanation'] = []
-                new_cell.metadata['codegen'] = False
             self.nb.cells.insert(index, new_cell)
             # Inserting code cells before the last executed cell requires resetting the kernel.
             if cell_type == 'code':
                 if index <= self.last_executed_cell:
                     self._reset_kernel()
                 self.last_valid_code_cell = min(self.last_valid_code_cell, index - 1)
-                self.last_valid_output = min(self.last_valid_output, index - 1)
+                self.last_valid_output_cell = min(self.last_valid_output_cell, index - 1)
             self._write()
             return new_cell, index
     
@@ -428,12 +423,12 @@ class Plainbook(object):
             # Update validation pointer: cap if code cell, shift if markdown cell
             if cell.cell_type == 'code':
                 self.last_valid_code_cell = min(self.last_valid_code_cell, index - 1)
-                self.last_valid_output = min(self.last_valid_output, index - 1)
+                self.last_valid_output_cell = min(self.last_valid_output_cell, index - 1)
             else:
                 if index <= self.last_valid_code_cell:
                     self.last_valid_code_cell -= 1
-                if index <= self.last_valid_output:
-                    self.last_valid_output -= 1
+                if index <= self.last_valid_output_cell:
+                    self.last_valid_output_cell -= 1
             # Finally, delete the cell
             del self.nb.cells[index]
             self._write()
@@ -455,7 +450,7 @@ class Plainbook(object):
                     # intervening cells are non-code.
                     self._reset_kernel()
                 self.last_valid_code_cell = min(self.last_valid_code_cell, affected_idx - 1)
-                self.last_valid_output = min(self.last_valid_output, affected_idx - 1)
+                self.last_valid_output_cell = min(self.last_valid_output_cell, affected_idx - 1)
             else:
                 # Adjust pointers for markdown cell movement
                 if self.last_executed_cell >= index:
@@ -468,10 +463,10 @@ class Plainbook(object):
                 if self.last_valid_code_cell >= new_index:
                     self.last_valid_code_cell += 1
                 # Adjusts output pointer. 
-                if self.last_valid_output >= index:
-                    self.last_valid_output -= 1
-                if self.last_valid_output >= new_index:
-                    self.last_valid_output += 1
+                if self.last_valid_output_cell >= index:
+                    self.last_valid_output_cell -= 1
+                if self.last_valid_output_cell >= new_index:
+                    self.last_valid_output_cell += 1
             self._write()
             
     # Cell editing methods
@@ -483,7 +478,6 @@ class Plainbook(object):
             cell = self.nb.cells[index]
             cell.source = source
             if cell.cell_type == 'code':
-                cell.metadata['codegen'] = False
                 # Reset outputs and execution count on code cell edit
                 cell.outputs = []
                 if index <= self.last_executed_cell:
@@ -494,7 +488,7 @@ class Plainbook(object):
                 # However, any following code cells are now invalid.
                 self.last_valid_code_cell = min(self.last_valid_code_cell, index)
                 # The output is now stale. 
-                self.last_valid_output = min(self.last_valid_output, index - 1)
+                self.last_valid_output_cell = min(self.last_valid_output_cell, index - 1)
             self._write()
 
 
@@ -505,10 +499,9 @@ class Plainbook(object):
             cell = self.nb.cells[index]
             assert cell.cell_type == 'code'
             cell.metadata['explanation'] = explanation
-            cell.metadata['codegen'] = False
             # The cell code is now considered stale. 
             self.last_valid_code_cell = min(self.last_valid_code_cell, index - 1)
-            self.last_valid_output = min(self.last_valid_output, index - 1)
+            self.last_valid_output_cell = min(self.last_valid_output_cell, index - 1)
             self._write()
             
             
@@ -619,13 +612,12 @@ class Plainbook(object):
                 # If we are still in a request, update the cell.
                 if self.ai_request_pending:
                     cell.source = new_code
-                    cell.metadata['codegen'] = True
                     # Reset outputs and execution count
                     cell.outputs = []
                     if index <= self.last_executed_cell:
                         self._reset_kernel()
                     # No output is valid after this. 
-                    self.last_valid_output = min(self.last_valid_output, index - 1)
+                    self.last_valid_output_cell = min(self.last_valid_output_cell, index - 1)
                     self._write()
                     # Sets last valid code cell to this cell. 
                     self.last_valid_code_cell = index

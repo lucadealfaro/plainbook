@@ -1,7 +1,7 @@
 import { ref, computed, watch, nextTick } from './vue.esm-browser.js';
 
 const ExplanationRenderer = {
-    props: ['source', 'isActive', 'codegen', 'needsRunning', 'hasError','asRead', 'startEditKey', 'isLocked'],
+    props: ['source', 'isActive', 'codeValid', 'outputValid', 'executed', 'hasError','asRead', 'startEditKey', 'isLocked'],
     emits: ['update:source', 'save', 'saveandrun', 'gencode', 'validate', 
             'run', 'delete', 'moveUp', 'moveDown'],
     setup(props, { emit }) {    
@@ -94,14 +94,13 @@ const ExplanationRenderer = {
                 style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem">
             <div class="toolbar-left">
                 <button class="button run-button is-small is-primary mr-1" 
-                        :disabled="!codegen"
                         title="Run this cell and all necessary preceding cells" @click.stop="$emit('run')">
                     <span class="icon"><i class="fa fa-step-forward"></i></span><span>Run</span>
                 </button>
                 <button class="button is-small" style="opacity: 0.6;">
-                    <span v-if="!codegen">Needs Code Generation</span>
+                    <span v-if="!codeValid">Needs Code Generation</span>
+                    <span v-else-if="!outputValid">Needs running</span>
                     <span v-else-if="asRead">Unmodified</span>
-                    <span v-else-if="needsRunning">Needs running</span>
                     <span v-else>Up to date</span>
                 </button>
             </div>
@@ -128,7 +127,7 @@ const ExplanationRenderer = {
                     <span v-if="hasError">Fix Code</span>
                     <span v-else>Regenerate Code</span>
                 </button>
-                <button :disabled="!codegen" class="button is-small is-success" title="Validate code against description" @click.stop="$emit('validate')">
+                <button :disabled="!codeValid" class="button is-small is-success" title="Validate code against description" @click.stop="$emit('validate')">
                     <span class="icon"><i class="fa fa-check"></i></span> <span>Validate Code</span>
                 </button>
                 <button class="button is-small is-danger py-1 " title="Delete cell" aria-label="Delete" 

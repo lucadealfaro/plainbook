@@ -9,7 +9,8 @@ import OutputRenderer from './OutputRenderer.js';
 
 export default {
     components: { MarkdownCell, CodeCell, ExplanationEditor, ValidationCell, OutputRenderer },
-    props: ['cell', 'isActive', 'isLocked', 'needsRunning', 'asRead', 'markdownEditKey', 'explanationEditKey'],
+    props: ['cell', 'isActive', 'isLocked', 'codeValid', 'outputValid', 'executed', 
+        'asRead', 'markdownEditKey', 'explanationEditKey'],
     emits: [
         'save-markdown', 'save-explanation', 'save-code', 
         'run-cell', 'save-and-run', 'generate-code', 
@@ -50,9 +51,10 @@ export default {
                         :isActive="isActive" 
                         :isLocked="isLocked" 
                         :asRead="asRead"
-                        :codegen="cell.metadata?.codegen || false" 
+                        :codeValid="codeValid"
+                        :outputValid="outputValid"
+                        :executed="executed"
                         :hasError="hasError"
-                        :needs-running="needsRunning"
                         :start-edit-key="explanationEditKey"
                         @save="$emit('save-explanation', $event)" 
                         @gencode="$emit('generate-code')" 

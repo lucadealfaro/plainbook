@@ -1,8 +1,8 @@
 export default {
-    props: ['isLocked', 'running', 'hasNotebook', 'lastRunIndex', 'cellCount', 'hasApiKey', 'debug'],
+    props: ['isLocked', 'running', 'hasNotebook', 'upToDate', 'cellCount', 'hasApiKey', 'debug'],
     emits: [
         'lock', 'refresh', 'interrupt', 'regenerate-all', 
-        'reset-run-all', 'open-info', 'open-settings'
+        'reset-run-all', 'run-all','open-info', 'open-settings', 'debug-request'
         ],
     template: /* html */ `
     <nav class="navbar is-dark is-fixed-top" role="navigation" aria-label="main navigation">
@@ -31,7 +31,7 @@ export default {
                             <span>Running...</span>
                         </button>
 
-                        <button v-if="!running && hasNotebook && lastRunIndex >= cellCount - 1"
+                        <button v-if="!running && upToDate"
                                 class="button is-light" title="All cells have been run">
                             <span class="icon"><i class="fa fa-check-circle"></i></span>
                             <span>Up to Date</span>
@@ -51,9 +51,22 @@ export default {
                             @click="$emit('reset-run-all')" 
                             title="Reset and run all cells"
                             class="button is-primary">
-                            <span class="icon"><i class="fa fa-play"></i></span>
+                            <span class="icon px-4">
+                                    <i class="fa fa-repeat mr-1"></i>
+                                    <i class="fa fa-play"></i>
+                            </span>
                             <span>Reset and Run All</span>
                         </button>
+
+                        <button v-if="!running && hasNotebook"
+                            :disabled="cellCount === 0"
+                            @click="$emit('run-all')" 
+                            title="Run all"
+                            class="button is-primary">
+                            <span class="icon"><i class="fa fa-play"></i></span>
+                            <span>Run</span>
+                        </button>
+
                     </div>
                 </div>
             </div>
