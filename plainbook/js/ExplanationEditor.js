@@ -1,9 +1,13 @@
 import { ref, computed, watch, nextTick } from './vue.esm-browser.js';
 
+import CellStateButton from './CellStateButton.js';
+
 const ExplanationRenderer = {
-    props: ['source', 'isActive', 'codeValid', 'outputValid', 'executed', 'hasError','asRead', 'startEditKey', 'isLocked'],
+    props: ['source', 'isActive', 'codeValid', 'outputValid', 'executed', 'hasError',
+            'asRead', 'startEditKey', 'isLocked'],
     emits: ['update:source', 'save', 'saveandrun', 'gencode', 'validate', 
             'run', 'delete', 'moveUp', 'moveDown'],
+    components: { CellStateButton },
     setup(props, { emit }) {    
         const isEditing = ref(false);
         const localSource = ref((Array.isArray(props.source) ? props.source.join('') : props.source) || '');
@@ -79,7 +83,8 @@ const ExplanationRenderer = {
         };
 
         return { isEditing, localSource, rendered, enterEditMode, saveChanges, 
-            cancelEdit, textareaEl, autoResize, saveAndRun, localIsLocked};
+            cancelEdit, textareaEl, autoResize, saveAndRun, localIsLocked, 
+            CellStateButton };
     },
 
     template: /* html */ `
@@ -97,12 +102,11 @@ const ExplanationRenderer = {
                         title="Run this cell and all necessary preceding cells" @click.stop="$emit('run')">
                     <span class="icon"><i class="fa fa-play"></i></span><span>Run</span>
                 </button>
-                <button class="button is-small" style="opacity: 0.6;">
-                    <span v-if="!codeValid">Needs Code Generation</span>
-                    <span v-else-if="!outputValid">Needs running</span>
-                    <span v-else-if="asRead">Unmodified</span>
-                    <span v-else>Up to date</span>
-                </button>
+                <cell-state-button 
+                :code-valid="codeValid" 
+                :output-valid="outputValid" 
+                :as-read="asRead" 
+                :has-error="hasError" />
             </div>
             <div class="toolbar-right" style="display: flex; flex-wrap: wrap; gap: 0.25rem;">
                 <button class="button is-small is-info" title="Edit action description" 

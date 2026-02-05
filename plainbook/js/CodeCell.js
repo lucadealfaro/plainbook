@@ -1,8 +1,12 @@
 import { ref, computed, watch, nextTick } from './vue.esm-browser.js';
 
+import CellStateButton from './CellStateButton.js';
+
 export default {
-    props: ['source', 'executionCount', 'isActive'],
+    props: ['source', 'executionCount', 'isActive', 'isLocked', 
+            'codeValid', 'outputValid', 'executed', 'hasError', 'asRead'],
     emits: ['save', 'update:source'],
+    components: { CellStateButton },
     setup(props, { emit }) {
         const isCollapsed = ref(true);
         const isEditing = ref(false);
@@ -129,16 +133,24 @@ export default {
         };
 
         return { isCollapsed, toggleCollapse, isEditing, cancelEdit, localSource, 
-            localIsLocked, highlightedCode, enterEditMode, saveCode, textareaEl, autoResize, handleTabKey };
+            localIsLocked, highlightedCode, enterEditMode, saveCode, textareaEl, 
+            CellStateButton, autoResize, handleTabKey };
     },
     template: /* html */ `
         <div class="code-cell-wrapper" style="position: relative; min-height: 1.75rem;">
-            <button class="button is-small is-white px-2"
-                    style="position: absolute; top: 0; left: 0; z-index: 1;"
-                    @click="toggleCollapse">
-                {{ isCollapsed ? '▶ &nbsp;Show code' : '▼' }}
-            </button>
-
+            <div style="display: flex; gap: 0.25rem; align-items: center; position: absolute; top: 0; left: 0; z-index: 1;">
+                <button class="button is-small is-white px-2"
+                        @click="toggleCollapse">
+                    {{ isCollapsed ? '▶ &nbsp;Show code' : '▼' }}
+                </button>
+                <cell-state-button v-if="!isActive"
+                    :code-valid="codeValid" 
+                    :output-valid="outputValid" 
+                    :as-read="asRead" 
+                    :has-error="hasError"
+                    :is-narrow="true" 
+                    :is-output="true"/>
+            </div>
             <div v-if="!isCollapsed" style="padding-left: 2.25rem;">
                 <div v-if="!isEditing" class="p-2 overflow-x-auto" @dblclick="enterEditMode">
                     <pre class="language-python"><code class="language-python" v-html="highlightedCode"></code></pre>

@@ -6,9 +6,12 @@ import CodeCell from './CodeCell.js';
 import ExplanationEditor from './ExplanationEditor.js';
 import ValidationCell from './ValidationCell.js';
 import OutputRenderer from './OutputRenderer.js';
+import CellStateButton from './CellStateButton.js';
 
 export default {
-    components: { MarkdownCell, CodeCell, ExplanationEditor, ValidationCell, OutputRenderer },
+    components: { MarkdownCell, CodeCell, ExplanationEditor, ValidationCell, OutputRenderer,
+            CellStateButton
+    },
     props: ['cell', 'isActive', 'isLocked', 'codeValid', 'outputValid', 'executed', 
         'asRead', 'markdownEditKey', 'explanationEditKey'],
     emits: [
@@ -76,6 +79,11 @@ export default {
                     :execution-count="cell.execution_count" 
                     :is-active="isActive"
                     :is-locked="isLocked"
+                    :codeValid="codeValid"
+                    :outputValid="outputValid"
+                    :executed="executed"
+                    :hasError="hasError"
+                    :asRead="asRead"
                     @save="$emit('save-code', $event)" />
                 
                 <div v-if="cell.outputs?.length" class="p-2 border-top has-background-white">
