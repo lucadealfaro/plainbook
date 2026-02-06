@@ -260,6 +260,8 @@ class Plainbook(object):
         with self._lock:
             if index < 0 or index >= len(self.nb.cells):
                 raise ExecutionError("Cell index out of range")
+            if index > self.last_valid_code_cell:
+                raise ExecutionError("Executed a cell that is not valid")
             cell = self.nb.cells[index]
             if cell.cell_type != 'code':
                 return None, "Not a code cell"
@@ -274,7 +276,7 @@ class Plainbook(object):
             self._heal_client()
             self.client.execute_cell(cell, index)
             self.last_executed_cell = index
-            self.last_valid_output_cell = index
+            self.last_valid_output_cell = max(index, self.last_valid_output_cell)
             # Saves the information about the variables. 
             # This is used for AI context if we need to regenerate code.
             cell.metadata['variables'] = self._get_variables()
