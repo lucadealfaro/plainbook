@@ -4,7 +4,7 @@ import CellStateButton from './CellStateButton.js';
 
 const ExplanationRenderer = {
     props: ['source', 'isActive', 'codeValid', 'outputValid', 'executed', 'hasError',
-            'asRead', 'startEditKey', 'isLocked'],
+            'asRead', 'startEditKey', 'isLocked', 'hasCode'],
     emits: ['update:source', 'save', 'saveandrun', 'gencode', 'validate', 
             'run', 'delete', 'moveUp', 'moveDown'],
     components: { CellStateButton },
@@ -78,6 +78,12 @@ const ExplanationRenderer = {
         };
 
         const cancelEdit = () => {
+            const originalIsEmpty = !originalSource.value || originalSource.value.trim().length === 0;
+            if (originalIsEmpty && !props.hasCode) {
+                isEditing.value = false;
+                emit('delete');
+                return;
+            }
             localSource.value = originalSource.value;
             isEditing.value = false;
         };

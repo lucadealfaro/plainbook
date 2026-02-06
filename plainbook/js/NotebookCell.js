@@ -50,7 +50,8 @@ export default {
             <div v-else-if="cell.cell_type === 'code'">
                 <div class="has-background-light p-0 border-bottom">
                 <explanation-editor 
-                        v-model:source="cell.metadata.explanation" 
+                        v-model:source="cell.metadata.explanation"
+                        :hasCode="(cell.source || '').trim().length > 0"
                         :isActive="isActive" 
                         :isLocked="isLocked" 
                         :asRead="asRead"

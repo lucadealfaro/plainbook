@@ -72,12 +72,23 @@ const MarkdownCell = {
         };
 
         const cancelEdit = () => {
+            const originalIsEmpty = !originalSource.value || originalSource.value.trim().length === 0;
+            if (originalIsEmpty) {
+                isEditing.value = false;
+                emit('delete');
+                return;
+            }
             localSource.value = originalSource.value;
             isEditing.value = false;
         };
 
         const save = () => {
+            const trimmed = (localSource.value || '').trim();
             isEditing.value = false;
+            if (trimmed.length === 0) {
+                emit('delete');
+                return;
+            }
             emit('save', localSource.value);
             refresh();
         };
