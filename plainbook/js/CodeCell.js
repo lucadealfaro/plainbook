@@ -143,7 +143,7 @@ export default {
                         @click="toggleCollapse">
                     {{ isCollapsed ? '▶ &nbsp;Show code' : '▼' }}
                 </button>
-                <cell-state-button v-if="!isActive"
+                <cell-state-button v-if="!isActive && isCollapsed"
                     :code-valid="codeValid" 
                     :output-valid="outputValid" 
                     :as-read="asRead" 
