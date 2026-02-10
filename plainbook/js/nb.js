@@ -333,10 +333,15 @@ createApp({
         // Executes cells up to the current cell. 
         const runCells = async (cellIndex) => {
             asRead.value = false;
+            // First, to execute this cell we need to have valid code for it. 
+            if (last_valid_code_cell_index.value < cellIndex) {
+                await generateCode(cellIndex);
+            }
             if (last_executed_cell_index.value === cellIndex) {
-                // We rerun the same cell.
+                // We can be asked to rerun the same cell again. 
                 await runOneCell(cellIndex);
             } else if (last_executed_cell_index.value > cellIndex) {
+                // Or, we may have executed further cells, and so be in need of a restart. 
                 // We need to run from the start up to cellIndex
                 await ui_resetKernel();
                 await runCells(cellIndex);
