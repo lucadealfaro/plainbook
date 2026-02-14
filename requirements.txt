@@ -3,7 +3,7 @@ cherrypy
 google-genai
 ipykernel
 jupyter_client
-lda-kernel
+snapshot-kernel
 nbclient
 nbformat
 pyyaml

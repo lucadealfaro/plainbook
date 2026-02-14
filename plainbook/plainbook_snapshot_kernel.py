@@ -14,24 +14,24 @@ from .plainbook_base import (
 )
 
 
-class Plainbook_LDAKernel(PlainbookAbstract):
-    """Plainbook implementation using the LDA snapshot kernel.
+class Plainbook_SnapshotKernel(PlainbookAbstract):
+    """Plainbook implementation using the snapshot kernel.
 
-    Each cell stores the LDA state it produced in cell.metadata['lda_state']
+    Each cell stores the snapshot state it produced in cell.metadata['snapshot_state']
     as a UUID. Re-execution starts from the snapshot before the affected cell
     rather than requiring a full kernel restart.
     """
 
     def __init__(self, notebook_path, debug=False):
         super().__init__(notebook_path, debug)
-        self._lda_token = secrets.token_hex(16)
-        self._lda_port = self._find_free_port(start=9100)
-        self._lda_base_url = f"http://127.0.0.1:{self._lda_port}"
+        self._sk_token = secrets.token_hex(16)
+        self._sk_port = self._find_free_port(start=9100)
+        self._sk_base_url = f"http://127.0.0.1:{self._sk_port}"
         self._current_exec_id = None
-        self._lda_process = subprocess.Popen(
-            [sys.executable, "-m", "lda_kernel.main",
-             "--bind", f"127.0.0.1:{self._lda_port}",
-             "--token", self._lda_token],
+        self._sk_process = subprocess.Popen(
+            [sys.executable, "-m", "snapshot_kernel.main",
+             "--bind", f"127.0.0.1:{self._sk_port}",
+             "--token", self._sk_token],
             stdout=None if debug else subprocess.PIPE,
             stderr=None if debug else subprocess.PIPE,
         )
@@ -49,14 +49,14 @@ class Plainbook_LDAKernel(PlainbookAbstract):
         return self
 
     def is_alive(self):
-        return self._lda_process is not None and self._lda_process.poll() is None
+        return self._sk_process is not None and self._sk_process.poll() is None
 
     # HTTP helpers
 
-    def _lda_request(self, method, path, json_body=None):
-        """Send a request to the LDA kernel server."""
-        url = f"{self._lda_base_url}{path}"
-        params = {"token": self._lda_token}
+    def _sk_request(self, method, path, json_body=None):
+        """Send a request to the snapshot kernel server."""
+        url = f"{self._sk_base_url}{path}"
+        params = {"token": self._sk_token}
         resp = requests.request(method, url, params=params, json=json_body, timeout=300)
         resp.raise_for_status()
         return resp.json()
@@ -73,29 +73,29 @@ class Plainbook_LDAKernel(PlainbookAbstract):
                     port += 1
 
     def _wait_for_server(self, timeout=10):
-        """Poll GET /states until the LDA kernel server is ready."""
+        """Poll GET /states until the snapshot kernel server is ready."""
         deadline = time.time() + timeout
         while time.time() < deadline:
             try:
-                self._lda_request("GET", "/states")
+                self._sk_request("GET", "/states")
                 if self.debug:
-                    print(f"LDA kernel server ready on port {self._lda_port}")
+                    print(f"Snapshot kernel server ready on port {self._sk_port}")
                 return
             except Exception:
                 time.sleep(0.2)
         raise RuntimeError(
-            f"LDA kernel server failed to start within {timeout}s on port {self._lda_port}"
+            f"Snapshot kernel server failed to start within {timeout}s on port {self._sk_port}"
         )
 
     # Finding the input state for a cell
 
     def _find_input_state(self, index):
-        """Walk backwards to find the LDA state name to execute cell `index` against.
+        """Walk backwards to find the snapshot state name to execute cell `index` against.
         Returns 'initial' if no previous code cell has been executed."""
         for i in range(index - 1, -1, -1):
             cell = self.nb.cells[i]
             if cell.cell_type == 'code':
-                state = cell.metadata.get('lda_state')
+                state = cell.metadata.get('snapshot_state')
                 if state:
                     return state
         return "initial"
@@ -103,7 +103,7 @@ class Plainbook_LDAKernel(PlainbookAbstract):
     # Abstract method implementations
 
     def execute_cell(self, index):
-        """Executes a code cell by index against the appropriate LDA snapshot."""
+        """Executes a code cell by index against the appropriate snapshot."""
         with self._lock:
             if index < 0 or index >= len(self.nb.cells):
                 raise ExecutionError("Cell index out of range")
@@ -125,7 +125,7 @@ class Plainbook_LDAKernel(PlainbookAbstract):
             self._current_exec_id = exec_id
 
             try:
-                result = self._lda_request("POST", "/execute", {
+                result = self._sk_request("POST", "/execute", {
                     "code": cell.source,
                     "exec_id": exec_id,
                     "state_name": input_state,
@@ -162,7 +162,7 @@ class Plainbook_LDAKernel(PlainbookAbstract):
                 )
 
             # Success: store state
-            cell.metadata['lda_state'] = new_state_name
+            cell.metadata['snapshot_state'] = new_state_name
             self.last_executed_cell = index
             self.last_valid_output_cell = max(index, self.last_valid_output_cell)
             # Get variables for AI context
@@ -177,7 +177,7 @@ class Plainbook_LDAKernel(PlainbookAbstract):
         for i in range(len(self.nb.cells) - 1, -1, -1):
             cell = self.nb.cells[i]
             if cell.cell_type == 'code':
-                state_name = cell.metadata.get('lda_state')
+                state_name = cell.metadata.get('snapshot_state')
                 if state_name:
                     break
         if not state_name:
@@ -185,7 +185,7 @@ class Plainbook_LDAKernel(PlainbookAbstract):
 
         temp_state = uuid.uuid4().hex
         try:
-            result = self._lda_request("POST", "/execute", {
+            result = self._sk_request("POST", "/execute", {
                 "code": VARIABLE_INSPECTION_CODE,
                 "exec_id": uuid.uuid4().hex,
                 "state_name": state_name,
@@ -198,43 +198,43 @@ class Plainbook_LDAKernel(PlainbookAbstract):
                     result_json += out.get("text", "")
             # Clean up temp state
             try:
-                self._lda_request("DELETE", f"/states/{temp_state}")
+                self._sk_request("DELETE", f"/states/{temp_state}")
             except Exception:
                 pass
             return json.loads(result_json)
         except (json.JSONDecodeError, TypeError, Exception):
             # Clean up temp state on error
             try:
-                self._lda_request("DELETE", f"/states/{temp_state}")
+                self._sk_request("DELETE", f"/states/{temp_state}")
             except Exception:
                 pass
             return {}
 
     def _reset_kernel(self):
-        """Reset the LDA kernel: clear all states, reset pointers."""
-        self._lda_request("POST", "/reset")
+        """Reset the snapshot kernel: clear all states, reset pointers."""
+        self._sk_request("POST", "/reset")
         self.last_executed_cell = -1
-        # Clear lda_state from all cell metadata
+        # Clear snapshot_state from all cell metadata
         for cell in self.nb.cells:
-            cell.metadata.pop('lda_state', None)
+            cell.metadata.pop('snapshot_state', None)
         if self.debug:
-            print("LDA kernel reset complete.")
+            print("Snapshot kernel reset complete.")
 
     def _invalidate_execution(self, index):
-        """Delete LDA states from cell index onward. Preserves earlier snapshots."""
+        """Delete snapshot states from cell index onward. Preserves earlier snapshots."""
         self._invalidate_from(index)
 
     def _invalidate_from(self, index):
-        """Delete LDA states from cell index onward."""
+        """Delete snapshot states from cell index onward."""
         for i in range(index, len(self.nb.cells)):
             cell = self.nb.cells[i]
-            state_name = cell.metadata.get('lda_state')
+            state_name = cell.metadata.get('snapshot_state')
             if state_name:
                 try:
-                    self._lda_request("DELETE", f"/states/{state_name}")
+                    self._sk_request("DELETE", f"/states/{state_name}")
                 except Exception:
                     pass
-                cell.metadata.pop('lda_state', None)
+                cell.metadata.pop('snapshot_state', None)
         self.last_executed_cell = min(self.last_executed_cell, index - 1)
 
     def interrupt_kernel(self):
@@ -244,20 +244,20 @@ class Plainbook_LDAKernel(PlainbookAbstract):
             if self.debug:
                 print(f"Interrupting execution {exec_id}...")
             try:
-                self._lda_request("POST", "/interrupt", {"exec_id": exec_id})
+                self._sk_request("POST", "/interrupt", {"exec_id": exec_id})
             except Exception as e:
                 if self.debug:
                     print(f"Error interrupting: {e}")
 
     def _shutdown(self):
-        """Terminate the LDA kernel subprocess."""
-        print(f"Shutting down LDA kernel for {self.name}...")
-        if hasattr(self, '_lda_process') and self._lda_process:
+        """Terminate the snapshot kernel subprocess."""
+        print(f"Shutting down snapshot kernel for {self.name}...")
+        if hasattr(self, '_sk_process') and self._sk_process:
             try:
-                self._lda_process.terminate()
-                self._lda_process.wait(timeout=5)
+                self._sk_process.terminate()
+                self._sk_process.wait(timeout=5)
             except subprocess.TimeoutExpired:
-                self._lda_process.kill()
-                self._lda_process.wait()
+                self._sk_process.kill()
+                self._sk_process.wait()
             except Exception as e:
-                print(f"Error shutting down LDA kernel: {e}")
+                print(f"Error shutting down snapshot kernel: {e}")

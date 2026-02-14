@@ -12,3 +12,6 @@ build/
 .vscode/
 .idea/
 tests/prova.ipynb
+plainbook.code-workspace
+raceplan.md
+.claude/

@@ -49,8 +49,8 @@ parser.add_argument('--debug', action='store_true', default=False,
                     help='Enable debug mode')
 parser.add_argument('--port', type=int, default=8080,
                     help='Port to run the server on')
-parser.add_argument('--kernel', choices=['jupyter', 'lda'], default='jupyter',
-                    help='Kernel backend to use (jupyter or lda)')
+parser.add_argument('--kernel', choices=['jupyter', 'snapshot'], default='jupyter',
+                    help='Kernel backend to use (jupyter or snapshot)')
 args = parser.parse_args()
 
 def _get_or_create_debug_token():
@@ -77,9 +77,9 @@ AUTH_TOKEN = _get_or_create_debug_token() if args.debug else secrets.token_hex(3
                     
 notebook_path = os.path.abspath(args.notebook)
 
-if args.kernel == 'lda':
-    from .plainbook_ldakernel import Plainbook_LDAKernel
-    notebook = Plainbook_LDAKernel(notebook_path, debug=args.debug)
+if args.kernel == 'snapshot':
+    from .plainbook_snapshot_kernel import Plainbook_SnapshotKernel
+    notebook = Plainbook_SnapshotKernel(notebook_path, debug=args.debug)
 else:
     from .plainbook_jupyter import PlainbookJupyter
     notebook = PlainbookJupyter(notebook_path, debug=args.debug)

@@ -2,13 +2,13 @@ import pytest
 from nbclient.exceptions import CellExecutionError
 
 from plainbook.plainbook_base import ExecutionError
-from plainbook.plainbook_ldakernel import Plainbook_LDAKernel
+from plainbook.plainbook_snapshot_kernel import Plainbook_SnapshotKernel
 
 
 @pytest.fixture
 def notebook(tmp_notebook_path):
-    """Creates a Plainbook_LDAKernel instance and shuts it down after the test."""
-    nb = Plainbook_LDAKernel(tmp_notebook_path)
+    """Creates a Plainbook_SnapshotKernel instance and shuts it down after the test."""
+    nb = Plainbook_SnapshotKernel(tmp_notebook_path)
     yield nb
     nb._shutdown()
 
@@ -205,7 +205,7 @@ class TestExecution:
         notebook.execute_cell(idx)
         assert notebook.last_executed_cell == 0
         notebook.set_cell_source(0, 'x = 2')
-        # LDA kernel: _invalidate_from(0) sets last_executed_cell = min(0, -1) = -1
+        # Snapshot kernel: _invalidate_from(0) sets last_executed_cell = min(0, -1) = -1
         assert notebook.last_executed_cell == -1
 
     def test_insert_code_before_executed_invalidates(self, notebook):
@@ -279,13 +279,13 @@ class TestMetadata:
         assert notebook.nb.cells[0].metadata['validation']['is_hidden'] is False
 
 
-# === LDA-specific tests ===
+# === Snapshot-kernel-specific tests ===
 
 
-class TestLDASpecific:
+class TestSnapshotKernelSpecific:
 
     def test_is_alive(self, notebook):
-        """LDA kernel subprocess is running after init."""
+        """Snapshot kernel subprocess is running after init."""
         assert notebook.is_alive() is True
 
     def test_kc_compat(self, notebook):
@@ -308,18 +308,18 @@ class TestLDASpecific:
         notebook.execute_cell(1)
         notebook.execute_cell(2)
 
-        state_0 = notebook.nb.cells[0].metadata.get('lda_state')
+        state_0 = notebook.nb.cells[0].metadata.get('snapshot_state')
         assert state_0 is not None
-        assert notebook.nb.cells[1].metadata.get('lda_state') is not None
-        assert notebook.nb.cells[2].metadata.get('lda_state') is not None
+        assert notebook.nb.cells[1].metadata.get('snapshot_state') is not None
+        assert notebook.nb.cells[2].metadata.get('snapshot_state') is not None
 
-        # Edit cell 1 → invalidates cells 1-2, preserves cell 0
+        # Edit cell 1 -> invalidates cells 1-2, preserves cell 0
         notebook.set_cell_source(1, 'y = x + 10')
         notebook.last_valid_code_cell = max(notebook.last_valid_code_cell, 1)
 
-        assert notebook.nb.cells[0].metadata.get('lda_state') == state_0
-        assert 'lda_state' not in notebook.nb.cells[1].metadata
-        assert 'lda_state' not in notebook.nb.cells[2].metadata
+        assert notebook.nb.cells[0].metadata.get('snapshot_state') == state_0
+        assert 'snapshot_state' not in notebook.nb.cells[1].metadata
+        assert 'snapshot_state' not in notebook.nb.cells[2].metadata
         assert notebook.last_executed_cell == 0
 
     def test_reexecute_from_snapshot(self, notebook):
@@ -342,23 +342,23 @@ class TestLDASpecific:
         )
         assert '11' in text
 
-    def test_lda_state_stored_after_execution(self, notebook):
-        """Each executed code cell stores its lda_state UUID."""
+    def test_snapshot_state_stored_after_execution(self, notebook):
+        """Each executed code cell stores its snapshot_state UUID."""
         _add_code_cell(notebook, 'x = 1')
-        assert 'lda_state' not in notebook.nb.cells[0].metadata
+        assert 'snapshot_state' not in notebook.nb.cells[0].metadata
         notebook.execute_cell(0)
-        assert notebook.nb.cells[0].metadata.get('lda_state') is not None
+        assert notebook.nb.cells[0].metadata.get('snapshot_state') is not None
 
-    def test_reset_clears_all_lda_states(self, notebook):
-        """reset_kernel clears lda_state from all cells."""
+    def test_reset_clears_all_snapshot_states(self, notebook):
+        """reset_kernel clears snapshot_state from all cells."""
         _add_code_cell(notebook, 'x = 1')
         _add_code_cell(notebook, 'y = 2')
         notebook.execute_cell(0)
         notebook.execute_cell(1)
-        assert notebook.nb.cells[0].metadata.get('lda_state') is not None
+        assert notebook.nb.cells[0].metadata.get('snapshot_state') is not None
 
         notebook.reset_kernel()
 
-        assert 'lda_state' not in notebook.nb.cells[0].metadata
-        assert 'lda_state' not in notebook.nb.cells[1].metadata
+        assert 'snapshot_state' not in notebook.nb.cells[0].metadata
+        assert 'snapshot_state' not in notebook.nb.cells[1].metadata
         assert notebook.last_executed_cell == -1
