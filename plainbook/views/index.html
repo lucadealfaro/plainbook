@@ -133,11 +133,12 @@
     </div>
 
     <!-- Settings Modal -->
-    <settings-modal 
-        :is-active="showSettings" 
-        :api-key="geminiApiKey" 
-        @close="showSettings = false" 
-        @save="(newKey) => {showSettings = false; saveSettings(newKey); }" 
+    <settings-modal
+        :is-active="showSettings"
+        :gemini-api-key="geminiApiKey"
+        :claude-api-key="claudeApiKey"
+        @close="showSettings = false"
+        @save="(keys) => {showSettings = false; saveSettings(keys); }"
     />
     <!-- Info Modal -->
     <info-modal 

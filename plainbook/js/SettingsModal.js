@@ -1,31 +1,28 @@
 import { ref, watch } from './vue.esm-browser.js';
 
 export default {
-    props: ['isActive', 'apiKey'],
+    props: ['isActive', 'geminiApiKey', 'claudeApiKey'],
     emits: ['close', 'save'],
     setup(props, { emit }) {
-        // Create a local draft of the API key
-        const localKey = ref(props.apiKey);
-        const error = ref('');
+        const localGeminiKey = ref(props.geminiApiKey);
+        const localClaudeKey = ref(props.claudeApiKey);
 
-        // Sync local draft whenever the modal is opened with the current parent value
+        // Sync local drafts whenever the modal is opened
         watch(() => props.isActive, (active) => {
             if (active) {
-                localKey.value = props.apiKey;
-                error.value = '';
+                localGeminiKey.value = props.geminiApiKey;
+                localClaudeKey.value = props.claudeApiKey;
             }
         });
 
         const handleSave = () => {
-            if (!localKey.value || localKey.value.trim() === '') {
-                error.value = 'API key is required';
-                return;
-            }
-            error.value = '';
-            emit('save', localKey.value);
+            emit('save', {
+                gemini_api_key: localGeminiKey.value || '',
+                claude_api_key: localClaudeKey.value || '',
+            });
         };
 
-        return { localKey, handleSave, error };
+        return { localGeminiKey, localClaudeKey, handleSave };
     },
     template: /* html */ `
     <div class="modal" :class="{'is-active': isActive}">
@@ -39,15 +36,26 @@ export default {
                 <div class="field">
                     <label class="label">Gemini API Key</label>
                     <div class="control">
-                        <input class="input" type="text" 
-                               v-model="localKey" 
-                               :class="{'is-warning': error}"
-                               placeholder="Enter your Gemini API key">
+                        <input class="input" type="text"
+                               v-model="localGeminiKey"
+                               placeholder="Enter your Gemini API key (optional)">
                     </div>
-                    <p v-if="error" class="help is-warning">{{ error }}</p>
                     <p class="help">
                         <a href="https://aistudio.google.com/app/apikey" target="_blank" class="button is-small is-link is-light" style="margin-top: 0.5rem;">
-                            {{ localKey ? 'Manage Gemini API Key' : 'Get Gemini API Key' }}
+                            {{ localGeminiKey ? 'Manage Gemini API Key' : 'Get Gemini API Key' }}
+                        </a>
+                    </p>
+                </div>
+                <div class="field">
+                    <label class="label">Claude API Key</label>
+                    <div class="control">
+                        <input class="input" type="text"
+                               v-model="localClaudeKey"
+                               placeholder="Enter your Claude API key (optional)">
+                    </div>
+                    <p class="help">
+                        <a href="https://console.anthropic.com/settings/keys" target="_blank" class="button is-small is-link is-light" style="margin-top: 0.5rem;">
+                            {{ localClaudeKey ? 'Manage Claude API Key' : 'Get Claude API Key' }}
                         </a>
                     </p>
                 </div>

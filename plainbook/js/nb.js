@@ -61,6 +61,7 @@ createApp({
         // For settings modal
         const showSettings = ref(false);
         const geminiApiKey = ref('');
+        const claudeApiKey = ref('');
         // For info modal
         const showInfo = ref(false);
 
@@ -122,6 +123,7 @@ createApp({
                 const r = await apiCall('/get_notebook');
                 notebook.value = r.nb;
                 geminiApiKey.value = r.gemini_api_key || '';
+                claudeApiKey.value = r.claude_api_key || '';
                 debug.value = r.debug || false;
             } catch (err) {
                 error.value = err.message;
@@ -513,15 +515,19 @@ createApp({
             }
         };
 
-        const saveSettings = async (newKey) => {
-            // Save the Gemini API key to the server
+        const saveSettings = async (keys) => {
+            // Save the API keys to the server
             try {
-                await apiCall('/set_key', 'POST', { gemini_api_key: geminiApiKey.value });
-                console.log('API key saved successfully');
+                await apiCall('/set_key', 'POST', {
+                    gemini_api_key: keys.gemini_api_key,
+                    claude_api_key: keys.claude_api_key,
+                });
+                console.log('API keys saved successfully');
             } catch (err) {
-                throw new Error('Error saving API key', { cause: err });
+                throw new Error('Error saving API keys', { cause: err });
             }
-            geminiApiKey.value = newKey;
+            geminiApiKey.value = keys.gemini_api_key;
+            claudeApiKey.value = keys.claude_api_key;
         };
 
         const genError = () => {
@@ -560,7 +566,7 @@ createApp({
             last_executed_cell_index, last_valid_code_cell_index, last_valid_output_cell_index,
             saveSettings, showSettings, showInfo, 
             genError, uiError, closeUiError, debug, sendDebugRequest,
-            explanationEditKey, deleteCell, moveCell, geminiApiKey };
+            explanationEditKey, deleteCell, moveCell, geminiApiKey, claudeApiKey };
     },
 
 template: `#app-template`,

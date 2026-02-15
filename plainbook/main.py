@@ -131,6 +131,7 @@ def get_notebook():
     return dict(
         nb=notebook.get_json(),
         gemini_api_key=settings.get('gemini_api_key'),
+        claude_api_key=settings.get('claude_api_key'),
         debug=args.debug
     )
 
@@ -139,7 +140,9 @@ def get_notebook():
 def set_key():
     data = request.json
     gemini_api_key = data.get('gemini_api_key', '')
+    claude_api_key = data.get('claude_api_key', '')
     settings['gemini_api_key'] = gemini_api_key
+    settings['claude_api_key'] = claude_api_key
     # Save settings to file
     try:
         with open(SETTINGS_FILE, 'w') as f:
@@ -249,16 +252,29 @@ def interrupt_kernel():
         return dict(status='error', message=str(e))
     
     
+def _get_ai_config(data):
+    """Resolve AI provider and API key from request data."""
+    ai_provider = data.get('ai_provider', 'gemini')
+    if ai_provider == 'claude':
+        api_key = settings.get('claude_api_key')
+        if not api_key:
+            return None, None, 'Claude API key not set.'
+    else:
+        api_key = settings.get('gemini_api_key')
+        if not api_key:
+            return None, None, 'Gemini API key not set.'
+    return api_key, ai_provider, None
+
 @post('/generate_code')
 @stateful
 @require_token
 def generate_code_cell():
     data = request.json
     cell_index = data.get('cell_index')
-    gemini_api_key = settings.get('gemini_api_key')
-    if not gemini_api_key:
-        return dict(status='error', message='Gemini API key not set.')
-    new_code, success = notebook.generate_code_cell(gemini_api_key, cell_index)
+    api_key, ai_provider, error = _get_ai_config(data)
+    if error:
+        return dict(status='error', message=error)
+    new_code, success = notebook.generate_code_cell(api_key, cell_index, ai_provider=ai_provider)
     if success:
         return dict(status='success', code=new_code)
     else:
@@ -272,10 +288,10 @@ def generate_code_cell():
 def validate_code_cell():
     data = request.json
     cell_index = data.get('cell_index')
-    gemini_api_key = settings.get('gemini_api_key')
-    if not gemini_api_key:
-        return dict(status='error', message='Gemini API key not set.')
-    validation_result = notebook.validate_code_cell(gemini_api_key, cell_index)
+    api_key, ai_provider, error = _get_ai_config(data)
+    if error:
+        return dict(status='error', message=error)
+    validation_result = notebook.validate_code_cell(api_key, cell_index, ai_provider=ai_provider)
     return dict(status='success', validation=validation_result)
 
 

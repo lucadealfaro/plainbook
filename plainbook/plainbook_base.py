@@ -9,6 +9,12 @@ import threading
 import nbformat
 
 from .gemini import gemini_generate_code, gemini_validate_code
+from .claude import claude_generate_code, claude_validate_code
+
+AI_PROVIDERS = {
+    "gemini": {"generate": gemini_generate_code, "validate": gemini_validate_code},
+    "claude": {"generate": claude_generate_code, "validate": claude_validate_code},
+}
 
 
 class ExecutionError(Exception):
@@ -471,8 +477,8 @@ class PlainbookAbstract(abc.ABC):
             return PREVIOUS_CODE_EXPLANATION_CHANGED.format(code_string=code_string)
 
 
-    def generate_code_cell(self, api_key, index):
-        """Generates code for the cell at index using Gemini."""
+    def generate_code_cell(self, api_key, index, ai_provider="gemini"):
+        """Generates code for the cell at index using the specified AI provider."""
         with self._lock:
             assert 0 <= index < len(self.nb.cells)
             cell = self.nb.cells[index]
@@ -499,7 +505,8 @@ class PlainbookAbstract(abc.ABC):
                 raise RuntimeError("An AI request is already pending.")
             try:
                 self.ai_request_pending = True
-                new_code = gemini_generate_code(
+                generate_fn = AI_PROVIDERS[ai_provider]["generate"]
+                new_code = generate_fn(
                     api_key,
                     preceding_code=preceding_code,
                     previous_code=previous_code,
@@ -533,8 +540,8 @@ class PlainbookAbstract(abc.ABC):
         self.ai_request_pending = False
 
 
-    def validate_code_cell(self, api_key, index):
-        """Validates the code in the cell at index using Gemini."""
+    def validate_code_cell(self, api_key, index, ai_provider="gemini"):
+        """Validates the code in the cell at index using the specified AI provider."""
         with self._lock:
             if self.ai_request_pending:
                 raise RuntimeError("An AI request is already pending.")
@@ -547,9 +554,10 @@ class PlainbookAbstract(abc.ABC):
             previous_code = self._get_preceding_code_json_for_ai(index)
             variable_context = self._get_variables_for_ai(index)
             try:
-                validation_result = gemini_validate_code(api_key, previous_code, code_to_validate,
-                                                         instructions, variable_context=variable_context,
-                                                         debug=self.debug)
+                validate_fn = AI_PROVIDERS[ai_provider]["validate"]
+                validation_result = validate_fn(api_key, previous_code, code_to_validate,
+                                                instructions, variable_context=variable_context,
+                                                debug=self.debug)
                 validation_result['is_hidden'] = False
                 cell.metadata['validation'] = validation_result
                 self._write()

@@ -1,5 +1,4 @@
-from google import genai
-from google.genai import types
+import anthropic
 
 from .ai_common import (
     SYSTEM_INSTRUCTIONS,
@@ -9,8 +8,10 @@ from .ai_common import (
     strip_markdown_code_fences,
 )
 
+CLAUDE_MODEL = "claude-sonnet-4-5-20250929"
 
-def gemini_generate_code(
+
+def claude_generate_code(
     api_key,
     preceding_code=None,
     previous_code=None,
@@ -19,10 +20,8 @@ def gemini_generate_code(
     error_context=None,
     variable_context=None,
     debug=False):
-    # 1. Initialize the Gemini client
-    client = genai.Client(api_key=api_key)
+    client = anthropic.Anthropic(api_key=api_key)
 
-    # 2. Create the prompt
     prompt = build_context_prompt(
         preceding=preceding_code,
         previous=previous_code,
@@ -39,23 +38,22 @@ Code:
     if debug:
         print("Prompt:", prompt)
 
-    # 3. Generate content
-    response = client.models.generate_content(
-        model="gemini-2.0-flash",
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            system_instruction=SYSTEM_INSTRUCTIONS
-        )
+    message = client.messages.create(
+        model=CLAUDE_MODEL,
+        max_tokens=4096,
+        system=SYSTEM_INSTRUCTIONS,
+        messages=[{"role": "user", "content": prompt}],
     )
+    response_text = message.content[0].text
     if debug:
-        print("Response:", response.text)
-    # 4. Process the response
-    code = strip_markdown_code_fences(response.text)
+        print("Response:", response_text)
+    code = strip_markdown_code_fences(response_text)
     return code
 
 
-def gemini_validate_code(api_key, previous_code, code_to_validate, instructions, variable_context=None, debug=False):
-    client = genai.Client(api_key=api_key)
+def claude_validate_code(api_key, previous_code, code_to_validate, instructions, variable_context=None, debug=False):
+    client = anthropic.Anthropic(api_key=api_key)
+
     prompt = build_context_prompt(
         preceding=previous_code,
         variable_context=variable_context
@@ -74,13 +72,13 @@ Validation Result:
     if debug:
         print("Prompt:", prompt)
 
-    response = client.models.generate_content(
-        model="gemini-2.0-flash",
-        contents=prompt,
-        config=types.GenerateContentConfig(
-            system_instruction=CHECKING_INSTRUCTIONS
-        )
+    message = client.messages.create(
+        model=CLAUDE_MODEL,
+        max_tokens=1024,
+        system=CHECKING_INSTRUCTIONS,
+        messages=[{"role": "user", "content": prompt}],
     )
+    response_text = message.content[0].text
     if debug:
-        print("Response:", response.text)
-    return parse_validation_response(response.text)
+        print("Response:", response_text)
+    return parse_validation_response(response_text)

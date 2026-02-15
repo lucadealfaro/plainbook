@@ -17,6 +17,7 @@ authors = [
 keywords = ["notebook", "jupyter", "natural language", "data science"]
 
 dependencies = [
+    "anthropic",
     "bottle",
     "cherrypy",
     "google-genai",
