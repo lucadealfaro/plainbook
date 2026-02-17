@@ -109,37 +109,37 @@ export default {
                 </div>
             </div>
             <div class="navbar-end">
-                <div class="navbar-item" ref="aiDropdown">
-                    <div class="dropdown" :class="{'is-active': aiDropdownOpen}">
-                        <div class="dropdown-trigger">
-                            <button class="button is-light"
-                                    :disabled="!availableAiProviders || availableAiProviders.length === 0"
-                                    @click.stop="toggleDropdown"
-                                    :title="canSwitchProvider ? 'Select AI Provider' : activeProviderName">
-                                <span class="icon is-small"><i class="fa fa-lightbulb-o"></i></span>
-                                <span>{{ activeProviderName }}</span>
-                                <span v-if="canSwitchProvider" class="icon is-small">
-                                    <i class="fa fa-angle-down"></i>
-                                </span>
-                            </button>
-                        </div>
-                        <div class="dropdown-menu" role="menu" v-if="canSwitchProvider">
-                            <div class="dropdown-content">
-                                <a v-for="provider in availableAiProviders" :key="provider.id"
-                                   class="dropdown-item" :class="{'is-active': provider.id === activeAiProvider}"
-                                   @click.prevent="selectProvider(provider.id)">
-                                    {{ provider.name }}
-                                </a>
-                            </div>
-                        </div>
-                    </div>
-                </div>
                 <div class="navbar-item">
                     <div class="buttons">
                         <button v-if="debug" class="button is-warning" title="Send debug request" @click="$emit('debug-request')">
                             <span class="icon"><i class="fa fa-bug"></i></span>
                             <span>Debug</span>
                         </button>
+                        <div ref="aiDropdown">
+                            <div class="dropdown" :class="{'is-active': aiDropdownOpen}">
+                                <div class="dropdown-trigger">
+                                    <button class="button is-light"
+                                            :disabled="!availableAiProviders || availableAiProviders.length === 0"
+                                            @click.stop="toggleDropdown"
+                                            :title="canSwitchProvider ? 'Select AI Provider' : activeProviderName">
+                                        <span class="icon is-small"><i class="fa fa-lightbulb-o"></i></span>
+                                        <span>{{ activeProviderName }}</span>
+                                        <span v-if="canSwitchProvider" class="icon is-small">
+                                            <i class="fa fa-angle-down"></i>
+                                        </span>
+                                    </button>
+                                </div>
+                                <div class="dropdown-menu" role="menu" v-if="canSwitchProvider">
+                                    <div class="dropdown-content">
+                                        <a v-for="provider in availableAiProviders" :key="provider.id"
+                                            class="dropdown-item" :class="{'is-active': provider.id === activeAiProvider}"
+                                            @click.prevent="selectProvider(provider.id)">
+                                            {{ provider.name }}
+                                        </a>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                         <button class="button is-light" @click="$emit('open-info')" title="About Plainbook">
                             <span class="icon"><i class="fa fa-info"></i></span>
                         </button>
