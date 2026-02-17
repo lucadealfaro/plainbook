@@ -159,7 +159,7 @@ export default {
             <div style="display: flex; gap: 0.25rem; align-items: center;">
                 <button class="button is-small is-white px-2 mt-1"
                         @click="toggleCollapse">
-                    {{ isCollapsed ? '▶ &nbsp;Show code' : '▼' }}
+                    {{ isCollapsed ? '▶ &nbsp;Show code' : '▼ &nbsp;Hide code' }}
                 </button>
                 <cell-state-button v-if="!isActive && isCollapsed"
                     :code-valid="codeValid"
