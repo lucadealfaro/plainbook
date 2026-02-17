@@ -20,8 +20,10 @@ def claude_generate_code(
     error_context=None,
     variable_context=None,
     validation_context=None,
+    model=None,
     debug=False):
     client = anthropic.Anthropic(api_key=api_key)
+    model = model or CLAUDE_MODEL
 
     prompt = build_context_prompt(
         preceding=preceding_code,
@@ -41,7 +43,7 @@ Code:
         print("Prompt:", prompt)
 
     message = client.messages.create(
-        model=CLAUDE_MODEL,
+        model=model,
         max_tokens=4096,
         system=SYSTEM_INSTRUCTIONS,
         messages=[{"role": "user", "content": prompt}],
@@ -53,8 +55,9 @@ Code:
     return code
 
 
-def claude_validate_code(api_key, previous_code, code_to_validate, instructions, variable_context=None, debug=False):
+def claude_validate_code(api_key, previous_code, code_to_validate, instructions, variable_context=None, model=None, debug=False):
     client = anthropic.Anthropic(api_key=api_key)
+    model = model or CLAUDE_MODEL
 
     prompt = build_context_prompt(
         preceding=previous_code,
@@ -75,7 +78,7 @@ Validation Result:
         print("Prompt:", prompt)
 
     message = client.messages.create(
-        model=CLAUDE_MODEL,
+        model=model,
         max_tokens=1024,
         system=CHECKING_INSTRUCTIONS,
         messages=[{"role": "user", "content": prompt}],

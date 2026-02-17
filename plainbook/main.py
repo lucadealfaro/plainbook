@@ -41,8 +41,13 @@ except FileNotFoundError:
     settings = {}
 
 AI_PROVIDER_REGISTRY = [
-    {"id": "gemini", "name": "Gemini", "key_setting": "gemini_api_key"},
-    {"id": "claude", "name": "Claude", "key_setting": "claude_api_key"},
+    {"id": "gemini:2.5-flash", "name": "Gemini 2.5 Flash", "major": "gemini", "key_setting": "gemini_api_key", "model": "gemini-2.5-flash-preview-05-20"},
+    {"id": "gemini:2.5-pro",   "name": "Gemini 2.5 Pro",   "major": "gemini", "key_setting": "gemini_api_key", "model": "gemini-2.5-pro-preview-05-06"},
+    {"id": "gemini:3-flash",   "name": "Gemini 3 Flash",   "major": "gemini", "key_setting": "gemini_api_key", "model": "gemini-3-flash-preview"},
+    {"id": "gemini:3-pro",     "name": "Gemini 3 Pro",     "major": "gemini", "key_setting": "gemini_api_key", "model": "gemini-3-pro-preview"},
+    {"id": "claude:haiku",     "name": "Claude Haiku",      "major": "claude", "key_setting": "claude_api_key", "model": "claude-haiku-4-5-20251001"},
+    {"id": "claude:sonnet",    "name": "Claude Sonnet",     "major": "claude", "key_setting": "claude_api_key", "model": "claude-sonnet-4-5-20250929"},
+    {"id": "claude:opus",      "name": "Claude Opus",       "major": "claude", "key_setting": "claude_api_key", "model": "claude-opus-4-0-20250115"},
 ]
 
 def _ensure_active_ai_provider():
@@ -295,17 +300,17 @@ def interrupt_kernel():
     
     
 def _get_ai_config():
-    """Resolve AI provider and API key from server-side active provider setting."""
+    """Resolve AI provider, model, and API key from server-side active provider setting."""
     ai_provider = settings.get('active_ai_provider')
     if not ai_provider:
-        return None, None, 'No AI provider is active. Please set an API key in Settings.'
+        return None, None, None, 'No AI provider is active. Please set an API key in Settings.'
     for p in AI_PROVIDER_REGISTRY:
         if p['id'] == ai_provider:
             api_key = settings.get(p['key_setting'])
             if not api_key:
-                return None, None, f'{p["name"]} API key not set.'
-            return api_key, ai_provider, None
-    return None, None, f'Unknown AI provider: {ai_provider}'
+                return None, None, None, f'{p["name"]} API key not set.'
+            return api_key, p['major'], p['model'], None
+    return None, None, None, f'Unknown AI provider: {ai_provider}'
 
 _BILLING_KEYWORDS = ['credit balance', 'billing', 'quota', 'rate limit', 'resource exhausted', 'exceeded your current']
 
@@ -324,13 +329,13 @@ def generate_code_cell():
     data = request.json
     cell_index = data.get('cell_index')
     validation_feedback = data.get('validation_feedback')
-    api_key, ai_provider, error = _get_ai_config()
+    api_key, ai_provider, model, error = _get_ai_config()
     if error:
         return dict(status='error', message=error)
     try:
         new_code, success = notebook.generate_code_cell(
             api_key, cell_index, ai_provider=ai_provider,
-            validation_feedback=validation_feedback)
+            model=model, validation_feedback=validation_feedback)
     except Exception as e:
         friendly = _check_billing_error(e)
         if friendly:
@@ -349,11 +354,11 @@ def generate_code_cell():
 def validate_code_cell():
     data = request.json
     cell_index = data.get('cell_index')
-    api_key, ai_provider, error = _get_ai_config()
+    api_key, ai_provider, model, error = _get_ai_config()
     if error:
         return dict(status='error', message=error)
     try:
-        validation_result = notebook.validate_code_cell(api_key, cell_index, ai_provider=ai_provider)
+        validation_result = notebook.validate_code_cell(api_key, cell_index, ai_provider=ai_provider, model=model)
     except Exception as e:
         friendly = _check_billing_error(e)
         if friendly:

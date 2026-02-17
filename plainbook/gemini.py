@@ -10,6 +10,10 @@ from .ai_common import (
 )
 
 
+GEMINI_GENERATE_MODEL = "gemini-2.5-flash-preview-05-20"
+GEMINI_VALIDATE_MODEL = "gemini-2.5-flash-preview-05-20"
+
+
 def gemini_generate_code(
     api_key,
     preceding_code=None,
@@ -19,9 +23,11 @@ def gemini_generate_code(
     error_context=None,
     variable_context=None,
     validation_context=None,
+    model=None,
     debug=False):
     # 1. Initialize the Gemini client
     client = genai.Client(api_key=api_key)
+    model = model or GEMINI_GENERATE_MODEL
 
     # 2. Create the prompt
     prompt = build_context_prompt(
@@ -43,7 +49,7 @@ Code:
 
     # 3. Generate content
     response = client.models.generate_content(
-        model="gemini-2.0-flash",
+        model=model,
         contents=prompt,
         config=types.GenerateContentConfig(
             system_instruction=SYSTEM_INSTRUCTIONS
@@ -56,8 +62,10 @@ Code:
     return code
 
 
-def gemini_validate_code(api_key, previous_code, code_to_validate, instructions, variable_context=None, debug=False):
+def gemini_validate_code(api_key, previous_code, code_to_validate, instructions, variable_context=None, model=None, debug=False):
     client = genai.Client(api_key=api_key)
+    model = model or GEMINI_VALIDATE_MODEL
+
     prompt = build_context_prompt(
         preceding=previous_code,
         variable_context=variable_context
@@ -77,7 +85,7 @@ Validation Result:
         print("Prompt:", prompt)
 
     response = client.models.generate_content(
-        model="gemini-2.5-flash",
+        model=model,
         contents=prompt,
         config=types.GenerateContentConfig(
             system_instruction=CHECKING_INSTRUCTIONS

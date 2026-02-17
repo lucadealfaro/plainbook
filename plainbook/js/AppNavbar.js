@@ -18,6 +18,20 @@ export default {
         canSwitchProvider() {
             return this.availableAiProviders && this.availableAiProviders.length >= 2;
         },
+        groupedProviders() {
+            if (!this.availableAiProviders) return [];
+            const groups = [];
+            let lastMajor = null;
+            for (const p of this.availableAiProviders) {
+                const major = p.major || p.id;
+                if (major !== lastMajor) {
+                    groups.push({ type: 'header', label: major.charAt(0).toUpperCase() + major.slice(1) });
+                    lastMajor = major;
+                }
+                groups.push({ type: 'item', provider: p });
+            }
+            return groups;
+        },
     },
     methods: {
         toggleDropdown() {
@@ -131,11 +145,17 @@ export default {
                                 </div>
                                 <div class="dropdown-menu" role="menu" v-if="canSwitchProvider">
                                     <div class="dropdown-content">
-                                        <a v-for="provider in availableAiProviders" :key="provider.id"
-                                            class="dropdown-item" :class="{'is-active': provider.id === activeAiProvider}"
-                                            @click.prevent="selectProvider(provider.id)">
-                                            {{ provider.name }}
-                                        </a>
+                                        <template v-for="(entry, idx) in groupedProviders" :key="idx">
+                                            <hr v-if="entry.type === 'header' && idx > 0" class="dropdown-divider">
+                                            <p v-if="entry.type === 'header'" class="dropdown-item has-text-weight-bold" style="cursor: default; font-size: 0.8em; text-transform: uppercase; color: #999;">
+                                                {{ entry.label }}
+                                            </p>
+                                            <a v-if="entry.type === 'item'"
+                                                class="dropdown-item" :class="{'is-active': entry.provider.id === activeAiProvider}"
+                                                @click.prevent="selectProvider(entry.provider.id)">
+                                                {{ entry.provider.name }}
+                                            </a>
+                                        </template>
                                     </div>
                                 </div>
                             </div>

@@ -66,11 +66,11 @@ createApp({
         const aiProviderRegistry = ref([]);
 
         const availableAiProviders = computed(() => {
-            const keyValues = {
+            const apiKeys = {
                 'gemini_api_key': geminiApiKey.value,
                 'claude_api_key': claudeApiKey.value,
             };
-            return aiProviderRegistry.value.filter(p => !!keyValues[p.key_setting]);
+            return aiProviderRegistry.value.filter(p => !!apiKeys[p.key_setting]);
         });
 
         // For info modal

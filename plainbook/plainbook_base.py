@@ -476,7 +476,7 @@ class PlainbookAbstract(abc.ABC):
             return PREVIOUS_CODE_EXPLANATION_CHANGED.format(code_string=code_string)
 
 
-    def generate_code_cell(self, api_key, index, ai_provider="gemini", validation_feedback=None):
+    def generate_code_cell(self, api_key, index, ai_provider="gemini", model=None, validation_feedback=None):
         """Generates code for the cell at index using the specified AI provider."""
         with self._lock:
             assert 0 <= index < len(self.nb.cells)
@@ -513,6 +513,7 @@ class PlainbookAbstract(abc.ABC):
                     file_context=files_context, error_context=error_context,
                     variable_context=variable_context,
                     validation_context=validation_feedback,
+                    model=model,
                     debug=self.debug)
                 # If we are still in a request, update the cell.
                 if self.ai_request_pending:
@@ -540,7 +541,7 @@ class PlainbookAbstract(abc.ABC):
         self.ai_request_pending = False
 
 
-    def validate_code_cell(self, api_key, index, ai_provider="gemini"):
+    def validate_code_cell(self, api_key, index, ai_provider="gemini", model=None):
         """Validates the code in the cell at index using the specified AI provider."""
         with self._lock:
             if self.ai_request_pending:
@@ -557,7 +558,7 @@ class PlainbookAbstract(abc.ABC):
                 validate_fn = AI_PROVIDERS[ai_provider]["validate"]
                 validation_result = validate_fn(api_key, previous_code, code_to_validate,
                                                 instructions, variable_context=variable_context,
-                                                debug=self.debug)
+                                                model=model, debug=self.debug)
                 validation_result['is_hidden'] = False
                 cell.metadata['validation'] = validation_result
                 self._write()
