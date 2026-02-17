@@ -67,11 +67,11 @@ export default {
                             <span>Running...</span>
                         </button>
 
-                        <button v-if="!running && upToDate"
+                        <!-- <button v-if="!running && upToDate"
                                 class="button is-light" title="All cells have been run">
                             <span class="icon"><i class="fa fa-check-circle"></i></span>
                             <span>Up to Date</span>
-                        </button>
+                        </button> -->
 
                         <!-- <button v-if="!running && hasNotebook"
                             :disabled="cellCount === 0 || isLocked"
@@ -92,7 +92,7 @@ export default {
                                     <i class="fa fa-repeat mr-1"></i>
                                     <i class="fa fa-play"></i>
                             </span>
-                            <span>Reset and Run All</span>
+                            <span>Run from the beginning</span>
                         </button>
 
                         <button v-if="!running && hasNotebook"
@@ -116,7 +116,7 @@ export default {
                                     :disabled="!availableAiProviders || availableAiProviders.length === 0"
                                     @click.stop="toggleDropdown"
                                     :title="canSwitchProvider ? 'Select AI Provider' : activeProviderName">
-                                <span class="icon is-small"><i class="fa fa-magic"></i></span>
+                                <span class="icon is-small"><i class="fa fa-lightbulb-o"></i></span>
                                 <span>{{ activeProviderName }}</span>
                                 <span v-if="canSwitchProvider" class="icon is-small">
                                     <i class="fa fa-angle-down"></i>
