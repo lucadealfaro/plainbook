@@ -355,18 +355,22 @@ createApp({
         
         
         // Function in charge of generating code for one cell.
-        const generateCodeOneCell = async (cellIndex, force = false) => {
+        const generateCodeOneCell = async (cellIndex, force = false, validationFeedback = null) => {
             const cell = notebook.value.cells[cellIndex];
             if (cell.cell_type !== 'code') return; // Only code cells
             if (!force && last_valid_code_cell_index.value >= cellIndex) return; // Already valid code
-            // If I don't have valid outputs for the previous cell, I need to run it first. 
+            // If I don't have valid outputs for the previous cell, I need to run it first.
             // Those outputs are needed as context for code generation.
             if (last_valid_output_cell_index.value < cellIndex - 1 && cellIndex > 0) {
                 await runCells(cellIndex - 1);
             }
             if (!running.value) return; // Stop if running has been cancelled
             asRead.value = false;
-            const r = await apiCall('/generate_code', 'POST', { cell_index: cellIndex });
+            const body = { cell_index: cellIndex };
+            if (validationFeedback) {
+                body.validation_feedback = validationFeedback;
+            }
+            const r = await apiCall('/generate_code', 'POST', body);
             if (r.status == 'success') {
                 if (notebook.value && notebook.value.cells[cellIndex]) {
                     cell.source = r.code;
@@ -482,7 +486,15 @@ createApp({
             await waitForPendingSaves();
             if (!running.value) {
                 running.value = true;
-                await generateCodeOneCell(cellIndex, true);
+                // Check for failed validation to pass as context
+                let validationFeedback = null;
+                const cell = notebook.value.cells[cellIndex];
+                const v = cell?.metadata?.validation;
+                if (v && !v.is_hidden && !v.is_valid && v.message) {
+                    validationFeedback = v.message;
+                    dismissValidation(cellIndex);
+                }
+                await generateCodeOneCell(cellIndex, true, validationFeedback);
                 running.value = false;
             }
         };

@@ -19,6 +19,7 @@ def claude_generate_code(
     file_context=None,
     error_context=None,
     variable_context=None,
+    validation_context=None,
     debug=False):
     client = anthropic.Anthropic(api_key=api_key)
 
@@ -27,7 +28,8 @@ def claude_generate_code(
         previous=previous_code,
         file_context=file_context,
         error_context=error_context,
-        variable_context=variable_context)
+        variable_context=variable_context,
+        validation_context=validation_context)
     prompt += f"""
 INSTRUCTIONS for New Cell:
 {instructions}

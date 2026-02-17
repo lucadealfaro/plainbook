@@ -476,7 +476,7 @@ class PlainbookAbstract(abc.ABC):
             return PREVIOUS_CODE_EXPLANATION_CHANGED.format(code_string=code_string)
 
 
-    def generate_code_cell(self, api_key, index, ai_provider="gemini"):
+    def generate_code_cell(self, api_key, index, ai_provider="gemini", validation_feedback=None):
         """Generates code for the cell at index using the specified AI provider."""
         with self._lock:
             assert 0 <= index < len(self.nb.cells)
@@ -512,6 +512,7 @@ class PlainbookAbstract(abc.ABC):
                     instructions=instructions,
                     file_context=files_context, error_context=error_context,
                     variable_context=variable_context,
+                    validation_context=validation_feedback,
                     debug=self.debug)
                 # If we are still in a request, update the cell.
                 if self.ai_request_pending:

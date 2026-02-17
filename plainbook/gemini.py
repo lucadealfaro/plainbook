@@ -18,6 +18,7 @@ def gemini_generate_code(
     file_context=None,
     error_context=None,
     variable_context=None,
+    validation_context=None,
     debug=False):
     # 1. Initialize the Gemini client
     client = genai.Client(api_key=api_key)
@@ -28,7 +29,8 @@ def gemini_generate_code(
         previous=previous_code,
         file_context=file_context,
         error_context=error_context,
-        variable_context=variable_context)
+        variable_context=variable_context,
+        validation_context=validation_context)
     prompt += f"""
 INSTRUCTIONS for New Cell:
 {instructions}

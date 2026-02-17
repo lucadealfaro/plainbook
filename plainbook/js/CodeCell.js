@@ -155,19 +155,26 @@ export default {
             CellStateButton, autoResize, handleTabKey, onBlur };
     },
     template: /* html */ `
-        <div class="code-cell-wrapper" style="position: relative; min-height: 1.75rem;">
-            <div style="display: flex; gap: 0.25rem; align-items: center; position: absolute; top: 0; left: 0; z-index: 1;">
-                <button class="button is-small is-white px-2"
+        <div class="code-cell-wrapper">
+            <div style="display: flex; gap: 0.25rem; align-items: center;">
+                <button class="button is-small is-white px-2 mt-1"
                         @click="toggleCollapse">
                     {{ isCollapsed ? '▶ &nbsp;Show code' : '▼' }}
                 </button>
                 <cell-state-button v-if="!isActive && isCollapsed"
-                    :code-valid="codeValid" 
-                    :output-valid="outputValid" 
-                    :as-read="asRead" 
+                    :code-valid="codeValid"
+                    :output-valid="outputValid"
+                    :as-read="asRead"
                     :has-error="hasError"
-                    :is-narrow="true" 
+                    :is-narrow="true"
                     :is-output="true"/>
+                <span style="flex: 1;"></span>
+                <button v-if="!isCollapsed && !isEditing && !localIsLocked"
+                    class="button is-small is-info mt-1 mr-3"
+                    @click="enterEditMode">
+                    <span class="icon"><i class="fa fa-pencil"></i></span>
+                    <span>Edit Code</span>
+                </button>
             </div>
             <div v-if="!isCollapsed" style="padding-left: 2.25rem;">
                 <div v-if="!isEditing" class="p-2 overflow-x-auto" @dblclick="enterEditMode">
@@ -188,10 +195,10 @@ export default {
                         @keydown.enter.shift.prevent="saveCode">
                     </textarea>
                     <div style="display: flex; justify-content: flex-end; gap: 0.5rem;">
-                        <button class="button is-small" @mousedown.prevent @click="cancelEdit">
+                        <button class="button is-small" @mousedown.prevent @click.stop="cancelEdit">
                             Cancel
                         </button>
-                        <button class="button is-small is-primary" :disabled="localIsLocked" @mousedown.prevent @click="saveCode">
+                        <button class="button is-small is-primary" :disabled="localIsLocked" @mousedown.prevent @click.stop="saveCode">
                             Save
                         </button>
                     </div>

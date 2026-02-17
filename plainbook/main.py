@@ -323,11 +323,14 @@ def _check_billing_error(e):
 def generate_code_cell():
     data = request.json
     cell_index = data.get('cell_index')
+    validation_feedback = data.get('validation_feedback')
     api_key, ai_provider, error = _get_ai_config()
     if error:
         return dict(status='error', message=error)
     try:
-        new_code, success = notebook.generate_code_cell(api_key, cell_index, ai_provider=ai_provider)
+        new_code, success = notebook.generate_code_cell(
+            api_key, cell_index, ai_provider=ai_provider,
+            validation_feedback=validation_feedback)
     except Exception as e:
         friendly = _check_billing_error(e)
         if friendly:

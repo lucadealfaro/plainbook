@@ -37,7 +37,8 @@ def build_context_prompt(
     previous=None,
     file_context=None,
     error_context=None,
-    variable_context=None):
+    variable_context=None,
+    validation_context=None):
     prompt = f"""
 CONTEXT (Existing Notebook Code):
 {preceding}
@@ -61,6 +62,13 @@ FILE CONTEXT:
         prompt += f"""
 VARIABLE CONTEXT (Variables currently in memory):
 {variable_context}
+
+"""
+    if validation_context:
+        prompt += f"""
+VALIDATION FEEDBACK:
+The previous code for this cell does not seem to be correct. Here are comments on it given by an AI model:
+{validation_context}
 
 """
     return prompt
