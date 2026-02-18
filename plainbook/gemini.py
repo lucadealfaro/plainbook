@@ -10,8 +10,8 @@ from .ai_common import (
 )
 
 
-GEMINI_GENERATE_MODEL = "gemini-2.5-flash-preview-05-20"
-GEMINI_VALIDATE_MODEL = "gemini-2.5-flash-preview-05-20"
+GEMINI_GENERATE_MODEL = "gemini-2.5-flash"
+GEMINI_VALIDATE_MODEL = "gemini-2.5-flash"
 
 
 def gemini_generate_code(

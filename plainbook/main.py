@@ -41,8 +41,8 @@ except FileNotFoundError:
     settings = {}
 
 AI_PROVIDER_REGISTRY = [
-    {"id": "gemini:2.5-flash", "name": "Gemini 2.5 Flash", "major": "gemini", "key_setting": "gemini_api_key", "model": "gemini-2.5-flash-preview-05-20"},
-    {"id": "gemini:2.5-pro",   "name": "Gemini 2.5 Pro",   "major": "gemini", "key_setting": "gemini_api_key", "model": "gemini-2.5-pro-preview-05-06"},
+    {"id": "gemini:2.5-flash", "name": "Gemini 2.5 Flash", "major": "gemini", "key_setting": "gemini_api_key", "model": "gemini-2.5-flash"},
+    {"id": "gemini:2.5-pro",   "name": "Gemini 2.5 Pro",   "major": "gemini", "key_setting": "gemini_api_key", "model": "gemini-2.5-pro"},
     {"id": "gemini:3-flash",   "name": "Gemini 3 Flash",   "major": "gemini", "key_setting": "gemini_api_key", "model": "gemini-3-flash-preview"},
     {"id": "gemini:3-pro",     "name": "Gemini 3 Pro",     "major": "gemini", "key_setting": "gemini_api_key", "model": "gemini-3-pro-preview"},
     {"id": "claude:haiku",     "name": "Claude Haiku",      "major": "claude", "key_setting": "claude_api_key", "model": "claude-haiku-4-5-20251001"},
