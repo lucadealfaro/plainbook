@@ -108,9 +108,9 @@ const MarkdownCell = {
                  style="display: flex; align-items: center; justify-content: flex-end; gap: 0.5rem;">
                 <div class="toolbar-right" style="display: flex; gap: 0.25rem;">
                     <button class="button is-small is-info" title="Edit markdown" @click.stop="enterEditMode">Edit</button>
-                    <button class="button is-small is-info py-1 " title="Move up" aria-label="Move Up" @click.stop="$emit('moveUp')"><span class="icon"><i class="fa fa-arrow-up"></i></span></button>
-                    <button class="button is-small is-info py-1 " title="Move down" aria-label="Move Down" @click.stop="$emit('moveDown')"><span class="icon"><i class="fa fa-arrow-down"></i></span></button>
-                    <button class="button is-small is-danger py-1 " title="Delete" aria-label="Delete" @click.stop="$emit('delete')"><span class="icon"><i class="fa fa-trash"></i></span></button>
+                    <button class="button is-small is-info py-1 " title="Move up" aria-label="Move Up" @click.stop="$emit('moveUp')"><span class="icon"><i class="bx bx-arrow-up"></i></span></button>
+                    <button class="button is-small is-info py-1 " title="Move down" aria-label="Move Down" @click.stop="$emit('moveDown')"><span class="icon"><i class="bx bx-arrow-down"></i></span></button>
+                    <button class="button is-small is-danger py-1 " title="Delete" aria-label="Delete" @click.stop="$emit('delete')"><span class="icon"><i class="bx bx-trash"></i></span></button>
                 </div>
             </div>
 

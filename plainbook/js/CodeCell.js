@@ -172,7 +172,7 @@ export default {
                 <button v-if="!isCollapsed && !isEditing && !localIsLocked"
                     class="button is-small is-info mt-1 mr-3"
                     @click="enterEditMode">
-                    <span class="icon"><i class="fa fa-pencil"></i></span>
+                    <span class="icon"><i class="bx bx-pencil"></i></span>
                     <span>Edit Code</span>
                 </button>
             </div>

@@ -137,3 +137,12 @@ pre[class*="language-"] {
 .dataframe {
   @extend .table, .is-narrow, .is-striped, .is-size-6;
 }
+
+.button .bx {
+  font-size: 1.05rem; /* adjust as needed */
+}
+
+.button.is-small .bx {
+  font-size: 1rem; /* adjust as needed */
+}
+

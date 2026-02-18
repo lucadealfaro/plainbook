@@ -61,29 +61,29 @@ export default {
                 <div class="navbar-item">
                     <div class="buttons">
                         <button v-if="isLocked" class="button is-warning" title="Unlock Notebook" @click="$emit('lock', false)">
-                            <span class="icon"><i class="fa fa-lock"></i></span>
+                            <span class="icon"><i class="bx bx-lock"></i></span>
                         </button>
                         <button v-else class="button is-light" title="Lock Notebook" @click="$emit('lock', true)">
-                            <span class="icon"><i class="fa fa-unlock"></i></span>
+                            <span class="icon"><i class="bx bx-lock-open"></i></span>
                         </button>
 
                         <button v-if="!running && hasNotebook"
                             @click="$emit('refresh')"
                             class="button is-light" title="Reload Notebook">
-                            <span class="icon"><i class="fa fa-refresh"></i></span>
+                            <span class="icon"><i class="bx bx-refresh-cw"></i></span>
                             <span>Refresh</span>
                         </button>
 
                         <button v-if="running && hasNotebook"
                                 @click="$emit('interrupt')"
                                 class="button is-danger" title="Interrupt Execution">
-                            <span class="icon"><i class="fa fa-stop"></i></span>
+                            <span class="icon"><i class="bx bx-stop"></i></span>
                             <span>Running...</span>
                         </button>
 
                         <!-- <button v-if="!running && upToDate"
                                 class="button is-light" title="All cells have been run">
-                            <span class="icon"><i class="fa fa-check-circle"></i></span>
+                            <span class="icon"><i class="bx bx-check-circle"></i></span>
                             <span>Up to Date</span>
                         </button> -->
 
@@ -92,7 +92,7 @@ export default {
                             @click="$emit('regenerate-all')"
                             title="Regenerate all code from descriptions"
                             class="button is-success">
-                            <span class="icon"><i class="fa fa-repeat"></i></span>
+                            <span class="icon"><i class="bx bx-repeat"></i></span>
                             <span>Regenerate All</span>
                         </button> -->
 
@@ -102,9 +102,9 @@ export default {
                             @click="$emit('reset-run-all')"
                             title="Reset and run all cells"
                             class="button is-primary">
-                            <span class="icon px-4">
-                                    <i class="fa fa-repeat mr-1"></i>
-                                    <i class="fa fa-play"></i>
+                            <span class="icon px-5">
+                                    <i class="bx bx-repeat mr-1"></i>
+                                    <i class="bx bx-play"></i>
                             </span>
                             <span>Run from the beginning</span>
                         </button>
@@ -115,7 +115,7 @@ export default {
                             @click="$emit('run-all')"
                             title="Run all"
                             class="button is-primary">
-                            <span class="icon"><i class="fa fa-play"></i></span>
+                            <span class="icon"><i class="bx bx-play"></i></span>
                             <span>Run</span>
                         </button>
 
@@ -126,7 +126,7 @@ export default {
                 <div class="navbar-item">
                     <div class="buttons">
                         <button v-if="debug" class="button is-warning" title="Send debug request" @click="$emit('debug-request')">
-                            <span class="icon"><i class="fa fa-bug"></i></span>
+                            <span class="icon"><i class="bx bx-bug"></i></span>
                             <span>Debug</span>
                         </button>
                         <div ref="aiDropdown">
@@ -136,10 +136,10 @@ export default {
                                             :disabled="!availableAiProviders || availableAiProviders.length === 0"
                                             @click.stop="toggleDropdown"
                                             :title="canSwitchProvider ? 'Select AI Provider' : activeProviderName">
-                                        <span class="icon is-small"><i class="fa fa-lightbulb-o"></i></span>
+                                        <span class="icon is-small"><i class="bx bx-light-bulb"></i></span>
                                         <span>{{ activeProviderName }}</span>
                                         <span v-if="canSwitchProvider" class="icon is-small">
-                                            <i class="fa fa-angle-down"></i>
+                                            <i class="bx bx-chevron-down"></i>
                                         </span>
                                     </button>
                                 </div>
@@ -161,11 +161,11 @@ export default {
                             </div>
                         </div>
                         <button class="button is-light" @click="$emit('open-info')" title="About Plainbook">
-                            <span class="icon"><i class="fa fa-info"></i></span>
+                            <span class="icon"><i class="bx bx-info-circle"></i></span>
                         </button>
                         <button class="button" :class="hasApiKey ? 'is-light' : 'is-warning'"
                                 @click="$emit('open-settings')" title="Settings">
-                            <span class="icon"><i :class="hasApiKey ? 'fa fa-cog' : 'fa fa-warning'"></i></span>
+                            <span class="icon"><i :class="hasApiKey ? 'bx bx-cog' : 'bx bx-alert-triangle'"></i></span>
                             <span>Settings</span>
                         </button>
                     </div>

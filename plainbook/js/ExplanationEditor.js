@@ -126,7 +126,7 @@ const ExplanationRenderer = {
             <div class="toolbar-left">
                 <button class="button run-button is-small is-primary mr-1" 
                         title="Run this cell and all necessary preceding cells" @click.stop="$emit('run')">
-                    <span class="icon"><i class="fa fa-play"></i></span><span>Run</span>
+                    <span class="icon"><i class="bx bx-play"></i></span><span>Run</span>
                 </button>
                 <cell-state-button 
                 :code-valid="codeValid" 
@@ -137,32 +137,32 @@ const ExplanationRenderer = {
             <div class="toolbar-right" style="display: flex; flex-wrap: wrap; gap: 0.25rem;">
                 <button class="button is-small is-info" title="Edit action description" 
                         :disabled="localIsLocked" @click.stop="enterEditMode">
-                    <span class="icon"><i class="fa fa-pencil"></i></span><span>Edit</span>
+                    <span class="icon"><i class="bx bx-pencil"></i></span><span>Edit</span>
                 </button>
                 <button class="button is-small is-info py-1 " 
                         :disabled="localIsLocked"
                         title="Move cell up" aria-label="Move Up" @click.stop="$emit('moveUp')">
-                    <span class="icon"><i class="fa fa-arrow-up"></i></span>
+                    <span class="icon"><i class="bx bx-arrow-up"></i></span>
                 </button>
                 <button class="button is-small is-info py-1 " 
                         :disabled="localIsLocked"
                         title="Move cell down" aria-label="Move Down" @click.stop="$emit('moveDown')">
-                    <span class="icon"><i class="fa fa-arrow-down"></i></span>
+                    <span class="icon"><i class="bx bx-arrow-down"></i></span>
                 </button>
                 <button class="button is-small"
                         :class="hasError ? 'is-warning' : 'is-success'" 
                         title="Regenerate code from description" 
                         :disabled="localIsLocked" @click.stop="$emit('gencode')">
-                    <span class="icon"><i class="fa fa-repeat"></i></span> 
+                    <span class="icon"><i class="bx bx-repeat"></i></span> 
                     <span v-if="hasError">Fix Code</span>
                     <span v-else>Regenerate Code</span>
                 </button>
                 <button :disabled="!codeValid" class="button is-small is-success" title="Validate code against description" @click.stop="$emit('validate')">
-                    <span class="icon"><i class="fa fa-check"></i></span> <span>Validate Code</span>
+                    <span class="icon"><i class="bx bx-check"></i></span> <span>Validate Code</span>
                 </button>
                 <button class="button is-small is-danger py-1 " title="Delete cell" aria-label="Delete" 
                         :disabled="localIsLocked" @click.stop="$emit('delete')">
-                    <span class="icon"><i class="fa fa-trash"></i></span>
+                    <span class="icon"><i class="bx bx-trash"></i></span>
                 </button>
             </div>
         </div>
@@ -187,7 +187,7 @@ const ExplanationRenderer = {
                     Save
                 </button>
                 <button class="button is-small is-primary" :disabled="localIsLocked" @mousedown.prevent @click="saveAndRun">
-                    <span class="icon"><i class="fa fa-play"></i></span> 
+                    <span class="icon"><i class="bx bx-play"></i></span> 
                     <span>Save and Run</span>
                 </button>
             </div>
