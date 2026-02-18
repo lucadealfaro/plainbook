@@ -102,9 +102,8 @@ export default {
                             @click="$emit('reset-run-all')"
                             title="Reset and run all cells"
                             class="button is-primary">
-                            <span class="icon px-5">
-                                    <i class="bx bx-repeat mr-1"></i>
-                                    <i class="bx bx-play"></i>
+                            <span class="icon">
+                                <i class="bx bx-keyframe-ease-in"></i>
                             </span>
                             <span>Run from the beginning</span>
                         </button>

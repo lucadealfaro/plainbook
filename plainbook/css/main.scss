@@ -41,7 +41,7 @@ pre[class*="language-"] {
 }
 
 // Hide button text on narrow screens, show only icons
-@media screen and (max-width: 768px) {
+@media screen and (max-width: 900px) {
   .navbar-item .button span:not(.icon) {
     display: none !important;
   }
@@ -70,7 +70,7 @@ pre[class*="language-"] {
 }
 
 .explanation-toolbar .toolbar-right .button {
-  @media (max-width: 768px) {
+  @media (max-width: 900px) {
     span:not(.icon) {
       display: none !important;
     }
@@ -81,7 +81,7 @@ pre[class*="language-"] {
 }
 
 .explanation-toolbar .toolbar-left .run-button {
-  @media (max-width: 768px) {
+  @media (max-width: 900px) {
     span:not(.icon) {
       display: none !important;
     }
