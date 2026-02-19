@@ -76,7 +76,7 @@ class PlainbookJupyter(PlainbookAbstract):
             cell = self.nb.cells[index]
             if cell.cell_type != 'code':
                 return None, "Not a code cell"
-            if index <= self.last_executed_cell:
+            if index <= min(self.last_executed_cell, self.last_valid_output_cell):
                 return cell.outputs, "Cached"
             # Checks that all intervening cells between last_executed_cell and index are non-code.
             for i in range(self.last_executed_cell + 1, index):

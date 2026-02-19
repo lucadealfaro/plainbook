@@ -158,11 +158,12 @@ const ExplanationRenderer = {
                 </button>
                 <button class="button is-small"
                         :class="hasError ? 'is-warning' : 'is-success'"
-                        title="Regenerate code from description"
+                        title="Generate code from description"
                         :disabled="localIsLocked" @click.stop="$emit('gencode')">
-                    <span class="icon"><i class="bx bx-repeat"></i></span>
+                    <span class="icon"><i class="bx bx-cognition"></i></span>
                     <span v-if="hasError">Fix Code</span>
-                    <span v-else>Regenerate Code</span>
+                    <span v-else-if="hasCode">Regenerate Code</span>
+                    <span v-else>Generate Code</span>
                 </button>
                 <button :disabled="!codeValid" class="button is-small is-success" title="Validate code against description" @click.stop="$emit('validate')">
                     <span class="icon"><i class="bx bx-check"></i></span> <span>Validate Code</span>

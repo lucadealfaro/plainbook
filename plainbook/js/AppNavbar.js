@@ -1,5 +1,5 @@
 export default {
-    props: ['isLocked', 'running', 'hasNotebook', 'upToDate', 'cellCount', 'hasApiKey', 'debug',
+    props: ['isLocked', 'running', 'runningActivity', 'hasNotebook', 'upToDate', 'cellCount', 'hasApiKey', 'debug',
             'activeAiProvider', 'availableAiProviders'],
     emits: [
         'lock', 'refresh', 'interrupt', 'regenerate-all',
@@ -60,25 +60,45 @@ export default {
             <div class="navbar-start">
                 <div class="navbar-item">
                     <div class="buttons">
+
                         <button v-if="isLocked" class="button is-warning" title="Unlock Notebook" @click="$emit('lock', false)">
-                            <span class="icon"><i class="bx bx-lock"></i></span>
+                        <span class="icon"><i class="bx bx-lock"></i></span>
                         </button>
                         <button v-else class="button is-light" title="Lock Notebook" @click="$emit('lock', true)">
-                            <span class="icon"><i class="bx bx-lock-open"></i></span>
+                        <span class="icon"><i class="bx bx-lock-open"></i></span>
                         </button>
 
                         <button v-if="!running && hasNotebook"
+                            :disabled="cellCount === 0"
+                            @click="$emit('clear-outputs')"
+                            title="Clear all outputs"
+                            class="button is-light">
+                            <span class="icon"><i class="bx bx-broom"></i></span>
+                            <span>Clear outputs</span>
+                        </button>
+
+                        <!-- <button v-if="!running && hasNotebook"
                             @click="$emit('refresh')"
                             class="button is-light" title="Reload Notebook">
                             <span class="icon"><i class="bx bx-refresh-cw"></i></span>
                             <span>Refresh</span>
-                        </button>
+                        </button> -->
 
                         <button v-if="running && hasNotebook"
                                 @click="$emit('interrupt')"
                                 class="button is-danger" title="Interrupt Execution">
-                            <span class="icon"><i class="bx bx-stop"></i></span>
-                            <span>Running...</span>
+                            <span class="icon">
+                                <i :class="runningActivity && runningActivity.type === 'generating'
+                                    ? 'bx bx-cognition'
+                                    : 'bx bx-running'"></i>
+                            </span>
+                            <span v-if="runningActivity && runningActivity.type === 'generating'">
+                                Generating cell {{ runningActivity.cellIndex + 1 }}
+                            </span>
+                            <span v-else-if="runningActivity && runningActivity.type === 'running'">
+                                Running cell {{ runningActivity.cellIndex + 1 }}
+                            </span>
+                            <span v-else>Running...</span>
                         </button>
 
                         <!-- <button v-if="!running && upToDate"
@@ -116,15 +136,6 @@ export default {
                             class="button is-primary">
                             <span class="icon"><i class="bx bx-play"></i></span>
                             <span>Run</span>
-                        </button>
-
-                        <button v-if="!running && hasNotebook"
-                            :disabled="cellCount === 0"
-                            @click="$emit('clear-outputs')"
-                            title="Clear all outputs"
-                            class="button is-light">
-                            <span class="icon"><i class="bx bx-broom"></i></span>
-                            <span>Clear outputs</span>
                         </button>
 
                     </div>

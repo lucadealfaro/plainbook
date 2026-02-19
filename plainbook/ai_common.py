@@ -3,6 +3,10 @@ import string
 
 SPACES_AND_PUNCTUATION_PATTERN = f"^[{re.escape(string.punctuation + string.whitespace)}]+"
 
+CHARS_PER_TOKEN = 4
+MAX_TOKENS_PER_ARGUMENT = 10_000
+_MAX_CHARS_PER_ARGUMENT = MAX_TOKENS_PER_ARGUMENT * CHARS_PER_TOKEN
+
 SYSTEM_INSTRUCTIONS = """
 You are an assistant that writes Python code for Jupyter cells, and your task is to
 write the code for one Jupyter cell.
@@ -32,6 +36,14 @@ def clean_start(text):
     return re.sub(SPACES_AND_PUNCTUATION_PATTERN, '', text)
 
 
+def truncate_to_token_limit(text):
+    """Truncate text to fit within the per-argument token limit.
+    Keeps the tail (most recent content) and prepends a truncation marker."""
+    if not text or len(text) <= _MAX_CHARS_PER_ARGUMENT:
+        return text
+    return "[...truncated...]\n" + text[-_MAX_CHARS_PER_ARGUMENT:]
+
+
 def build_context_prompt(
     preceding=None,
     previous=None,
@@ -39,6 +51,12 @@ def build_context_prompt(
     error_context=None,
     variable_context=None,
     validation_context=None):
+    preceding = truncate_to_token_limit(preceding)
+    previous = truncate_to_token_limit(previous)
+    file_context = truncate_to_token_limit(file_context)
+    error_context = truncate_to_token_limit(error_context)
+    variable_context = truncate_to_token_limit(variable_context)
+    validation_context = truncate_to_token_limit(validation_context)
     prompt = f"""
 CONTEXT (Existing Notebook Code):
 {preceding}

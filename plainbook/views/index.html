@@ -43,6 +43,7 @@
     <app-navbar
         :is-locked="isLocked"
         :running="running"
+        :running-activity="runningActivity"
         :has-notebook="!!notebook"
         :up-to-date="notebook && last_valid_output_cell_index >= notebook.cells.length - 1"
         :cell-count="notebook ? notebook.cells.length : 0"

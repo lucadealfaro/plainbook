@@ -29,6 +29,7 @@ createApp({
         const debug = ref(false);
         // For running a notebook.
         const running = ref(false);
+        const runningActivity = ref({ type: null, cellIndex: null });
         const last_executed_cell_index = ref(-1);
         const last_valid_code_cell_index = ref(-1);
         const last_valid_output_cell_index = ref(-1);
@@ -82,7 +83,8 @@ createApp({
         app.config.errorHandler = (err, instance, info) => {
             console.error("Global error:", err, instance, info);
             running.value = false;
-            
+            runningActivity.value = { type: null, cellIndex: null };
+
             const formatError = (e) => {
                 const msg = e.message || String(e);
                 const stack = e.stack || '';
@@ -395,6 +397,7 @@ createApp({
                 await runCells(cellIndex - 1);
             }
             if (!running.value) return; // Stop if running has been cancelled
+            runningActivity.value = { type: 'generating', cellIndex };
             asRead.value = false;
             const body = { cell_index: cellIndex };
             if (validationFeedback) {
@@ -451,6 +454,7 @@ createApp({
             const cell = notebook.value.cells[cellIndex];
             if (cell.cell_type !== 'code') return; // Only run code cells
             if (!running.value) return; // Stop if running has been cancelled
+            runningActivity.value = { type: 'running', cellIndex };
             asRead.value = false;
             const r = await apiCall('/execute_cell', 'POST', { cell_index: cellIndex });
                 if (r.status === 'error') {
@@ -482,6 +486,7 @@ createApp({
                 await generateCode(cellIndex);
                 await runCells(cellIndex);
                 running.value = false;
+                runningActivity.value = { type: null, cellIndex: null };
             }
         };
 
@@ -493,6 +498,7 @@ createApp({
                 running.value = true;
                 await runCells(cellIndex);
                 running.value = false;
+                runningActivity.value = { type: null, cellIndex: null };
             }
         };
 
@@ -506,6 +512,7 @@ createApp({
                 await ui_resetKernel();
                 await runCells(notebook.value.cells.length - 1);
                 running.value = false;
+                runningActivity.value = { type: null, cellIndex: null };
             }
         };
 
@@ -526,6 +533,7 @@ createApp({
                 }
                 await generateCodeOneCell(cellIndex, true, validationFeedback);
                 running.value = false;
+                runningActivity.value = { type: null, cellIndex: null };
             }
         };
 
@@ -533,6 +541,7 @@ createApp({
         const ui_interruptKernel = async () => {
             try {
                 running.value = false;
+                runningActivity.value = { type: null, cellIndex: null };
                 await apiCall('/interrupt_kernel', 'POST');
                 console.log('Kernel interrupted');
             } catch (err) {
@@ -637,7 +646,7 @@ createApp({
             sendCodeToServer, clearCellCode, ui_saveExplanationAndRun,
             sendMarkdownToServer, generateCode, activeIndex, reloadNotebook,
             validateCode, dismissValidation, ui_resetAndRunAllCells, ui_forceRegenerateCellCode,
-            setActiveCell, ui_runCell, running, asRead,
+            setActiveCell, ui_runCell, running, runningActivity, asRead,
             ui_interruptKernel, insertCell, markdownEditKey,
             last_executed_cell_index, last_valid_code_cell_index, last_valid_output_cell_index,
             saveSettings, showSettings, showInfo,
