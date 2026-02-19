@@ -6,19 +6,16 @@ import CodeCell from './CodeCell.js';
 import ExplanationEditor from './ExplanationEditor.js';
 import ValidationCell from './ValidationCell.js';
 import OutputRenderer from './OutputRenderer.js';
-import CellStateButton from './CellStateButton.js';
-
 export default {
-    components: { MarkdownCell, CodeCell, ExplanationEditor, ValidationCell, OutputRenderer,
-            CellStateButton
-    },
+    components: { MarkdownCell, CodeCell, ExplanationEditor, ValidationCell, OutputRenderer },
     props: ['cell', 'isActive', 'isLocked', 'codeValid', 'outputValid', 'executed', 
         'asRead', 'markdownEditKey', 'explanationEditKey'],
     emits: [
         'save-markdown', 'save-explanation', 'save-code',
         'run-cell', 'save-and-run', 'generate-code', 'clear-code',
         'validate-code', 'dismiss-validation',
-        'delete', 'move-up', 'move-down'
+        'delete', 'move-up', 'move-down',
+        'activate'
     ],
     setup(props, { emit }) {
         const hasError = computed(() => {
@@ -33,6 +30,7 @@ export default {
     },
     template: /* html */ `
         <div class="notebook-cell box p-0 mb-2 is-clipped shadow-sm"
+             @click="$emit('activate')"
              :style="{
                 border: isActive ? '2px solid #1d4ed8' : '1px solid transparent',
                 cursor: 'pointer'
@@ -90,7 +88,8 @@ export default {
                     :executed="executed"
                     :hasError="hasError"
                     :asRead="asRead"
-                    @save="$emit('save-code', $event)" />
+                    @save="$emit('save-code', $event)"
+                    @activate="$emit('activate')" />
                 
                 <div v-if="outputVisible && cell.outputs?.length" class="p-2 border-top has-background-white">
                     <output-renderer v-for="(out, oIdx) in cell.outputs" :key="oIdx" :output="out" />

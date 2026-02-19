@@ -1,12 +1,9 @@
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from './vue.esm-browser.js';
 
-import CellStateButton from './CellStateButton.js';
-
 export default {
-    props: ['source', 'executionCount', 'isActive', 'isLocked', 
+    props: ['source', 'executionCount', 'isActive', 'isLocked',
             'codeValid', 'outputValid', 'executed', 'hasError', 'asRead'],
-    emits: ['save', 'update:source'],
-    components: { CellStateButton },
+    emits: ['save', 'update:source', 'activate'],
     setup(props, { emit }) {
         const isCollapsed = ref(true);
         const isEditing = ref(false);
@@ -152,7 +149,7 @@ export default {
 
         return { isCollapsed, toggleCollapse, isEditing, cancelEdit, localSource,
             localIsLocked, highlightedCode, enterEditMode, saveCode, textareaEl,
-            CellStateButton, autoResize, handleTabKey, onBlur };
+            autoResize, handleTabKey, onBlur };
     },
     template: /* html */ `
         <div class="code-cell-wrapper">
@@ -161,13 +158,15 @@ export default {
                         @click="toggleCollapse">
                     {{ isCollapsed ? '▶ &nbsp;Show code' : '▼ &nbsp;Hide code' }}
                 </button>
-                <cell-state-button v-if="!isActive && isCollapsed"
-                    :code-valid="codeValid"
-                    :output-valid="outputValid"
-                    :as-read="asRead"
-                    :has-error="hasError"
-                    :is-narrow="true"
-                    :is-output="true"/>
+                <button v-if="!isActive && isCollapsed" class="button is-small"
+                    style="opacity: 0.6; padding: 0.1rem 0.5rem;"
+                    @click.stop="$emit('activate')">
+                    <span>Output:&nbsp;</span>
+                    <span v-if="!codeValid">Stale</span>
+                    <span v-else-if="!outputValid">Stale</span>
+                    <span v-else-if="asRead">Unmodified</span>
+                    <span v-else>Up to date</span>
+                </button>
                 <span style="flex: 1;"></span>
                 <button v-if="!isCollapsed && !isEditing && !localIsLocked"
                     class="button is-small is-info mt-1 mr-3"

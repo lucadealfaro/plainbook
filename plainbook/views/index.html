@@ -104,7 +104,7 @@
                         :as-read="asRead"
                         :markdown-edit-key="markdownEditKey[index]"
                         :explanation-edit-key="explanationEditKey[index]"
-                        @click="setActiveCell(index)"
+                        @activate="setActiveCell(index)"
                         
                         @save-markdown="(content) => sendMarkdownToServer(content, index)"
                         @save-explanation="(content) => sendExplanationToServer(content, index)"

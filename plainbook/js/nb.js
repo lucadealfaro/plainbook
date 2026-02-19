@@ -290,8 +290,8 @@ createApp({
             }
         };
 
-        const setActiveCell = (idx, shouldScroll = false) => { 
-            activeIndex.value = idx; 
+        const setActiveCell = (idx, shouldScroll = false) => {
+            activeIndex.value = idx;
             if (shouldScroll) {
                 nextTick(() => {
                     const cells = document.querySelectorAll('.notebook-cell');

@@ -1,13 +1,10 @@
 import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from './vue.esm-browser.js';
 
-import CellStateButton from './CellStateButton.js';
-
 const ExplanationRenderer = {
     props: ['source', 'isActive', 'codeValid', 'outputValid', 'executed', 'hasError',
             'asRead', 'startEditKey', 'isLocked', 'hasCode', 'outputVisible'],
     emits: ['update:source', 'save', 'saveandrun', 'gencode', 'clearcode', 'validate',
             'run', 'delete', 'moveUp', 'moveDown', 'toggle-output'],
-    components: { CellStateButton },
     setup(props, { emit }) {    
         const isEditing = ref(false);
         const localSource = ref((Array.isArray(props.source) ? props.source.join('') : props.source) || '');
@@ -109,8 +106,7 @@ const ExplanationRenderer = {
         };
 
         return { isEditing, localSource, rendered, enterEditMode, saveChanges,
-            cancelEdit, textareaEl, autoResize, saveAndRun, onBlur, localIsLocked,
-            CellStateButton };
+            cancelEdit, textareaEl, autoResize, saveAndRun, onBlur, localIsLocked };
     },
 
     template: /* html */ `
@@ -128,17 +124,17 @@ const ExplanationRenderer = {
                         title="Run this cell and all necessary preceding cells" @click.stop="$emit('run')">
                     <span class="icon"><i class="bx bx-play"></i></span><span>Run</span>
                 </button>
-                <cell-state-button 
-                :code-valid="codeValid" 
-                :output-valid="outputValid" 
-                :as-read="asRead" 
-                :has-error="hasError" />
                 <button class="button is-small" style="opacity: 0.6;"
-                        title="Toggle output visibility"
-                        @click.stop="$emit('toggle-output')">
+                    title="Toggle output visibility"
+                    @click.stop="$emit('toggle-output')">
                     <span class="icon">
                         <i :class="outputVisible ? 'bx bx-eye-slash' : 'bx bx-eye'"></i>
                     </span>
+                    <span>Output:&nbsp;</span>
+                    <span v-if="!codeValid">Stale</span>
+                    <span v-else-if="!outputValid">Stale</span>
+                    <span v-else-if="asRead">Unmodified</span>
+                    <span v-else>Up to date</span>
                 </button>
             </div>
             <div class="toolbar-right" style="display: flex; flex-wrap: wrap; gap: 0.25rem;">
