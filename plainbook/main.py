@@ -398,6 +398,14 @@ def cancel_ai_request():
         return dict(status='error', message=str(e))
     
     
+@post('/clear_outputs')
+@stateful
+@require_token
+def clear_outputs():
+    notebook.clear_outputs()
+    return dict(status='success')
+
+
 @post('/lock_notebook')
 @stateful
 @require_token

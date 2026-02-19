@@ -155,6 +155,22 @@ createApp({
             dictRef.value = { ...dictRef.value, [idx]: (dictRef.value[idx] || 0) + 1 };
         };
 
+        const clearOutputs = async () => {
+            try {
+                await apiCall('/clear_outputs', 'POST');
+                if (notebook.value) {
+                    for (const cell of notebook.value.cells) {
+                        if (cell.cell_type === 'code') {
+                            cell.outputs = [];
+                        }
+                    }
+                }
+                console.log('Outputs cleared');
+            } catch (err) {
+                throw new Error('Failed to clear outputs', { cause: err });
+            }
+        };
+
         const sendDebugRequest = async () => {
             try {
                 await apiCall('/debug_request', 'POST', { notebook: notebook.value });
@@ -627,7 +643,7 @@ createApp({
             saveSettings, showSettings, showInfo,
             genError, uiError, closeUiError, debug, sendDebugRequest,
             explanationEditKey, deleteCell, moveCell, geminiApiKey, claudeApiKey,
-            activeAiProvider, availableAiProviders, setActiveAiProvider };
+            clearOutputs, activeAiProvider, availableAiProviders, setActiveAiProvider };
     },
 
 template: `#app-template`,

@@ -55,6 +55,7 @@
         @interrupt="ui_interruptKernel"
         @reset-run-all="ui_resetAndRunAllCells"
         @run-all="ui_runCell(notebook.cells.length - 1)"
+        @clear-outputs="clearOutputs"
         @open-info="showInfo = true"
         @open-settings="showSettings = true"
         @debug-request="sendDebugRequest"

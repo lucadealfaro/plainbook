@@ -593,6 +593,15 @@ class PlainbookAbstract(abc.ABC):
             self._write()
 
 
+    def clear_outputs(self):
+        """Clears all cell outputs and resets the last valid output index."""
+        with self._lock:
+            for cell in self.nb.cells:
+                if cell.cell_type == 'code':
+                    cell.outputs = []
+            self.last_valid_output_cell = -1
+            self._write()
+
     def set_input_files(self, files, missing_files=[]):
         """Sets the input files for the notebook."""
         with self._lock:

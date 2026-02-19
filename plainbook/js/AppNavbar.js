@@ -3,7 +3,7 @@ export default {
             'activeAiProvider', 'availableAiProviders'],
     emits: [
         'lock', 'refresh', 'interrupt', 'regenerate-all',
-        'reset-run-all', 'run-all','open-info', 'open-settings', 'debug-request',
+        'reset-run-all', 'run-all', 'clear-outputs', 'open-info', 'open-settings', 'debug-request',
         'set-ai-provider'
         ],
     data() {
@@ -116,6 +116,15 @@ export default {
                             class="button is-primary">
                             <span class="icon"><i class="bx bx-play"></i></span>
                             <span>Run</span>
+                        </button>
+
+                        <button v-if="!running && hasNotebook"
+                            :disabled="cellCount === 0"
+                            @click="$emit('clear-outputs')"
+                            title="Clear all outputs"
+                            class="button is-light">
+                            <span class="icon"><i class="bx bx-broom"></i></span>
+                            <span>Clear outputs</span>
                         </button>
 
                     </div>
