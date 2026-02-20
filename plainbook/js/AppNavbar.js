@@ -56,8 +56,7 @@ export default {
     },
     template: /* html */ `
     <div class="app-toolbar has-background-dark"
-         style="position: fixed; top: 0; left: 0; right: 0; z-index: 30;
-                display: flex; flex-wrap: wrap; align-items: center;
+         style="display: flex; flex-wrap: wrap; align-items: center;
                 padding: 0.4rem 0.4rem; gap: 0.2rem;"
          role="navigation" aria-label="main navigation">
         <div class="buttons mb-0">
