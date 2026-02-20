@@ -55,11 +55,12 @@ export default {
         document.removeEventListener('click', this._onDocClick);
     },
     template: /* html */ `
-    <nav class="navbar is-dark is-fixed-top" role="navigation" aria-label="main navigation">
-        <div id="the-navbar-menu" class="navbar-menu">
-            <div class="navbar-start">
-                <div class="navbar-item">
-                    <div class="buttons">
+    <div class="app-toolbar has-background-dark"
+         style="position: fixed; top: 0; left: 0; right: 0; z-index: 30;
+                display: flex; flex-wrap: wrap; align-items: center;
+                padding: 0.4rem 0.4rem; gap: 0.2rem;"
+         role="navigation" aria-label="main navigation">
+        <div class="buttons mb-0">
 
                         <button v-if="isLocked" class="button is-warning" title="Unlock Notebook" @click="$emit('lock', false)">
                         <span class="icon"><i class="bx bx-lock"></i></span>
@@ -138,12 +139,9 @@ export default {
                             <span>Run</span>
                         </button>
 
-                    </div>
-                </div>
-            </div>
-            <div class="navbar-end">
-                <div class="navbar-item">
-                    <div class="buttons">
+        </div>
+        <span style="flex: 1;"></span>
+        <div class="buttons mb-0">
                         <button v-if="debug" class="button is-warning" title="Send debug request" @click="$emit('debug-request')">
                             <span class="icon"><i class="bx bx-bug"></i></span>
                             <span>Debug</span>
@@ -187,9 +185,6 @@ export default {
                             <span class="icon"><i :class="hasApiKey ? 'bx bx-cog' : 'bx bx-alert-triangle'"></i></span>
                             <span>Settings</span>
                         </button>
-                    </div>
-                </div>
-            </div>
         </div>
-    </nav>`
+    </div>`
 };

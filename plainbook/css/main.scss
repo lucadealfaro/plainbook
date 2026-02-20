@@ -41,16 +41,16 @@ pre[class*="language-"] {
 }
 
 // Hide button text on narrow screens, show only icons
-@media screen and (max-width: 900px) {
-  .navbar-item .button span:not(.icon) {
+@media screen and (max-width: 1000px) {
+  .app-toolbar .button span:not(.icon) {
     display: none !important;
   }
-  .navbar-item .button {
+  .app-toolbar .button {
     padding-left: 0.75rem;
     padding-right: 0.75rem;
     justify-content: center;
   }
-  .navbar-item .button .icon {
+  .app-toolbar .button .icon {
     margin: 0 !important;
   }
 }
@@ -145,4 +145,3 @@ pre[class*="language-"] {
 .button.is-small .bx {
   font-size: 1rem; /* adjust as needed */
 }
-
