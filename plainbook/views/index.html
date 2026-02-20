@@ -85,10 +85,15 @@
 
                     <cell-insertion-zone v-if="!isLocked"
                         :is-active="activeIndex === index || (activeIndex >= 0 && activeIndex === index - 1)"
-                        @insert="(celltype) => insertCell(index, celltype)" 
+                        @insert="(celltype) => insertCell(index, celltype)"
                     />
-                    
-                    <notebook-cell 
+
+                    <cell-label
+                        v-if="cell.cell_type === 'code'"
+                        :label="'Cell ' + (index + 1)"
+                    />
+
+                    <notebook-cell
                         :cell="cell"
                         :is-active="activeIndex === index"
                         :is-locked="isLocked"

@@ -138,6 +138,14 @@ pre[class*="language-"] {
   @extend .table, .is-narrow, .is-striped, .is-size-6;
 }
 
+.cell-label {
+  font-size: 0.85rem;
+  color: #777;
+  padding-left: 0.5rem;
+  margin-bottom: -0.2rem;
+  user-select: none;
+}
+
 .button .bx {
   font-size: 1.05rem; /* adjust as needed */
 }

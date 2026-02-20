@@ -3,6 +3,7 @@ import { createApp, ref, computed, onMounted, onBeforeUnmount, nextTick, getCurr
 import AppNavbar from './AppNavbar.js';
 import NotebookCell from './NotebookCell.js';
 import CellInsertionZone from './CellInsertionZone.js';
+import CellLabel from './CellLabel.js';
 import SettingsModal from './SettingsModal.js';
 import InfoModal from './InfoModal.js';
 import UiError from './UiError.js';
@@ -10,7 +11,7 @@ import InputFile from './InputFile.js';
 import NotebookHelp from './NotebookHelp.js';
 
 createApp({
-    components: { AppNavbar, NotebookCell, CellInsertionZone, SettingsModal, InfoModal, UiError, InputFile, NotebookHelp },
+    components: { AppNavbar, NotebookCell, CellInsertionZone, CellLabel, SettingsModal, InfoModal, UiError, InputFile, NotebookHelp },
     setup() {
         // Extract token from URL
         const urlParams = new URLSearchParams(window.location.search);
