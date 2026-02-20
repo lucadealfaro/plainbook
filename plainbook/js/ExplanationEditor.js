@@ -157,7 +157,7 @@ const ExplanationRenderer = {
                         title="Clear code"
                         :disabled="localIsLocked || !hasCode" @click.stop="$emit('clearcode')">
                     <span class="icon"><i class="bx bx-eraser"></i></span>
-                    <span>Clear Code</span>
+                    <span>Clear code</span>
                 </button>
                 <button class="button is-small"
                         :class="hasError ? 'is-warning' : 'is-success'"
@@ -165,11 +165,11 @@ const ExplanationRenderer = {
                         :disabled="localIsLocked" @click.stop="$emit('gencode')">
                     <span class="icon"><i class="bx bx-cognition"></i></span>
                     <span v-if="hasError">Fix Code</span>
-                    <span v-else-if="hasCode">Regenerate Code</span>
-                    <span v-else>Generate Code</span>
+                    <span v-else-if="hasCode">Regenerate code</span>
+                    <span v-else>Generate code</span>
                 </button>
                 <button :disabled="!codeValid" class="button is-small is-success" title="Validate code against description" @click.stop="$emit('validate')">
-                    <span class="icon"><i class="bx bx-check"></i></span> <span>Validate Code</span>
+                    <span class="icon"><i class="bx bx-check"></i></span> <span>Validate code</span>
                 </button>
                 <button class="button is-small is-danger py-1 " title="Delete cell" aria-label="Delete" 
                         :disabled="localIsLocked" @click.stop="$emit('delete')">
