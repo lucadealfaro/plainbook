@@ -3,7 +3,7 @@ export default {
             'activeAiProvider', 'availableAiProviders'],
     emits: [
         'lock', 'refresh', 'interrupt', 'regenerate-all',
-        'reset-run-all', 'run-all', 'clear-outputs', 'open-info', 'open-settings', 'debug-request',
+        'reset-run-all', 'run-all', 'run-all-tests', 'clear-outputs', 'open-info', 'open-settings', 'debug-request',
         'set-ai-provider'
         ],
     data() {
@@ -136,6 +136,16 @@ export default {
                             class="button is-primary">
                             <span class="icon"><i class="bx bx-play"></i></span>
                             <span>Run</span>
+                        </button>
+
+                        <button v-if="!running && hasNotebook"
+                            :disabled="cellCount === 0"
+                            @mousedown.prevent
+                            @click="$emit('run-all-tests')"
+                            title="Run all tests"
+                            class="button is-warning">
+                            <span class="icon"><i class="bx bx-seal-check"></i></span>
+                            <span>Run tests</span>
                         </button>
 
         </div>

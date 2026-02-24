@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "plainbook"
-version = "0.0.20"
+version = "0.0.21"
 description = "Plain Language Notebooks"
 readme = "README.md"
 requires-python = ">=3.8"
@@ -21,10 +21,7 @@ dependencies = [
     "bottle",
     "cherrypy",
     "google-genai",
-    "ipykernel",
-    "jupyter_client",
     "snapshot-kernel>=0.1.3",
-    "nbclient",
     "nbformat",
     "pyyaml",
     "requests",

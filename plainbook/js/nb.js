@@ -6,12 +6,13 @@ import CellInsertionZone from './CellInsertionZone.js';
 import CellLabel from './CellLabel.js';
 import SettingsModal from './SettingsModal.js';
 import InfoModal from './InfoModal.js';
+import TestHelpModal from './TestHelpModal.js';
 import UiError from './UiError.js';
 import InputFile from './InputFile.js';
 import NotebookHelp from './NotebookHelp.js';
 
 createApp({
-    components: { AppNavbar, NotebookCell, CellInsertionZone, CellLabel, SettingsModal, InfoModal, UiError, InputFile, NotebookHelp },
+    components: { AppNavbar, NotebookCell, CellInsertionZone, CellLabel, SettingsModal, InfoModal, TestHelpModal, UiError, InputFile, NotebookHelp },
     setup() {
         // Extract token from URL
         const urlParams = new URLSearchParams(window.location.search);
@@ -78,6 +79,12 @@ createApp({
         // For info modal
         const showInfo = ref(false);
 
+        // For test help modal
+        const showTestHelp = ref(false);
+
+        // Test cell state
+        const last_valid_test_cell_index = ref(-1);
+
         // Configure global error handler
         const app = getCurrentInstance().appContext.app;
 
@@ -108,6 +115,7 @@ createApp({
             last_executed_cell_index.value = state.last_executed_cell;
             last_valid_code_cell_index.value = state.last_valid_code_cell;
             last_valid_output_cell_index.value = state.last_valid_output_cell;
+            last_valid_test_cell_index.value = state.last_valid_test_cell;
             isLocked.value = state.is_locked;
             if (notebook.value && notebook.value.metadata) {
                 notebook.value.metadata.is_locked = state.is_locked;
@@ -163,7 +171,7 @@ createApp({
                 await apiCall('/clear_outputs', 'POST');
                 if (notebook.value) {
                     for (const cell of notebook.value.cells) {
-                        if (cell.cell_type === 'code') {
+                        if (cell.cell_type === 'code' || cell.cell_type === 'test') {
                             cell.outputs = [];
                         }
                     }
@@ -323,7 +331,7 @@ createApp({
                     nextTick(() => {
                         if (cellType === 'markdown') {
                             bumpKey(markdownEditKey, index);
-                        } else {
+                        } else { // code or test
                             bumpKey(explanationEditKey, index);
                         }
                     });
@@ -386,6 +394,7 @@ createApp({
             asRead.value = false;
             for (let i = last_valid_code_cell_index.value + 1; i <= cellIndex; i++) {
                 if (!running.value) return; // Stop if running has been cancelled
+                if (notebook.value.cells[i].cell_type !== 'code') continue; // Skip non-code cells
                 await generateCodeOneCell(i);
             }
         };
@@ -571,6 +580,129 @@ createApp({
         };
 
 
+        // Test cell functions
+
+        const generateTestCodeOneCell = async (cellIndex, force = false, validationFeedback = null) => {
+            const cell = notebook.value.cells[cellIndex];
+            if (cell.cell_type !== 'test') return;
+            if (!force && last_valid_test_cell_index.value >= cellIndex) return;
+            if (!running.value) return;
+            runningActivity.value = { type: 'generating', cellIndex };
+            asRead.value = false;
+            const body = { cell_index: cellIndex };
+            if (validationFeedback) {
+                body.validation_feedback = validationFeedback;
+            }
+            const r = await apiCall('/generate_test_code', 'POST', body);
+            if (r.status === 'success') {
+                if (notebook.value && notebook.value.cells[cellIndex]) {
+                    cell.source = r.code;
+                    console.log('Test code generated for cell:', cellIndex);
+                }
+            } else if (r.status === 'cancelled') {
+                console.log('Test code generation cancelled for cell:', cellIndex);
+            } else {
+                throw new Error(r.message || 'Test code generation failed');
+            }
+        };
+
+        const runOneTest = async (cellIndex) => {
+            if (cellIndex < 0 || cellIndex >= notebook.value.cells.length) return;
+            const cell = notebook.value.cells[cellIndex];
+            if (cell.cell_type !== 'test') return;
+            if (!running.value) return;
+            // Ensure all previous code cells are run
+            // Find the last code cell before this test
+            let lastCodeIdx = -1;
+            for (let i = cellIndex - 1; i >= 0; i--) {
+                if (notebook.value.cells[i].cell_type === 'code') {
+                    lastCodeIdx = i;
+                    break;
+                }
+            }
+            if (lastCodeIdx >= 0 && last_executed_cell_index.value < lastCodeIdx) {
+                await runCells(lastCodeIdx);
+            }
+            if (!running.value) return;
+            // Generate test code if needed
+            if (last_valid_test_cell_index.value < cellIndex) {
+                await generateTestCodeOneCell(cellIndex);
+            }
+            if (!running.value) return;
+            // Execute the test cell
+            runningActivity.value = { type: 'running', cellIndex };
+            asRead.value = false;
+            const r = await apiCall('/execute_test_cell', 'POST', { cell_index: cellIndex });
+            if (r.status === 'error') {
+                throw new Error(r.message || 'Test execution failed');
+            }
+            if (r.outputs) {
+                cell.outputs = r.outputs;
+            }
+            console.log('Test cell executed:', cellIndex);
+        };
+
+        const ui_runTestCell = async (cellIndex) => {
+            flushActiveEdits();
+            await waitForPendingSaves();
+            if (!running.value) {
+                running.value = true;
+                await runOneTest(cellIndex);
+                running.value = false;
+                runningActivity.value = { type: null, cellIndex: null };
+            }
+        };
+
+        const ui_runAllTests = async () => {
+            flushActiveEdits();
+            await waitForPendingSaves();
+            if (!running.value) {
+                running.value = true;
+                for (let i = 0; i < notebook.value.cells.length; i++) {
+                    if (!running.value) break;
+                    if (notebook.value.cells[i].cell_type === 'test') {
+                        await runOneTest(i);
+                    }
+                }
+                running.value = false;
+                runningActivity.value = { type: null, cellIndex: null };
+            }
+        };
+
+        const ui_saveExplanationAndRunTest = async (content, cellIndex) => {
+            const response = await sendExplanationToServer(content, cellIndex);
+            if (response && response.cell_name
+                    && notebook.value && notebook.value.cells[cellIndex]) {
+                notebook.value.cells[cellIndex].metadata.name = response.cell_name;
+            }
+            if (!running.value) {
+                running.value = true;
+                await generateTestCodeOneCell(cellIndex);
+                await runOneTest(cellIndex);
+                running.value = false;
+                runningActivity.value = { type: null, cellIndex: null };
+            }
+        };
+
+        const ui_forceRegenerateTestCode = async (cellIndex) => {
+            asRead.value = false;
+            flushActiveEdits();
+            await waitForPendingSaves();
+            if (!running.value) {
+                running.value = true;
+                let validationFeedback = null;
+                const cell = notebook.value.cells[cellIndex];
+                const v = cell?.metadata?.validation;
+                if (v && !v.is_hidden && !v.is_valid && v.message) {
+                    validationFeedback = v.message;
+                    dismissValidation(cellIndex);
+                }
+                await generateTestCodeOneCell(cellIndex, true, validationFeedback);
+                running.value = false;
+                runningActivity.value = { type: null, cellIndex: null };
+            }
+        };
+
         const handleKeydown = (e) => {
             const total = notebook.value?.cells?.length ?? 0;
             if (total === 0) return;
@@ -660,10 +792,12 @@ createApp({
             setActiveCell, ui_runCell, running, runningActivity, asRead,
             ui_interruptKernel, insertCell, markdownEditKey,
             last_executed_cell_index, last_valid_code_cell_index, last_valid_output_cell_index,
-            saveSettings, showSettings, showInfo,
+            last_valid_test_cell_index,
+            saveSettings, showSettings, showInfo, showTestHelp,
             genError, uiError, closeUiError, debug, sendDebugRequest,
             explanationEditKey, deleteCell, moveCell, geminiApiKey, claudeApiKey,
-            clearOutputs, activeAiProvider, availableAiProviders, setActiveAiProvider };
+            clearOutputs, activeAiProvider, availableAiProviders, setActiveAiProvider,
+            ui_runTestCell, ui_runAllTests, ui_saveExplanationAndRunTest, ui_forceRegenerateTestCode };
     },
 
 template: `#app-template`,

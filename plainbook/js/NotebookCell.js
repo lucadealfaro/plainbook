@@ -8,18 +8,19 @@ import ValidationCell from './ValidationCell.js';
 import OutputRenderer from './OutputRenderer.js';
 export default {
     components: { MarkdownCell, CodeCell, ExplanationEditor, ValidationCell, OutputRenderer },
-    props: ['cell', 'isActive', 'isLocked', 'codeValid', 'outputValid', 'executed', 
-        'asRead', 'markdownEditKey', 'explanationEditKey'],
+    props: ['cell', 'isActive', 'isLocked', 'codeValid', 'outputValid', 'executed',
+        'asRead', 'markdownEditKey', 'explanationEditKey', 'testCodeValid'],
     emits: [
         'save-markdown', 'save-explanation', 'save-code',
         'run-cell', 'save-and-run', 'generate-code', 'clear-code',
         'validate-code', 'dismiss-validation',
         'delete', 'move-up', 'move-down',
-        'activate'
+        'activate',
+        'run-test', 'save-and-run-test', 'generate-test-code', 'open-test-help'
     ],
     setup(props, { emit }) {
         const hasError = computed(() => {
-            if (props.cell.cell_type !== 'code') return false;
+            if (!['code', 'test'].includes(props.cell.cell_type)) return false;
             if (!props.cell.outputs) return false;
             return props.cell.outputs.some(out => out.output_type === 'error');
         });
@@ -91,6 +92,57 @@ export default {
                     @save="$emit('save-code', $event)"
                     @activate="$emit('activate')" />
                 
+                <div v-if="outputVisible && cell.outputs?.length" class="p-2 border-top has-background-white">
+                    <output-renderer v-for="(out, oIdx) in cell.outputs" :key="oIdx" :output="out" />
+                </div>
+            </div>
+
+            <div v-else-if="cell.cell_type === 'test'">
+                <div class="has-background-warning-light p-0 border-bottom">
+                <explanation-editor
+                        v-model:source="cell.metadata.explanation"
+                        :hasCode="(cell.source || '').trim().length > 0"
+                        :isActive="isActive"
+                        :isLocked="isLocked"
+                        :asRead="asRead"
+                        :codeValid="testCodeValid"
+                        :outputValid="testCodeValid"
+                        :executed="false"
+                        :hasError="hasError"
+                        :outputVisible="outputVisible"
+                        :start-edit-key="explanationEditKey"
+                        cellMode="test"
+                        @save="$emit('save-explanation', $event)"
+                        @toggle-output="outputVisible = !outputVisible"
+                        @gencode="$emit('generate-test-code')"
+                        @clearcode="$emit('clear-code')"
+                        @validate="$emit('validate-code')"
+                        @run="$emit('run-test')"
+                        @saveandrun="$emit('save-and-run-test', $event)"
+                        @open-test-help="$emit('open-test-help')"
+                        @delete="$emit('delete')"
+                        @moveUp="$emit('move-up')"
+                        @moveDown="$emit('move-down')" />
+                </div>
+
+                <validation-cell
+                    v-if="cell.metadata?.validation && !cell.metadata?.validation.is_hidden"
+                    :validation="cell.metadata.validation"
+                    @dismiss_validation="$emit('dismiss-validation')" />
+
+                <code-cell
+                    v-model:source="cell.source"
+                    :execution-count="cell.execution_count"
+                    :is-active="isActive"
+                    :is-locked="isLocked"
+                    :codeValid="testCodeValid"
+                    :outputValid="testCodeValid"
+                    :executed="false"
+                    :hasError="hasError"
+                    :asRead="asRead"
+                    @save="$emit('save-code', $event)"
+                    @activate="$emit('activate')" />
+
                 <div v-if="outputVisible && cell.outputs?.length" class="p-2 border-top has-background-white">
                     <output-renderer v-for="(out, oIdx) in cell.outputs" :key="oIdx" :output="out" />
                 </div>

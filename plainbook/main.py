@@ -4,7 +4,7 @@ import asyncio
 import datetime
 from functools import wraps
 import json
-from nbclient.exceptions import CellExecutionError
+from .plainbook import CellExecutionError
 import os
 from pathlib import Path
 import secrets
@@ -19,7 +19,7 @@ from bottle import run, default_app, request, TEMPLATE_PATH
 # print(f"DEBUGGER PYTHON: {sys.executable}")
 
 # Plainbook imports
-from .plainbook_base import ExecutionError
+from .plainbook import ExecutionError
 from .claude import get_claude_models
 from .gemini import get_gemini_models
 
@@ -140,8 +140,6 @@ parser.add_argument('--debug', action='store_true', default=False,
                     help='Enable debug mode')
 parser.add_argument('--port', type=int, default=8080,
                     help='Port to run the server on')
-parser.add_argument('--kernel', choices=['jupyter', 'snapshot'], default='snapshot',
-                    help='Kernel backend to use (jupyter or snapshot)')
 args = parser.parse_args()
 
 def _get_or_create_debug_token():
@@ -168,12 +166,8 @@ AUTH_TOKEN = _get_or_create_debug_token() if args.debug else secrets.token_hex(3
                     
 notebook_path = os.path.abspath(args.notebook)
 
-if args.kernel == 'snapshot':
-    from .plainbook_snapshot_kernel import Plainbook_SnapshotKernel
-    notebook = Plainbook_SnapshotKernel(notebook_path, debug=args.debug)
-else:
-    from .plainbook_jupyter import PlainbookJupyter
-    notebook = PlainbookJupyter(notebook_path, debug=args.debug)
+from .plainbook import Plainbook
+notebook = Plainbook(notebook_path, debug=args.debug)
 assert notebook.kc is not None
 assert notebook.km.is_alive()
                     
@@ -432,6 +426,46 @@ def generate_code_cell():
     else:
         # The request was cancelled, we need to avoid updating the code.
         return dict(status='cancelled', code=None)
+
+
+@post('/generate_test_code')
+@stateful
+@require_token
+def generate_test_code():
+    data = request.json
+    cell_index = data.get('cell_index')
+    validation_feedback = data.get('validation_feedback')
+    api_key, ai_provider, model, error = _get_ai_config()
+    if error:
+        return dict(status='error', message=error)
+    try:
+        new_code, success = notebook.generate_test_code(
+            api_key, cell_index, ai_provider=ai_provider,
+            model=model, validation_feedback=validation_feedback)
+    except Exception as e:
+        friendly = _check_billing_error(e)
+        if friendly:
+            return dict(status='error', message=friendly)
+        raise
+    if success:
+        return dict(status='success', code=new_code)
+    else:
+        return dict(status='cancelled', code=None)
+
+
+@post('/execute_test_cell')
+@stateful
+@require_token
+def execute_test_cell():
+    data = request.json
+    cell_index = data.get('cell_index')
+    try:
+        outputs = notebook.execute_test_cell(cell_index)
+        return dict(status='ok', outputs=outputs)
+    except NotImplementedError as e:
+        return dict(status='error', message=str(e))
+    except Exception as e:
+        return dict(status='error', message=str(e))
 
 
 @post('/validate_code')

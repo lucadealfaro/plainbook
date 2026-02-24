@@ -19,10 +19,11 @@ The code is divided into server code, and client code.
 ### Server Code
 
 The server code is written in Python, on top of the bottle.py web server. 
-The main files are as follows: 
-* main.py : web interface. 
-* plainbook_ipython.py : contains a class representing a plainbook, with methods for saving cell content, executing cells, and so on. 
-* gemini.py : interface to Gemini LLM for code generation and verification. 
+The main files are as follows:
+* main.py : web interface.
+* plainbook.py : contains the `Plainbook` class, with methods for saving cell content, executing cells, and so on. It uses the snapshot kernel (https://github.com/lucadealfaro/snapshot-kernel) for code execution.
+* gemini.py : interface to Gemini LLM for code generation and verification.
+* claude.py : interface to Claude LLM for code generation and verification.
 
 ### Client Code
 
@@ -44,10 +45,6 @@ Essentially, the css/main.css file is generated from css/main.scss using:
 
     npm run build
 
-## Future work
+## Architecture note
 
- In plainbook/plainbook_jupyter.py , there is an implementation of plainbook based on the Jupyter Python kernel.  It works.  The only problem is that the Jupyter kernel is not a snapshotting kernel -- that is, it does not keep a snapshot of a state after executing a cell.  So I would like to develop an analogous class, in a separate file, that uses a snapshotting kernel.  The class is called Plainbook_SnapshotKernel, and the file is plainbook_snapshot_kernel.py .  The idea is this.
-Once you use a snapshotting kernel, you can associate with each cell the name of the state snapshot created by executing that cell in order.  So if you need to re-execute a cell, you don't need to start from the beginning; you can just start from the snapshot just before the cell.
-You can find the snapshot-based kernel SnapshotKernel at https://github.com/lucadealfaro/snapshot-kernel .
-Note that communication with the snapshot kernel is different than with the normal Jupyter kernel.  One needs to start the bottle-based web server of the snapshotting kernel at a port of our choice (not 8080 or something close to what we use for this application; choose ports in a different range), and one needs to communicate with it via HTTP API.
-I recommend using the requests library, rather than basic urllib, in order to do requests to the API.
+The project uses a single `Plainbook` class in `plainbook/plainbook.py`, backed by the snapshot kernel (https://github.com/lucadealfaro/snapshot-kernel). The snapshot kernel runs as a subprocess and is communicated with via HTTP API. Each cell execution creates a named snapshot, enabling efficient re-execution from any point without restarting from the beginning.

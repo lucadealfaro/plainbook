@@ -2,10 +2,11 @@ import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from './vu
 
 const ExplanationRenderer = {
     props: ['source', 'isActive', 'codeValid', 'outputValid', 'executed', 'hasError',
-            'asRead', 'startEditKey', 'isLocked', 'hasCode', 'outputVisible'],
+            'asRead', 'startEditKey', 'isLocked', 'hasCode', 'outputVisible', 'cellMode'],
     emits: ['update:source', 'save', 'saveandrun', 'gencode', 'clearcode', 'validate',
-            'run', 'delete', 'moveUp', 'moveDown', 'toggle-output'],
-    setup(props, { emit }) {    
+            'run', 'delete', 'moveUp', 'moveDown', 'toggle-output', 'open-test-help'],
+    setup(props, { emit }) {
+        const isTestCell = computed(() => props.cellMode === 'test');
         const isEditing = ref(false);
         const localSource = ref((Array.isArray(props.source) ? props.source.join('') : props.source) || '');
         const originalSource = ref(localSource.value);
@@ -105,8 +106,17 @@ const ExplanationRenderer = {
             isEditing.value = false;
         };
 
+        const clearLabel = computed(() => isTestCell.value ? 'Clear test' : 'Clear code');
+        const generateLabel = computed(() => {
+            if (props.hasError) return isTestCell.value ? 'Fix Test' : 'Fix Code';
+            if (props.hasCode) return isTestCell.value ? 'Regenerate test' : 'Regenerate code';
+            return isTestCell.value ? 'Generate test' : 'Generate code';
+        });
+        const validateLabel = computed(() => isTestCell.value ? 'Validate test' : 'Validate code');
+
         return { isEditing, localSource, rendered, enterEditMode, saveChanges,
-            cancelEdit, textareaEl, autoResize, saveAndRun, onBlur, localIsLocked };
+            cancelEdit, textareaEl, autoResize, saveAndRun, onBlur, localIsLocked,
+            isTestCell, clearLabel, generateLabel, validateLabel };
     },
 
     template: /* html */ `
@@ -120,7 +130,8 @@ const ExplanationRenderer = {
                 class="explanation-toolbar has-background-grey-lighter pl-3 pr-3"
                 style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem">
             <div class="toolbar-left">
-                <button class="button run-button is-small is-primary mr-1" 
+                <button class="button run-button is-small mr-1"
+                        :class="isTestCell ? 'is-warning' : 'is-primary'"
                         title="Run this cell and all necessary preceding cells" @click.stop="$emit('run')">
                     <span class="icon"><i class="bx bx-play"></i></span><span>Run</span>
                 </button>
@@ -138,40 +149,41 @@ const ExplanationRenderer = {
                 </button>
             </div>
             <div class="toolbar-right" style="display: flex; flex-wrap: wrap; gap: 0.25rem;">
-                <button class="button is-small is-info" title="Edit action description" 
+                <button class="button is-small is-info" title="Edit action description"
                         :disabled="localIsLocked" @click.stop="enterEditMode">
                     <span class="icon"><i class="bx bx-pencil"></i></span><span>Edit</span>
                 </button>
-                <button class="button is-small is-info py-1 " 
+                <button class="button is-small is-info py-1 "
                         :disabled="localIsLocked"
                         title="Move cell up" aria-label="Move Up" @click.stop="$emit('moveUp')">
                     <span class="icon"><i class="bx bx-arrow-up"></i></span>
                 </button>
-                <button class="button is-small is-info py-1 " 
+                <button class="button is-small is-info py-1 "
                         :disabled="localIsLocked"
                         title="Move cell down" aria-label="Move Down" @click.stop="$emit('moveDown')">
                     <span class="icon"><i class="bx bx-arrow-down"></i></span>
                 </button>
                 <button class="button is-small"
                         :class="hasError ? 'is-warning' : 'is-success'"
-                        title="Clear code"
+                        :title="clearLabel"
                         :disabled="localIsLocked || !hasCode" @click.stop="$emit('clearcode')">
                     <span class="icon"><i class="bx bx-eraser"></i></span>
-                    <span>Clear code</span>
+                    <span>{{ clearLabel }}</span>
                 </button>
                 <button class="button is-small"
                         :class="hasError ? 'is-warning' : 'is-success'"
                         title="Generate code from description"
                         :disabled="localIsLocked" @click.stop="$emit('gencode')">
                     <span class="icon"><i class="bx bx-cognition"></i></span>
-                    <span v-if="hasError">Fix Code</span>
-                    <span v-else-if="hasCode">Regenerate code</span>
-                    <span v-else>Generate code</span>
+                    <span>{{ generateLabel }}</span>
                 </button>
                 <button :disabled="!codeValid" class="button is-small is-success" title="Validate code against description" @click.stop="$emit('validate')">
-                    <span class="icon"><i class="bx bx-check"></i></span> <span>Validate code</span>
+                    <span class="icon"><i class="bx bx-check"></i></span> <span>{{ validateLabel }}</span>
                 </button>
-                <button class="button is-small is-danger py-1 " title="Delete cell" aria-label="Delete" 
+                <button v-if="isTestCell" class="button is-small" title="Test Help" @click.stop="$emit('open-test-help')">
+                    <span class="icon"><i class="bx bx-info-circle"></i></span>
+                </button>
+                <button class="button is-small is-danger py-1 " title="Delete cell" aria-label="Delete"
                         :disabled="localIsLocked" @click.stop="$emit('delete')">
                     <span class="icon"><i class="bx bx-trash"></i></span>
                 </button>
@@ -197,8 +209,8 @@ const ExplanationRenderer = {
                 <button class="button is-small is-info" :disabled="localIsLocked" @mousedown.prevent @click="saveChanges">
                     Save
                 </button>
-                <button class="button is-small is-primary" :disabled="localIsLocked" @mousedown.prevent @click="saveAndRun">
-                    <span class="icon"><i class="bx bx-play"></i></span> 
+                <button class="button is-small" :class="isTestCell ? 'is-warning' : 'is-primary'" :disabled="localIsLocked" @mousedown.prevent @click="saveAndRun">
+                    <span class="icon"><i class="bx bx-play"></i></span>
                     <span>Save and Run</span>
                 </button>
             </div>

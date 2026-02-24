@@ -1,13 +1,19 @@
-import abc
 import atexit
 import copy
 import datetime
 import json
 import os
 import re
+import secrets
+import socket
+import subprocess
+import sys
 import threading
+import time
+import uuid
 
 import nbformat
+import requests
 
 from .gemini import gemini_generate_code, gemini_validate_code, gemini_generate_cell_name
 from .claude import claude_generate_code, claude_validate_code, claude_generate_cell_name
@@ -21,6 +27,14 @@ AI_PROVIDERS = {
 class ExecutionError(Exception):
     """Custom exception for execution errors in Plainbook."""
     pass
+
+class CellExecutionError(Exception):
+    """Raised when a cell execution produces a runtime error."""
+    def __init__(self, traceback="", ename="", evalue=""):
+        self.traceback = traceback
+        self.ename = ename
+        self.evalue = evalue
+        super().__init__(f"{ename}: {evalue}")
 
 def getlist(value):
     """Utility to ensure a value is a list."""
@@ -92,9 +106,8 @@ This is the previous code for the cell; it might need revision as some of the pr
 """
 
 
-class PlainbookAbstract(abc.ABC):
-    """Abstract base class for Plainbook implementations.
-    Subclasses must implement the kernel-specific methods."""
+class Plainbook:
+    """Plainbook implementation backed by the snapshot kernel."""
 
     def __init__(self, notebook_path, debug=False):
         print(f"Initializing Plainbook for {notebook_path}...")
@@ -107,48 +120,254 @@ class PlainbookAbstract(abc.ABC):
         self.last_executed_cell = -1
         self.last_valid_code_cell = -1
         self.last_valid_output_cell = -1
+        self.last_valid_test_cell = -1
         # Loads the notebook from disk.
         self._load_notebook()
         self._filter_input_files()
         # AI request tracker, so we can interrupt if needed.
         self.ai_request_pending = False
-
-    def _finalize_init(self):
-        """Called by subclasses after their kernel is ready."""
+        # Start the snapshot kernel.
+        self._sk_token = secrets.token_hex(16)
+        self._sk_port = self._find_free_port(start=9100)
+        self._sk_base_url = f"http://127.0.0.1:{self._sk_port}"
+        self._current_exec_id = None
+        self._cell_states = {}
+        self._sk_process = subprocess.Popen(
+            [sys.executable, "-m", "snapshot_kernel.main",
+             "--bind", f"127.0.0.1:{self._sk_port}",
+             "--token", self._sk_token],
+            stdout=None if debug else subprocess.PIPE,
+            stderr=None if debug else subprocess.PIPE,
+        )
+        self._wait_for_server()
         self.default_variables = self._get_variables()
         atexit.register(self._shutdown)
 
-    # Abstract methods that subclasses must implement
+    # Compatibility properties for main.py assertions
 
-    @abc.abstractmethod
+    @property
+    def kc(self):
+        return self
+
+    @property
+    def km(self):
+        return self
+
+    def is_alive(self):
+        return self._sk_process is not None and self._sk_process.poll() is None
+
+    # Snapshot kernel HTTP helpers
+
+    def _sk_request(self, method, path, json_body=None):
+        """Send a request to the snapshot kernel server."""
+        url = f"{self._sk_base_url}{path}"
+        params = {"token": self._sk_token}
+        resp = requests.request(method, url, params=params, json=json_body, timeout=300)
+        resp.raise_for_status()
+        return resp.json()
+
+    def _find_free_port(self, start=9100):
+        """Scan for a free port starting from start."""
+        port = start
+        while True:
+            with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                try:
+                    s.bind(('127.0.0.1', port))
+                    return port
+                except OSError:
+                    port += 1
+
+    def _wait_for_server(self, timeout=10):
+        """Poll GET /states until the snapshot kernel server is ready."""
+        deadline = time.time() + timeout
+        while time.time() < deadline:
+            try:
+                self._sk_request("GET", "/states")
+                if self.debug:
+                    print(f"Snapshot kernel server ready on port {self._sk_port}")
+                return
+            except Exception:
+                time.sleep(0.2)
+        raise RuntimeError(
+            f"Snapshot kernel server failed to start within {timeout}s on port {self._sk_port}"
+        )
+
+    def _find_input_state(self, index):
+        """Walk backwards to find the snapshot state name to execute cell `index` against.
+        Returns 'initial' if no previous code cell has been executed."""
+        for i in range(index - 1, -1, -1):
+            cell = self.nb.cells[i]
+            if cell.cell_type == 'code' and i <= self.last_executed_cell:
+                state = self._cell_states.get(cell.id)
+                if state:
+                    return state
+        return "initial"
+
+    # Kernel methods
+
     def execute_cell(self, index):
-        """Executes a code cell by index and returns (outputs, details)."""
-        ...
+        """Executes a code cell by index against the appropriate snapshot."""
+        with self._lock:
+            if index < 0 or index >= len(self.nb.cells):
+                raise ExecutionError("Cell index out of range")
+            if index > self.last_valid_code_cell:
+                raise ExecutionError("Executed a cell that is not valid")
+            cell = self.nb.cells[index]
+            if cell.cell_type != 'code':
+                return None, "Not a code cell"
+            if index <= min(self.last_executed_cell, self.last_valid_output_cell):
+                return cell.outputs, "Cached"
+            # Checks that all intervening cells between last_executed_cell and index are non-code.
+            for i in range(self.last_executed_cell + 1, index):
+                if self.nb.cells[i].cell_type == 'code':
+                    raise ExecutionError("Cannot execute cell out of order")
 
-    @abc.abstractmethod
-    def _reset_kernel(self):
-        """Resets the kernel to a clean state."""
-        ...
+            input_state = self._find_input_state(index)
+            cell_id = cell.id
+            if cell_id in self._cell_states:
+                new_state_name = self._cell_states[cell_id]
+            else:
+                new_state_name = uuid.uuid4().hex
+                existing_names = set(self._cell_states.values())
+                while new_state_name in existing_names:
+                    new_state_name = uuid.uuid4().hex
+                self._cell_states[cell_id] = new_state_name
+            exec_id = uuid.uuid4().hex
+            self._current_exec_id = exec_id
 
-    @abc.abstractmethod
-    def _invalidate_execution(self, index):
-        """Invalidates execution from the given cell index onward."""
-        ...
+            try:
+                result = self._sk_request("POST", "/execute", {
+                    "code": cell.source,
+                    "exec_id": exec_id,
+                    "state_name": input_state,
+                    "new_state_name": new_state_name,
+                })
+            finally:
+                self._current_exec_id = None
 
-    @abc.abstractmethod
-    def interrupt_kernel(self):
-        """Interrupts the currently running execution."""
-        ...
+            # Convert outputs to nbformat objects
+            outputs = []
+            for out in result.get("output", []):
+                outputs.append(nbformat.from_dict(out))
+            cell.outputs = outputs
 
-    @abc.abstractmethod
+            if result.get("error"):
+                err = result["error"]
+                # Build an error output matching Jupyter format
+                error_output = nbformat.from_dict({
+                    "output_type": "error",
+                    "ename": err.get("ename", "Error"),
+                    "evalue": err.get("evalue", ""),
+                    "traceback": err.get("traceback", []),
+                })
+                # Only append if not already in outputs
+                if not any(o.get("output_type") == "error" for o in cell.outputs):
+                    cell.outputs.append(error_output)
+                self._write()
+                raise CellExecutionError(
+                    traceback="\n".join(err.get("traceback", [])),
+                    ename=err.get("ename", "Error"),
+                    evalue=err.get("evalue", ""),
+                )
+
+            # Success: update execution pointer
+            self.last_executed_cell = index
+            self.last_valid_output_cell = max(index, self.last_valid_output_cell)
+            # Get variables for AI context
+            cell.metadata['variables'] = self._get_variables()
+            self._write()
+            return cell.outputs, 'ok'
+
     def _get_variables(self):
-        """Returns a dictionary of variables and their information in the kernel."""
-        ...
+        """Execute the variable inspection code against the last executed state."""
+        # Find the most recent valid state
+        state_name = None
+        for i in range(len(self.nb.cells) - 1, -1, -1):
+            cell = self.nb.cells[i]
+            if cell.cell_type == 'code' and i <= self.last_executed_cell:
+                state_name = self._cell_states.get(cell.id)
+                if state_name:
+                    break
+        if not state_name:
+            return {}
 
-    @abc.abstractmethod
+        temp_state = uuid.uuid4().hex
+        try:
+            result = self._sk_request("POST", "/execute", {
+                "code": VARIABLE_INSPECTION_CODE,
+                "exec_id": uuid.uuid4().hex,
+                "state_name": state_name,
+                "new_state_name": temp_state,
+            })
+            # Parse stdout from the output
+            result_json = ""
+            for out in result.get("output", []):
+                if out.get("output_type") == "stream" and out.get("name") == "stdout":
+                    result_json += out.get("text", "")
+            # Clean up temp state
+            try:
+                self._sk_request("DELETE", f"/states/{temp_state}")
+            except Exception:
+                pass
+            return json.loads(result_json)
+        except (json.JSONDecodeError, TypeError, Exception):
+            # Clean up temp state on error
+            try:
+                self._sk_request("DELETE", f"/states/{temp_state}")
+            except Exception:
+                pass
+            return {}
+
+    def _reset_kernel(self):
+        """Reset the snapshot kernel: clear all states, reset pointers."""
+        self._sk_request("POST", "/reset")
+        self.last_executed_cell = -1
+        self._cell_states.clear()
+        if self.debug:
+            print("Snapshot kernel reset complete.")
+
+    def _invalidate_execution(self, index):
+        """Delete snapshot states from cell index onward. Preserves earlier snapshots."""
+        self._invalidate_from(index)
+
+    def _invalidate_from(self, index):
+        """Delete snapshot states from cell index onward.
+        Dict entries are kept so state names can be reused on re-execution."""
+        for i in range(index, len(self.nb.cells)):
+            cell = self.nb.cells[i]
+            state_name = self._cell_states.get(cell.id)
+            if state_name:
+                try:
+                    self._sk_request("DELETE", f"/states/{state_name}")
+                except Exception:
+                    pass
+                # Keep dict entry — name will be reused on re-execution
+        self.last_executed_cell = min(self.last_executed_cell, index - 1)
+
+    def interrupt_kernel(self):
+        """Interrupt the currently running execution."""
+        exec_id = self._current_exec_id
+        if exec_id:
+            if self.debug:
+                print(f"Interrupting execution {exec_id}...")
+            try:
+                self._sk_request("POST", "/interrupt", {"exec_id": exec_id})
+            except Exception as e:
+                if self.debug:
+                    print(f"Error interrupting: {e}")
+
     def _shutdown(self):
-        """Cleanly shuts down the kernel."""
-        ...
+        """Terminate the snapshot kernel subprocess."""
+        print(f"Shutting down snapshot kernel for {self.name}...")
+        if hasattr(self, '_sk_process') and self._sk_process:
+            try:
+                self._sk_process.terminate()
+                self._sk_process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self._sk_process.kill()
+                self._sk_process.wait()
+            except Exception as e:
+                print(f"Error shutting down snapshot kernel: {e}")
 
     # Notebook I/O
 
@@ -159,7 +378,7 @@ class PlainbookAbstract(abc.ABC):
                 self.nb = nbformat.read(f, as_version=4)
                 for cell in self.nb.cells:
                     cell.source = tostring(cell.source)
-                    if cell.cell_type == 'code':
+                    if cell.cell_type in ('code', 'test'):
                         if 'explanation' not in cell.metadata:
                             cell.metadata['explanation'] = cell.source
                             cell.metadata['explanation_timestamp'] = datetime.datetime.now().isoformat()
@@ -181,9 +400,10 @@ class PlainbookAbstract(abc.ABC):
             self.nb.metadata['is_locked'] = False
             with open(self.path, "w") as f:
                 nbformat.write(self.nb, f)
-        self.last_executed_cell = -1 # When we load, we need to re-execute from the start. 
+        self.last_executed_cell = -1 # When we load, we need to re-execute from the start.
         self.last_valid_code_cell = self.nb.metadata.get('last_valid_code_cell', -1)
         self.last_valid_output_cell = self.nb.metadata.get('last_valid_output', -1)
+        self.last_valid_test_cell = self.nb.metadata.get('last_valid_test_cell', -1)
 
     def _filter_input_files(self):
         """Filters the input files from notebook metadata."""
@@ -203,6 +423,7 @@ class PlainbookAbstract(abc.ABC):
     def _write(self):
         self.nb.metadata['last_valid_code_cell'] = self.last_valid_code_cell
         self.nb.metadata['last_valid_output'] = self.last_valid_output_cell
+        self.nb.metadata['last_valid_test_cell'] = self.last_valid_test_cell
         with open(self.path, "w") as f:
             nbformat.write(self.nb, f)
 
@@ -225,6 +446,7 @@ class PlainbookAbstract(abc.ABC):
             'last_executed_cell': self.last_executed_cell,
             'last_valid_code_cell': self.last_valid_code_cell,
             'last_valid_output_cell': self.last_valid_output_cell,
+            'last_valid_test_cell': self.last_valid_test_cell,
             'is_locked': self.nb.metadata.get('is_locked', False),
         }
         if self.debug:
@@ -261,12 +483,17 @@ class PlainbookAbstract(abc.ABC):
 
 
     def insert_cell(self, index, cell_type):
-        """Insert a new cell at index with given type ('markdown' or 'code'). Returns the cell json."""
+        """Insert a new cell at index with given type ('markdown', 'code', or 'test'). Returns the cell json."""
         with self._lock:
-            assert cell_type in ('markdown', 'code')
+            assert cell_type in ('markdown', 'code', 'test')
             assert 0 <= index <= len(self.nb.cells)
             if cell_type == 'markdown':
                 new_cell = nbformat.v4.new_markdown_cell(source="")
+            elif cell_type == 'test':
+                new_cell = nbformat.v4.new_code_cell(source="", execution_count=None, outputs=[])
+                new_cell.cell_type = 'test'
+                new_cell.metadata['explanation'] = []
+                new_cell.metadata['explanation_timestamp'] = datetime.datetime.now().isoformat()
             else:
                 new_cell = nbformat.v4.new_code_cell(source="", execution_count=None, outputs=[])
                 new_cell.metadata['explanation'] = []
@@ -278,6 +505,9 @@ class PlainbookAbstract(abc.ABC):
                     self._invalidate_execution(index)
                 self.last_valid_code_cell = min(self.last_valid_code_cell, index - 1)
                 self.last_valid_output_cell = min(self.last_valid_output_cell, index - 1)
+                self.last_valid_test_cell = min(self.last_valid_test_cell, index - 1)
+            elif cell_type == 'test':
+                self.last_valid_test_cell = min(self.last_valid_test_cell, index - 1)
             self._write()
             return new_cell, index
 
@@ -293,16 +523,28 @@ class PlainbookAbstract(abc.ABC):
                 if cell.cell_type == 'code':
                     self._invalidate_execution(index)
                 else:
+                    # Test and markdown cells are not in the main execution chain
                     self.last_executed_cell -= 1
-            # Update validation pointer: cap if code cell, shift if markdown cell
+            # Update validation pointers
             if cell.cell_type == 'code':
                 self.last_valid_code_cell = min(self.last_valid_code_cell, index - 1)
                 self.last_valid_output_cell = min(self.last_valid_output_cell, index - 1)
-            else:
+                self.last_valid_test_cell = min(self.last_valid_test_cell, index - 1)
+            elif cell.cell_type == 'test':
+                self.last_valid_test_cell = min(self.last_valid_test_cell, index - 1)
+                # Shift code/output pointers since test cells are not in the main chain
                 if index <= self.last_valid_code_cell:
                     self.last_valid_code_cell -= 1
                 if index <= self.last_valid_output_cell:
                     self.last_valid_output_cell -= 1
+            else:
+                # Markdown cell: shift all pointers
+                if index <= self.last_valid_code_cell:
+                    self.last_valid_code_cell -= 1
+                if index <= self.last_valid_output_cell:
+                    self.last_valid_output_cell -= 1
+                if index <= self.last_valid_test_cell:
+                    self.last_valid_test_cell -= 1
             # Finally, delete the cell
             del self.nb.cells[index]
             self._write()
@@ -322,6 +564,23 @@ class PlainbookAbstract(abc.ABC):
                     self._invalidate_execution(affected_idx)
                 self.last_valid_code_cell = min(self.last_valid_code_cell, affected_idx - 1)
                 self.last_valid_output_cell = min(self.last_valid_output_cell, affected_idx - 1)
+                self.last_valid_test_cell = min(self.last_valid_test_cell, affected_idx - 1)
+            elif cell.cell_type == 'test':
+                # Test cells are not in the main execution chain; shift code/output/executed pointers
+                if self.last_executed_cell >= index:
+                    self.last_executed_cell -= 1
+                if self.last_executed_cell >= new_index:
+                    self.last_executed_cell += 1
+                if self.last_valid_code_cell >= index:
+                    self.last_valid_code_cell -= 1
+                if self.last_valid_code_cell >= new_index:
+                    self.last_valid_code_cell += 1
+                if self.last_valid_output_cell >= index:
+                    self.last_valid_output_cell -= 1
+                if self.last_valid_output_cell >= new_index:
+                    self.last_valid_output_cell += 1
+                # Cap test validity at the affected range
+                self.last_valid_test_cell = min(self.last_valid_test_cell, min(index, new_index) - 1)
             else:
                 # Adjust pointers for markdown cell movement
                 if self.last_executed_cell >= index:
@@ -338,6 +597,11 @@ class PlainbookAbstract(abc.ABC):
                     self.last_valid_output_cell -= 1
                 if self.last_valid_output_cell >= new_index:
                     self.last_valid_output_cell += 1
+                # Shift test pointer for markdown movement
+                if self.last_valid_test_cell >= index:
+                    self.last_valid_test_cell -= 1
+                if self.last_valid_test_cell >= new_index:
+                    self.last_valid_test_cell += 1
             self._write()
 
     # Cell editing methods
@@ -349,7 +613,11 @@ class PlainbookAbstract(abc.ABC):
             cell = self.nb.cells[index]
             cell.source = source
             cell.metadata['code_timestamp'] = datetime.datetime.now().isoformat()
-            if cell.cell_type == 'code':
+            if cell.cell_type == 'test':
+                cell.outputs = []
+                # The user has updated the test code; assume this cell valid, following invalid.
+                self.last_valid_test_cell = min(self.last_valid_test_cell, index)
+            elif cell.cell_type == 'code':
                 # Reset outputs and execution count on code cell edit
                 cell.outputs = []
                 if index <= self.last_executed_cell:
@@ -360,34 +628,43 @@ class PlainbookAbstract(abc.ABC):
                 self.last_valid_code_cell = min(self.last_valid_code_cell, index)
                 # The output is now stale.
                 self.last_valid_output_cell = min(self.last_valid_output_cell, index - 1)
+                self.last_valid_test_cell = min(self.last_valid_test_cell, index - 1)
             self._write()
 
 
     def clear_cell_code(self, index):
-        """Clears the source code of a code cell and marks its code as invalid."""
+        """Clears the source code of a code or test cell and marks its code as invalid."""
         with self._lock:
             assert 0 <= index < len(self.nb.cells)
             cell = self.nb.cells[index]
-            assert cell.cell_type == 'code'
+            assert cell.cell_type in ('code', 'test')
             cell.source = ''
             cell.outputs = []
-            if index <= self.last_executed_cell:
-                self._invalidate_execution(index)
-            self.last_valid_code_cell = min(self.last_valid_code_cell, index - 1)
-            self.last_valid_output_cell = min(self.last_valid_output_cell, index - 1)
+            if cell.cell_type == 'test':
+                self.last_valid_test_cell = min(self.last_valid_test_cell, index - 1)
+            else:
+                if index <= self.last_executed_cell:
+                    self._invalidate_execution(index)
+                self.last_valid_code_cell = min(self.last_valid_code_cell, index - 1)
+                self.last_valid_output_cell = min(self.last_valid_output_cell, index - 1)
+                self.last_valid_test_cell = min(self.last_valid_test_cell, index - 1)
             self._write()
 
     def set_cell_explanation(self, index, explanation):
-        """Sets the explanation of a code cell at the given index."""
+        """Sets the explanation of a code or test cell at the given index."""
         with self._lock:
             assert 0 <= index < len(self.nb.cells)
             cell = self.nb.cells[index]
-            assert cell.cell_type == 'code'
+            assert cell.cell_type in ('code', 'test')
             cell.metadata['explanation'] = explanation
             cell.metadata['explanation_timestamp'] = datetime.datetime.now().isoformat()
-            # The cell code is now considered stale.
-            self.last_valid_code_cell = min(self.last_valid_code_cell, index - 1)
-            self.last_valid_output_cell = min(self.last_valid_output_cell, index - 1)
+            if cell.cell_type == 'test':
+                self.last_valid_test_cell = min(self.last_valid_test_cell, index - 1)
+            else:
+                # The cell code is now considered stale.
+                self.last_valid_code_cell = min(self.last_valid_code_cell, index - 1)
+                self.last_valid_output_cell = min(self.last_valid_output_cell, index - 1)
+                self.last_valid_test_cell = min(self.last_valid_test_cell, index - 1)
             self._write()
 
 
@@ -397,7 +674,9 @@ class PlainbookAbstract(abc.ABC):
         """Returns the content of a cell for AI processing.
         Needs to be called with the lock held."""
         cell = self.nb.cells[index]
-        if cell.cell_type == 'code':
+        if cell.cell_type == 'test':
+            return "\n"
+        elif cell.cell_type == 'code':
             explanation = cell.metadata.get('explanation', "")
             explanation = ["# " + line for line in explanation.splitlines(keepends=True)]
             explanation_text = "".join(explanation) + "\n"
@@ -466,13 +745,15 @@ class PlainbookAbstract(abc.ABC):
 
     def _get_preceding_code_for_ai(self, index):
         """Returns the concatenated source code of all previous code cells for context."""
-        previous_code = [self._get_cell_for_ai(i) for i in range(index)]
+        previous_code = [self._get_cell_for_ai(i) for i in range(index)
+                         if self.nb.cells[i].cell_type != 'test']
         return "\n".join(previous_code)
 
 
     def _get_preceding_code_json_for_ai(self, index):
         """Returns the JSON representation of all previous code cells for context."""
-        cells = [self._get_cell_json_for_ai(i) for i in range(index)]
+        cells = [self._get_cell_json_for_ai(i) for i in range(index)
+                 if self.nb.cells[i].cell_type != 'test']
         nb = nbformat.v4.new_notebook()
         nb.cells = cells
         nb_json = nbformat.writes(nb, indent=4)
@@ -551,6 +832,20 @@ class PlainbookAbstract(abc.ABC):
                 self.ai_request_pending = False
 
 
+    def generate_test_code(self, api_key, index, ai_provider="gemini", model=None, validation_feedback=None):
+        """Generates test code for a test cell. Stub for now."""
+        with self._lock:
+            assert 0 <= index < len(self.nb.cells)
+            cell = self.nb.cells[index]
+            assert cell.cell_type == 'test'
+            self.last_valid_test_cell = index
+            self._write()
+            return cell.source, True
+
+    def execute_test_cell(self, index):
+        """Executes a test cell. Stub for now."""
+        raise NotImplementedError("Test execution not yet implemented")
+
     def cancel_ai_request(self):
         """Cancels any ongoing AI request by interrupting the kernel."""
         self.ai_request_pending = False
@@ -564,7 +859,7 @@ class PlainbookAbstract(abc.ABC):
             self.ai_request_pending = True
             assert 0 <= index < len(self.nb.cells)
             cell = self.nb.cells[index]
-            assert cell.cell_type == 'code'
+            assert cell.cell_type in ('code', 'test')
             code_to_validate = cell.source
             instructions = cell.metadata.get('explanation')
             previous_code = self._get_preceding_code_json_for_ai(index)
@@ -598,7 +893,7 @@ class PlainbookAbstract(abc.ABC):
         """Clears all cell outputs and resets the last valid output index."""
         with self._lock:
             for cell in self.nb.cells:
-                if cell.cell_type == 'code':
+                if cell.cell_type in ('code', 'test'):
                     cell.outputs = []
             self.last_valid_output_cell = -1
             self._write()
