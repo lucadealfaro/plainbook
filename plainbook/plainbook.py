@@ -884,8 +884,59 @@ class Plainbook:
                 self.ai_request_pending = False
 
     def execute_test_cell(self, index):
-        """Executes a test cell. Stub for now."""
-        raise NotImplementedError("Test execution not yet implemented")
+        """Executes a test cell using multistate_execute."""
+        with self._lock:
+            if index < 0 or index >= len(self.nb.cells):
+                raise ExecutionError("Cell index out of range")
+            cell = self.nb.cells[index]
+            if cell.cell_type != 'test':
+                return None
+
+            # Build state mapping from named code cells before this index
+            state_mapping = {}
+            for i in range(index):
+                c = self.nb.cells[i]
+                if c.cell_type == 'code':
+                    name = c.metadata.get('name')
+                    if name and c.id in self._cell_states:
+                        state_mapping[f"__state__{name}"] = self._cell_states[c.id]
+
+            exec_id = uuid.uuid4().hex
+            self._current_exec_id = exec_id
+            try:
+                result = self._sk_request("POST", "/multistate_execute", {
+                    "code": cell.source,
+                    "exec_id": exec_id,
+                    "state_mapping": state_mapping,
+                })
+            finally:
+                self._current_exec_id = None
+
+            # Convert outputs to nbformat objects
+            outputs = []
+            for out in result.get("output", []):
+                outputs.append(nbformat.from_dict(out))
+            cell.outputs = outputs
+
+            if result.get("error"):
+                err = result["error"]
+                error_output = nbformat.from_dict({
+                    "output_type": "error",
+                    "ename": err.get("ename", "Error"),
+                    "evalue": err.get("evalue", ""),
+                    "traceback": err.get("traceback", []),
+                })
+                if not any(o.get("output_type") == "error" for o in cell.outputs):
+                    cell.outputs.append(error_output)
+                self._write()
+                raise CellExecutionError(
+                    traceback="\n".join(err.get("traceback", [])),
+                    ename=err.get("ename", "Error"),
+                    evalue=err.get("evalue", ""),
+                )
+
+            self._write()
+            return cell.outputs
 
     def cancel_ai_request(self):
         """Cancels any ongoing AI request by interrupting the kernel."""
