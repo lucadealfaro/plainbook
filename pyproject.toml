@@ -21,7 +21,7 @@ dependencies = [
     "bottle",
     "cherrypy",
     "google-genai",
-    "snapshot-kernel>=0.1.3",
+    "snapshot-kernel>=0.1.4",
     "nbformat",
     "pyyaml",
     "requests",
@@ -40,4 +40,4 @@ where = ["."]
 include = ["plainbook*"]
 
 [tool.setuptools.package-data]
-plainbook = ["js/*.js", "css/*.css", "views/*.html", "fonts/*"]
+plainbook = ["js/*.js", "css/*.css", "views/*.html", "images/*", "fonts/*"]

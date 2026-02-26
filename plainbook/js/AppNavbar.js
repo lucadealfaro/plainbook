@@ -61,6 +61,11 @@ export default {
          role="navigation" aria-label="main navigation">
         <div class="buttons mb-0">
 
+                        <button class="button is-light" @click="$emit('open-info')" title="About Plainbook">
+                            <img src="/images/Plainbook_logo.png" alt="About Plainbook"
+                                 style="height: 1.5em;">
+                        </button>
+
                         <button v-if="isLocked" class="button is-warning" title="Unlock Notebook" @click="$emit('lock', false)">
                         <span class="icon"><i class="bx bx-lock"></i></span>
                         </button>
@@ -125,7 +130,7 @@ export default {
                             <span class="icon">
                                 <i class="bx bx-keyframe-ease-in"></i>
                             </span>
-                            <span>Run from the beginning</span>
+                            <span>Re-run</span>
                         </button>
 
                         <button v-if="!running && hasNotebook"

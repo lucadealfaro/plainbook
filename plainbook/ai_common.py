@@ -32,7 +32,9 @@ For example, if a code cell has metadata name "load_data" and defines a variable
 you access it in the test as: __state__load_data.df
 
 When the instructions mention "this cell" or "the current cell", they refer to
-the most recent code cell before this test cell.
+the most recent code cell before this test cell.  The variables in this cell
+can be accessed in the test using the same __state__<cell_name>.<variable_name> pattern, 
+or they can also be accessed directly as <variable_name> without the __state__ prefix.
 
 You are given the previous cells of the Jupyter notebook (in JSON format),
 along with their output (if any) and a description of available variables.

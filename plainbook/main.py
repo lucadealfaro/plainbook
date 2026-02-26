@@ -186,6 +186,10 @@ def server_static_css(filepath):
 def server_static_fonts(filepath):
     return static_file(filepath, root=os.path.join(APP_FOLDER, 'fonts'))
 
+@route('/images/<filepath:path>')
+def server_static_images(filepath):
+    return static_file(filepath, root=os.path.join(APP_FOLDER, 'images'))
+
 # Authentication decorator
 def require_token(func):
     @wraps(func)
