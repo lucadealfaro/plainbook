@@ -765,6 +765,7 @@ createApp({
         };
 
         const handleClickOutside = (event) => {
+            if (event.target.closest('.modal')) return;
             const container = document.querySelector('.notebook-container');
             const navbar = document.querySelector('.navbar');
             if (container && !container.contains(event.target) &&

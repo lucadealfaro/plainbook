@@ -137,7 +137,7 @@ const ExplanationRenderer = {
                     <span v-if="!isTestCell">Run</span>
                     <span v-else>Run test</span>
                 </button>
-                <button v-if="isTestCell" class="button is-small" title="Test Help" @click.stop="$emit('open-test-help')">
+                <button v-if="isTestCell" class="button is-small mr-1" title="Test Help" @click.stop="$emit('open-test-help')">
                     <span class="icon"><i class="bx bx-info-circle"></i></span>
                 </button>
                 <button class="button is-small" style="opacity: 0.6;"
@@ -178,7 +178,7 @@ const ExplanationRenderer = {
                 <button class="button is-small"
                         :class="hasError ? 'is-warning' : 'is-success'"
                         title="Generate code from description"
-                        :disabled="localIsLocked" @click.stop="$emit('gencode')">
+                        :disabled="localIsLocked || !localSource.trim()" @click.stop="$emit('gencode')">
                     <span class="icon"><i class="bx bx-cognition"></i></span>
                     <span>{{ generateLabel }}</span>
                 </button>
