@@ -137,6 +137,9 @@ const ExplanationRenderer = {
                     <span v-if="!isTestCell">Run</span>
                     <span v-else>Run test</span>
                 </button>
+                <button v-if="isTestCell" class="button is-small" title="Test Help" @click.stop="$emit('open-test-help')">
+                    <span class="icon"><i class="bx bx-info-circle"></i></span>
+                </button>
                 <button class="button is-small" style="opacity: 0.6;"
                     title="Toggle output visibility"
                     @click.stop="$emit('toggle-output')">
@@ -182,9 +185,6 @@ const ExplanationRenderer = {
                 <button :disabled="!codeValid" class="button is-small is-success" title="Validate code against description" @click.stop="$emit('validate')">
                     <span class="icon"><i class="bx bx-check"></i></span> <span>{{ validateLabel }}</span>
                 </button>
-                <button v-if="isTestCell" class="button is-small" title="Test Help" @click.stop="$emit('open-test-help')">
-                    <span class="icon"><i class="bx bx-info-circle"></i></span>
-                </button>
                 <button class="button is-small is-danger py-1 " title="Delete cell" aria-label="Delete"
                         :disabled="localIsLocked" @click.stop="$emit('delete')">
                     <span class="icon"><i class="bx bx-trash"></i></span>
@@ -196,7 +196,7 @@ const ExplanationRenderer = {
             <textarea 
                 ref="textareaEl"
                 v-model="localSource" 
-                placeholder="Explain what should be done in this cell..."
+                :placeholder="isTestCell ? 'Describe your test here...' : 'Explain what the cell should do...'"
                 class="textarea is-family-monospace mb-2" 
                 rows="1"
                 style="overflow: hidden; resize: none; height: 0;"
@@ -204,7 +204,13 @@ const ExplanationRenderer = {
                 @blur="onBlur"
                 @keydown.enter.shift.prevent="saveAndRun">
             </textarea>
-            <div style="display: flex; justify-content: flex-end; gap: 0.5rem;">
+            <div style="display: flex; justify-content: space-between; align-items: center;">
+                <div>
+                    <button v-if="isTestCell" class="button is-small" title="Test Help" @mousedown.prevent @click.stop="$emit('open-test-help')">
+                        <span class="icon"><i class="bx bx-info-circle"></i></span>
+                    </button>
+                </div>
+                <div style="display: flex; gap: 0.5rem;">
                 <button class="button is-small" @mousedown.prevent @click="cancelEdit">
                     Cancel
                 </button>
@@ -215,6 +221,7 @@ const ExplanationRenderer = {
                     <span class="icon"><i class="bx bx-play"></i></span>
                     <span>Save and Run</span>
                 </button>
+                </div>
             </div>
         </div>
     `
