@@ -198,9 +198,6 @@ export default {
                                 </div>
                             </div>
                         </div>
-                        <button class="button is-light" @click="$emit('open-info')" title="About Plainbook">
-                            <span class="icon"><i class="bx bx-info-circle"></i></span>
-                        </button>
                         <button class="button" :class="hasApiKey ? 'is-light' : 'is-warning'"
                                 @click="$emit('open-settings')" title="Settings">
                             <span class="icon"><i :class="hasApiKey ? 'bx bx-cog' : 'bx bx-alert-triangle'"></i></span>

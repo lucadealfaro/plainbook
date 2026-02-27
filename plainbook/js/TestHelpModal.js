@@ -22,20 +22,21 @@ export default {
                         </p><p>
                         Properties can also relate the plainbook states after different cells. 
                         To refer to cells, you can use their names, displayed on the top left of cells. 
-                        For instance, if a cell <em>load_data</em> loads a dataset, your property can say: 
-                        <blockquote><em>
-                            Check that the dataset, as filtered from the previous cell, contains all the 
-                            data loaded in cell load_data that has non-null values for phone number. 
-                        </em></blockquote>
-                        </p><p>
-                        The only restriction is that in a test, you can only refer to <em>preceding</em> cells. 
-                        You can even compare the values of the same variable after different cells: 
-                        <blockquote><em>
-                            Check that the average computed in cell first_method is greater than the 
-                            one computed in second_method, which in turn should be greater than the
-                            one computed in third_method. 
-                        </em></blockquote>
+                        For instance, if a cell <em>load_data</em> loads a dataset, your property can say:
                         </p>
+                        <blockquote><em>
+                            Check that the dataset, as filtered from the previous cell, contains all the
+                            data loaded in cell load_data that has non-null values for phone number.
+                        </em></blockquote>
+                        <p>
+                        The only restriction is that in a test, you can only refer to <em>preceding</em> cells.
+                        You can even compare the values of the same variable after different cells:
+                        </p>
+                        <blockquote><em>
+                            Check that the average computed in cell first_method is greater than the
+                            one computed in second_method, which in turn should be greater than the
+                            one computed in third_method.
+                        </em></blockquote>
                         <h2 class="title is-4">Running Tests</h2>
                         <p>
                         Tests can be run either individually, by clicking the Run button in the 
