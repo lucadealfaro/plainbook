@@ -7,6 +7,7 @@ from .ai_common import (
     NAME_GENERATION_INSTRUCTIONS,
     build_context_prompt,
     build_name_prompt,
+    log_ai_request_size,
     parse_validation_response,
     strip_markdown_code_fences,
 )
@@ -67,8 +68,8 @@ INSTRUCTIONS for New Cell:
 Code:
 """
 
-    if debug and False:  # Don't print the prompt for generation by default since it can be very long
-        print("Prompt:", prompt)
+    if debug:
+        log_ai_request_size("claude generate_code", SYSTEM_INSTRUCTIONS, prompt)
 
     message = client.messages.create(
         model=model,
@@ -111,8 +112,8 @@ INSTRUCTIONS for Test Cell:
 Code:
 """
 
-    if debug and False:
-        print("Prompt:", prompt)
+    if debug:
+        log_ai_request_size("claude generate_test_code", TEST_SYSTEM_INSTRUCTIONS, prompt)
 
     message = client.messages.create(
         model=model,
@@ -146,8 +147,8 @@ INSTRUCTIONS for Validation:
 Validation Result:
 """
 
-    if debug and False:  # Don't print the prompt for validation by default since it can be very long
-        print("Prompt:", prompt)
+    if debug:
+        log_ai_request_size("claude validate_code", CHECKING_INSTRUCTIONS, prompt)
 
     message = client.messages.create(
         model=model,
@@ -165,6 +166,8 @@ def claude_generate_cell_name(api_key, explanation, model=None, debug=False):
     client = anthropic.Anthropic(api_key=api_key)
     model = model or CLAUDE_MODEL
     prompt = build_name_prompt(explanation)
+    if debug:
+        log_ai_request_size("claude generate_name", NAME_GENERATION_INSTRUCTIONS, prompt)
     message = client.messages.create(
         model=model,
         max_tokens=50,
@@ -173,5 +176,5 @@ def claude_generate_cell_name(api_key, explanation, model=None, debug=False):
     )
     response_text = message.content[0].text
     if debug:
-        print("Response to name generation:", response_text)    
+        print("Response to name generation:", response_text)
     return response_text.strip()

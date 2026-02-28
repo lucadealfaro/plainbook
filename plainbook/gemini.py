@@ -8,6 +8,7 @@ from .ai_common import (
     NAME_GENERATION_INSTRUCTIONS,
     build_context_prompt,
     build_name_prompt,
+    log_ai_request_size,
     parse_validation_response,
     strip_markdown_code_fences,
 )
@@ -67,8 +68,8 @@ INSTRUCTIONS for New Cell:
 Code:
 """
 
-    if debug and False:  # Don't print the prompt for generation by default since it can be very long
-        print("Prompt:", prompt)
+    if debug:
+        log_ai_request_size("gemini generate_code", SYSTEM_INSTRUCTIONS, prompt)
 
     # 3. Generate content
     response = client.models.generate_content(
@@ -113,8 +114,8 @@ INSTRUCTIONS for Test Cell:
 Code:
 """
 
-    if debug and False:
-        print("Prompt:", prompt)
+    if debug:
+        log_ai_request_size("gemini generate_test_code", TEST_SYSTEM_INSTRUCTIONS, prompt)
 
     response = client.models.generate_content(
         model=model,
@@ -148,8 +149,8 @@ INSTRUCTIONS for Validation:
 Validation Result:
 """
 
-    if debug and False:  # Don't print the prompt for validation by default since it can be very long
-        print("Prompt:", prompt)
+    if debug:
+        log_ai_request_size("gemini validate_code", CHECKING_INSTRUCTIONS, prompt)
 
     response = client.models.generate_content(
         model=model,
@@ -167,6 +168,8 @@ def gemini_generate_cell_name(api_key, explanation, model=None, debug=False):
     client = genai.Client(api_key=api_key)
     model = model or GEMINI_GENERATE_MODEL
     prompt = build_name_prompt(explanation)
+    if debug:
+        log_ai_request_size("gemini generate_name", NAME_GENERATION_INSTRUCTIONS, prompt)
     response = client.models.generate_content(
         model=model,
         contents=prompt,

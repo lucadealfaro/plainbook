@@ -67,6 +67,14 @@ followed by a brief explanation.
 """
 
 
+def log_ai_request_size(label, system_instructions, prompt):
+    """Log the size of an AI request when debug mode is on."""
+    sys_len = len(system_instructions)
+    prompt_len = len(prompt)
+    total = sys_len + prompt_len
+    print(f"[AI {label}] system={sys_len} prompt={prompt_len} total={total} chars (~{total // CHARS_PER_TOKEN} tokens)")
+
+
 def clean_start(text):
     return re.sub(SPACES_AND_PUNCTUATION_PATTERN, '', text)
 

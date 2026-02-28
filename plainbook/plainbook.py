@@ -23,6 +23,8 @@ AI_PROVIDERS = {
     "claude": {"generate": claude_generate_code, "validate": claude_validate_code, "name": claude_generate_cell_name, "generate_test": claude_generate_test_code},
 }
 
+MAX_OUTPUT_CHARS_FOR_AI = 2000
+
 
 class ExecutionError(Exception):
     """Custom exception for execution errors in Plainbook."""
@@ -696,6 +698,26 @@ class Plainbook:
             return "\n"
 
 
+    def _filter_outputs_for_ai(self, outputs):
+        """Filters cell outputs to remove images and oversized data before
+        sending to AI. Returns a new list of filtered output items."""
+        media_keys = {'image/png', 'image/jpeg', 'image/gif', 'image/svg+xml',
+                      'image/bmp', 'image/webp', 'application/pdf'}
+        filtered = []
+        for output in outputs:
+            output_type = output.get('output_type', '')
+            if output_type in ('display_data', 'execute_result'):
+                data = output.get('data', {})
+                data = {k: v for k, v in data.items() if k not in media_keys}
+                if not data:
+                    continue
+                output = copy.copy(output)
+                output['data'] = data
+            if len(json.dumps(output, default=str)) > MAX_OUTPUT_CHARS_FOR_AI:
+                continue
+            filtered.append(output)
+        return filtered
+
     def _get_cell_json_for_ai(self, index):
         """Returns the content of a cell for AI processing, in JSON format.
         Needs to be called with the lock held."""
@@ -708,6 +730,8 @@ class Plainbook:
             new_cell.source = explanation_text + cell.source
         if not self.nb.metadata.get('share_output_with_ai', True):
             new_cell.outputs = []
+        else:
+            new_cell.outputs = self._filter_outputs_for_ai(new_cell.outputs)
         return new_cell
 
 
@@ -759,10 +783,22 @@ class Plainbook:
         return "\n".join(previous_code)
 
 
-    def _get_preceding_code_json_for_ai(self, index):
-        """Returns the JSON representation of all previous code cells for context."""
+    def _get_preceding_code_json_for_ai(self, index, include_all_variables=True):
+        """Returns the JSON representation of all previous code cells for context.
+        If include_all_variables is False, strip variables metadata from all cells
+        except the last code cell, to reduce token usage for action cells."""
         cells = [self._get_cell_json_for_ai(i) for i in range(index)
                  if self.nb.cells[i].cell_type != 'test']
+        if not include_all_variables:
+            # Find the last code cell and strip variables from all others.
+            last_code_idx = None
+            for i in range(len(cells) - 1, -1, -1):
+                if cells[i].cell_type == 'code':
+                    last_code_idx = i
+                    break
+            for i, cell in enumerate(cells):
+                if cell.cell_type == 'code' and i != last_code_idx:
+                    cell.metadata.pop('variables', None)
         nb = nbformat.v4.new_notebook()
         nb.cells = cells
         nb_json = nbformat.writes(nb, indent=4)
@@ -802,7 +838,7 @@ class Plainbook:
             files_context = self._get_files_context()
             error_context = self._get_error_context(index)
             variable_context = self._get_variables_for_ai(index)
-            preceding_code = self._get_preceding_code_json_for_ai(index)
+            preceding_code = self._get_preceding_code_json_for_ai(index, include_all_variables=False)
             previous_code = self._get_cell_code_for_ai(index)
             # Mark that an AI request is pending
             if self.ai_request_pending:
@@ -963,7 +999,7 @@ class Plainbook:
             assert cell.cell_type in ('code', 'test')
             code_to_validate = cell.source
             instructions = cell.metadata.get('explanation')
-            previous_code = self._get_preceding_code_json_for_ai(index)
+            previous_code = self._get_preceding_code_json_for_ai(index, include_all_variables=(cell.cell_type == 'test'))
             variable_context = self._get_variables_for_ai(index)
             try:
                 validate_fn = AI_PROVIDERS[ai_provider]["validate"]
