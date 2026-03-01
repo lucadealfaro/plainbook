@@ -93,9 +93,7 @@ export default {
                                 @click="$emit('interrupt')"
                                 class="button is-danger" title="Interrupt Execution">
                             <span class="icon">
-                                <i :class="runningActivity && runningActivity.type === 'generating'
-                                    ? 'bx bx-cognition'
-                                    : 'bx bx-running'"></i>
+                                <i :class="bx-stop-circle"></i>
                             </span>
                             <span v-if="runningActivity && runningActivity.type === 'generating'">
                                 Generating cell {{ runningActivity.cellIndex + 1 }}<template v-if="runningActivity.cellName">: {{ runningActivity.cellName }}</template>

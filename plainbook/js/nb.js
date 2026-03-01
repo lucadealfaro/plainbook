@@ -585,7 +585,10 @@ createApp({
             try {
                 running.value = false;
                 runningActivity.value = { type: null, cellIndex: null };
-                await apiCall('/interrupt_kernel', 'POST');
+                await Promise.all([
+                    apiCall('/interrupt_kernel', 'POST'),
+                    apiCall('/cancel_ai_request', 'POST'),
+                ]);
                 console.log('Kernel interrupted');
             } catch (err) {
                 throw new Error('Interrupt error', { cause: err });
