@@ -431,7 +431,7 @@ createApp({
                 await runCells(cellIndex - 1);
             }
             if (!running.value) return; // Stop if running has been cancelled
-            runningActivity.value = { type: 'generating', cellIndex };
+            runningActivity.value = { type: 'generating', cellIndex, cellName: cell.metadata.name || null };
             asRead.value = false;
             const body = { cell_index: cellIndex };
             if (validationFeedback) {
@@ -488,7 +488,7 @@ createApp({
             const cell = notebook.value.cells[cellIndex];
             if (cell.cell_type !== 'code') return; // Only run code cells
             if (!running.value) return; // Stop if running has been cancelled
-            runningActivity.value = { type: 'running', cellIndex };
+            runningActivity.value = { type: 'running', cellIndex, cellName: cell.metadata.name || null };
             asRead.value = false;
             const r = await apiCall('/execute_cell', 'POST', { cell_index: cellIndex });
                 if (r.status === 'error') {
@@ -610,7 +610,7 @@ createApp({
             if (cell.cell_type !== 'test') return;
             if (!force && last_valid_test_cell_index.value >= cellIndex) return;
             if (!running.value) return;
-            runningActivity.value = { type: 'generating', cellIndex };
+            runningActivity.value = { type: 'generating', cellIndex, cellName: cell.metadata.name || null };
             asRead.value = false;
             const body = { cell_index: cellIndex };
             if (validationFeedback) {
@@ -653,7 +653,7 @@ createApp({
             }
             if (!running.value) return;
             // Execute the test cell
-            runningActivity.value = { type: 'running', cellIndex };
+            runningActivity.value = { type: 'running', cellIndex, cellName: cell.metadata.name || null };
             asRead.value = false;
             const r = await apiCall('/execute_test_cell', 'POST', { cell_index: cellIndex });
             if (r.status === 'error') {
