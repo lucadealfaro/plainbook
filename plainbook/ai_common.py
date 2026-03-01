@@ -212,13 +212,15 @@ The previous code for this cell does not seem to be correct. Here are comments o
 
 
 def strip_markdown_code_fences(code):
-    print("Code before stripping markdown fences:", repr(code))
-    """Strip ```python and ``` markdown fences from generated code."""
+    """Strip ```python and ``` markdown fences from generated code,
+    tolerating leading/trailing whitespace around the fences."""
+    code = code.strip()
     if code.startswith("```python"):
         code = code[len("```python"):].strip()
+    elif code.startswith("```"):
+        code = code[3:].strip()
     if code.endswith("```"):
         code = code[:-3].strip()
-    print("Code after stripping markdown fences:", repr(code))
     return code
 
 
