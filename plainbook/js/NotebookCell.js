@@ -15,7 +15,7 @@ export default {
         'run-cell', 'save-and-run', 'generate-code', 'clear-code',
         'validate-code', 'dismiss-validation',
         'delete', 'move-up', 'move-down',
-        'activate',
+        'activate', 'interrupt',
         'run-test', 'save-and-run-test', 'generate-test-code', 'open-test-help'
     ],
     setup(props, { emit }) {
@@ -69,6 +69,7 @@ export default {
                         @clearcode="$emit('clear-code')"
                         @validate="$emit('validate-code')"
                         @run="$emit('run-cell')"
+                        @interrupt="$emit('interrupt')"
                         @saveandrun="$emit('save-and-run', $event)"
                         @delete="$emit('delete')"
                         @moveUp="$emit('move-up')"
@@ -120,6 +121,7 @@ export default {
                         @clearcode="$emit('clear-code')"
                         @validate="$emit('validate-code')"
                         @run="$emit('run-test')"
+                        @interrupt="$emit('interrupt')"
                         @saveandrun="$emit('save-and-run-test', $event)"
                         @open-test-help="$emit('open-test-help')"
                         @delete="$emit('delete')"

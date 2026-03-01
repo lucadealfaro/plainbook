@@ -4,7 +4,7 @@ const ExplanationRenderer = {
     props: ['source', 'isActive', 'codeValid', 'outputValid', 'executed', 'hasError',
             'asRead', 'startEditKey', 'isLocked', 'running', 'hasCode', 'outputVisible', 'cellMode'],
     emits: ['update:source', 'save', 'saveandrun', 'gencode', 'clearcode', 'validate',
-            'run', 'delete', 'moveUp', 'moveDown', 'toggle-output', 'open-test-help'],
+            'run', 'interrupt', 'delete', 'moveUp', 'moveDown', 'toggle-output', 'open-test-help'],
     setup(props, { emit }) {
         const isTestCell = computed(() => props.cellMode === 'test');
         const isEditing = ref(false);
@@ -111,21 +111,34 @@ const ExplanationRenderer = {
             generating.value = true;
             emit('gencode');
         };
+        const validating = ref(false);
+        const onValidate = () => {
+            validating.value = true;
+            emit('validate');
+        };
         watch(() => props.running, (val) => {
-            if (!val) generating.value = false;
+            if (!val) {
+                generating.value = false;
+                validating.value = false;
+            }
         });
 
         const clearLabel = computed(() => isTestCell.value ? 'Clear code' : 'Clear code');
         const generateLabel = computed(() => {
-            if (props.hasError) return isTestCell.value ? 'Fix Code' : 'Fix Code';
-            if (props.hasCode) return isTestCell.value ? 'Regenerate code' : 'Regenerate code';
-            return isTestCell.value ? 'Generate code' : 'Generate code';
+            if (props.hasError) return 'Fix Code';
+            if (props.hasCode) return 'Regenerate code';
+            return 'Generate code';
+        });
+        const stopGenerateLabel = computed(() => {
+            if (props.hasError) return 'Stop fixing';
+            return 'Stop generating';
         });
         const validateLabel = computed(() => isTestCell.value ? 'Validate code' : 'Validate code');
 
         return { isEditing, localSource, rendered, enterEditMode, saveChanges,
             cancelEdit, textareaEl, autoResize, saveAndRun, onBlur, localIsLocked,
-            isTestCell, clearLabel, generateLabel, validateLabel, generating, onGenCode };
+            isTestCell, clearLabel, generateLabel, stopGenerateLabel, validateLabel,
+            generating, onGenCode, validating, onValidate };
     },
 
     template: /* html */ `
@@ -139,9 +152,13 @@ const ExplanationRenderer = {
                 class="explanation-toolbar has-background-grey-lighter pl-3 pr-3"
                 style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem">
             <div class="toolbar-left">
-                <button class="button run-button is-small mr-1"
+                <button v-if="running" class="button run-button is-small mr-1 is-danger"
+                        title="Interrupt execution" @click.stop="$emit('interrupt')">
+                    <span class="icon"><i class="bx bx-stop-circle"></i></span>
+                    <span>Interrupt</span>
+                </button>
+                <button v-else class="button run-button is-small mr-1"
                         :class="isTestCell ? 'is-warning' : 'is-primary'"
-                        :disabled="running"
                         title="Run this cell and all necessary preceding cells" @click.stop="$emit('run')">
                     <span class="icon"><i class="bx bx-play"></i></span>
                     <span v-if="!isTestCell">Run</span>
@@ -185,16 +202,26 @@ const ExplanationRenderer = {
                     <span class="icon"><i class="bx bx-eraser"></i></span>
                     <span>{{ clearLabel }}</span>
                 </button>
-                <button class="button is-small"
+                <button v-if="generating" class="button is-small is-danger"
+                        title="Stop code generation" @click.stop="$emit('interrupt')">
+                    <span class="icon"><i class="bx bx-stop-circle"></i></span>
+                    <span>{{ stopGenerateLabel }}</span>
+                </button>
+                <button v-else class="button is-small"
                         :class="isTestCell ? 'is-warning' : 'is-success'"
                         title="Generate or regenerate the code"
                         :disabled="running || localIsLocked || !localSource.trim()" @click.stop="onGenCode">
-                    <span class="icon"><i class="bx bx-cognition" :class="{'bx-spin': generating}"></i></span>
+                    <span class="icon"><i class="bx bx-cognition"></i></span>
                     <span>{{ generateLabel }}</span>
                 </button>
-                <button :disabled="!codeValid" class="button is-small" 
+                <button v-if="validating" class="button is-small is-danger"
+                        title="Stop validation" @click.stop="$emit('interrupt')">
+                    <span class="icon"><i class="bx bx-stop-circle"></i></span>
+                    <span>Stop validation</span>
+                </button>
+                <button v-else :disabled="running || !codeValid" class="button is-small"
                         :class="isTestCell ? 'is-warning' : 'is-success'"
-                        title="Validate code against description" @click.stop="$emit('validate')">
+                        title="Validate code against description" @click.stop="onValidate">
                     <span class="icon"><i class="bx bx-check"></i></span> <span>{{ validateLabel }}</span>
                 </button>
                 <button class="button is-small is-danger py-1 " title="Delete cell" aria-label="Delete"

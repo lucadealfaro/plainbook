@@ -118,10 +118,11 @@
                         @save-code="(content) => sendCodeToServer(content, index)"
                         @save-and-run="(content) => ui_saveExplanationAndRun(content, index)"
 
+                        @interrupt="ui_interruptKernel"
                         @run-cell="ui_runCell(index)"
                         @generate-code="ui_forceRegenerateCellCode(index)"
                         @clear-code="clearCellCode(index)"
-                        @validate-code="validateCode(index)"
+                        @validate-code="ui_validateCode(index)"
                         @dismiss-validation="dismissValidation(index)"
 
                         @run-test="ui_runTestCell(index)"

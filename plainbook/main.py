@@ -492,6 +492,8 @@ def validate_code_cell():
         if friendly:
             return dict(status='error', message=friendly)
         raise
+    if validation_result is None:
+        return dict(status='cancelled')
     return dict(status='success', validation=validation_result)
 
 

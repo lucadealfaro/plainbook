@@ -98,6 +98,9 @@ export default {
                             <span v-if="runningActivity && runningActivity.type === 'generating'">
                                 Generating cell {{ runningActivity.cellIndex + 1 }}<template v-if="runningActivity.cellName">: {{ runningActivity.cellName }}</template>
                             </span>
+                            <span v-else-if="runningActivity && runningActivity.type === 'validating'">
+                                Validating cell {{ runningActivity.cellIndex + 1 }}<template v-if="runningActivity.cellName">: {{ runningActivity.cellName }}</template>
+                            </span>
                             <span v-else-if="runningActivity && runningActivity.type === 'running'">
                                 Running cell {{ runningActivity.cellIndex + 1 }}<template v-if="runningActivity.cellName">: {{ runningActivity.cellName }}</template>
                             </span>

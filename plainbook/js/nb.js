@@ -297,17 +297,29 @@ createApp({
                 throw new Error('No AI provider is active. Please set an API key in Settings.');
             };
             asRead.value = false;
+            const cell = notebook.value.cells[cellIndex];
+            runningActivity.value = { type: 'validating', cellIndex, cellName: cell.metadata.name || null };
             try {
                 const r = await apiCall('/validate_code', 'POST', { cell_index: cellIndex });
-                if (r.status === 'error') {
+                if (r.status === 'cancelled') {
+                    console.log('Validation cancelled for cell:', cellIndex);
+                } else if (r.status === 'error') {
                     throw new Error(r.message || 'Validation failed');
-                }
-                if (notebook.value && notebook.value.cells[cellIndex]) {
+                } else if (notebook.value && notebook.value.cells[cellIndex]) {
                     notebook.value.cells[cellIndex].metadata.validation = r.validation;
                     console.log('Code validation received for cell:', cellIndex, r.validation);
                 }
             } catch (err) {
                 throw new Error(err.message || 'Failed to validate code', { cause: err });
+            }
+        };
+
+        const ui_validateCode = async (cellIndex) => {
+            if (!running.value) {
+                running.value = true;
+                await validateCode(cellIndex);
+                running.value = false;
+                runningActivity.value = { type: null, cellIndex: null };
             }
         };
 
@@ -817,7 +829,7 @@ createApp({
             sendExplanationToServer, authToken,
             sendCodeToServer, clearCellCode, ui_saveExplanationAndRun,
             sendMarkdownToServer, generateCode, activeIndex, reloadNotebook,
-            validateCode, dismissValidation, ui_resetAndRunAllCells, ui_forceRegenerateCellCode,
+            validateCode, ui_validateCode, dismissValidation, ui_resetAndRunAllCells, ui_forceRegenerateCellCode,
             setActiveCell, ui_runCell, running, runningActivity, asRead,
             ui_interruptKernel, insertCell, markdownEditKey,
             last_executed_cell_index, last_valid_code_cell_index, last_valid_output_cell_index,

@@ -1007,10 +1007,13 @@ class Plainbook:
                                                 instructions, variable_context=variable_context,
                                                 model=model, debug=self.debug,
                                                 dump_ai_requests=self.dump_ai_requests)
-                validation_result['is_hidden'] = False
-                cell.metadata['validation'] = validation_result
-                self._write()
-                return validation_result
+                if self.ai_request_pending:
+                    validation_result['is_hidden'] = False
+                    cell.metadata['validation'] = validation_result
+                    self._write()
+                    return validation_result
+                else:
+                    return None
             finally:
                 self.ai_request_pending = False
 
