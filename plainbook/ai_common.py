@@ -122,7 +122,7 @@ def log_ai_request_size(label, system_instructions, prompt, *,
     breakdown = _breakdown_preceding(preceding)
     if breakdown:
         parts = [f"{k}={_chars_and_tokens(v)}" for k, v in breakdown.items() if v]
-        print(f"  Preceding context: {', '.join(parts)}")
+        print(f"  Preceding context:\n    {'\n    '.join(parts)}")
     # Breakdown of other fields.
     fields = [
         ("instructions", instructions),
@@ -134,7 +134,7 @@ def log_ai_request_size(label, system_instructions, prompt, *,
     ]
     parts = [f"{name}={_chars_and_tokens(len(val))}" for name, val in fields if val]
     if parts:
-        print(f"  Other fields: {', '.join(parts)}")
+        print(f"  Cell information:\n    {'\n    '.join(parts)}")
 
 
 def dump_ai_request(label, system_instructions, prompt):
@@ -212,11 +212,13 @@ The previous code for this cell does not seem to be correct. Here are comments o
 
 
 def strip_markdown_code_fences(code):
+    print("Code before stripping markdown fences:", repr(code))
     """Strip ```python and ``` markdown fences from generated code."""
     if code.startswith("```python"):
         code = code[len("```python"):].strip()
     if code.endswith("```"):
         code = code[:-3].strip()
+    print("Code after stripping markdown fences:", repr(code))
     return code
 
 
