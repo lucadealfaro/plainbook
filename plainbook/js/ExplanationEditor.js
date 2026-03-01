@@ -152,7 +152,7 @@ const ExplanationRenderer = {
                 class="explanation-toolbar has-background-grey-lighter pl-3 pr-3"
                 style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem">
             <div class="toolbar-left">
-                <button v-if="running" class="button run-button is-small mr-1 is-danger"
+                <button v-if="running" class="button run-button is-small mr-1 is-primary"
                         title="Interrupt execution" @click.stop="$emit('interrupt')">
                     <span class="icon"><i class="bx bx-stop-circle"></i></span>
                     <span>Interrupt</span>
@@ -202,7 +202,7 @@ const ExplanationRenderer = {
                     <span class="icon"><i class="bx bx-eraser"></i></span>
                     <span>{{ clearLabel }}</span>
                 </button>
-                <button v-if="generating" class="button is-small is-danger"
+                <button v-if="generating" class="button is-small is-success"
                         title="Stop code generation" @click.stop="$emit('interrupt')">
                     <span class="icon"><i class="bx bx-stop-circle"></i></span>
                     <span>{{ stopGenerateLabel }}</span>
@@ -214,7 +214,7 @@ const ExplanationRenderer = {
                     <span class="icon"><i class="bx bx-cognition"></i></span>
                     <span>{{ generateLabel }}</span>
                 </button>
-                <button v-if="validating" class="button is-small is-danger"
+                <button v-if="validating" class="button is-small is-success"
                         title="Stop validation" @click.stop="$emit('interrupt')">
                     <span class="icon"><i class="bx bx-stop-circle"></i></span>
                     <span>Stop validation</span>
