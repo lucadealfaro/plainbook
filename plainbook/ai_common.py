@@ -75,6 +75,20 @@ def log_ai_request_size(label, system_instructions, prompt):
     print(f"[AI {label}] system={sys_len} prompt={prompt_len} total={total} chars (~{total // CHARS_PER_TOKEN} tokens)")
 
 
+def dump_ai_request(label, system_instructions, prompt):
+    """Dump the full text of an AI request to stdout."""
+    separator = "=" * 72
+    print(separator)
+    print(f"[AI REQUEST: {label}]")
+    print(separator)
+    print("SYSTEM INSTRUCTIONS:")
+    print(system_instructions)
+    print(separator)
+    print("PROMPT:")
+    print(prompt)
+    print(separator)
+
+
 def clean_start(text):
     return re.sub(SPACES_AND_PUNCTUATION_PATTERN, '', text)
 

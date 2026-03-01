@@ -7,6 +7,7 @@ from .ai_common import (
     NAME_GENERATION_INSTRUCTIONS,
     build_context_prompt,
     build_name_prompt,
+    dump_ai_request,
     log_ai_request_size,
     parse_validation_response,
     strip_markdown_code_fences,
@@ -50,7 +51,8 @@ def claude_generate_code(
     variable_context=None,
     validation_context=None,
     model=None,
-    debug=False):
+    debug=False,
+    dump_ai_requests=False):
     client = anthropic.Anthropic(api_key=api_key)
     model = model or CLAUDE_MODEL
 
@@ -70,6 +72,8 @@ Code:
 
     if debug:
         log_ai_request_size("claude generate_code", SYSTEM_INSTRUCTIONS, prompt)
+    if dump_ai_requests:
+        dump_ai_request("claude generate_code", SYSTEM_INSTRUCTIONS, prompt)
 
     message = client.messages.create(
         model=model,
@@ -94,7 +98,8 @@ def claude_generate_test_code(
     variable_context=None,
     validation_context=None,
     model=None,
-    debug=False):
+    debug=False,
+    dump_ai_requests=False):
     client = anthropic.Anthropic(api_key=api_key)
     model = model or CLAUDE_MODEL
 
@@ -114,6 +119,8 @@ Code:
 
     if debug:
         log_ai_request_size("claude generate_test_code", TEST_SYSTEM_INSTRUCTIONS, prompt)
+    if dump_ai_requests:
+        dump_ai_request("claude generate_test_code", TEST_SYSTEM_INSTRUCTIONS, prompt)
 
     message = client.messages.create(
         model=model,
@@ -128,7 +135,7 @@ Code:
     return code
 
 
-def claude_validate_code(api_key, previous_code, code_to_validate, instructions, variable_context=None, model=None, debug=False):
+def claude_validate_code(api_key, previous_code, code_to_validate, instructions, variable_context=None, model=None, debug=False, dump_ai_requests=False):
     client = anthropic.Anthropic(api_key=api_key)
     model = model or CLAUDE_MODEL
 
@@ -149,6 +156,8 @@ Validation Result:
 
     if debug:
         log_ai_request_size("claude validate_code", CHECKING_INSTRUCTIONS, prompt)
+    if dump_ai_requests:
+        dump_ai_request("claude validate_code", CHECKING_INSTRUCTIONS, prompt)
 
     message = client.messages.create(
         model=model,
@@ -162,12 +171,14 @@ Validation Result:
     return parse_validation_response(response_text)
 
 
-def claude_generate_cell_name(api_key, explanation, model=None, debug=False):
+def claude_generate_cell_name(api_key, explanation, model=None, debug=False, dump_ai_requests=False):
     client = anthropic.Anthropic(api_key=api_key)
     model = model or CLAUDE_MODEL
     prompt = build_name_prompt(explanation)
     if debug:
         log_ai_request_size("claude generate_name", NAME_GENERATION_INSTRUCTIONS, prompt)
+    if dump_ai_requests:
+        dump_ai_request("claude generate_name", NAME_GENERATION_INSTRUCTIONS, prompt)
     message = client.messages.create(
         model=model,
         max_tokens=50,

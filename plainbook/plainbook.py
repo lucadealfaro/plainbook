@@ -111,10 +111,11 @@ This is the previous code for the cell; it might need revision as some of the pr
 class Plainbook:
     """Plainbook implementation backed by the snapshot kernel."""
 
-    def __init__(self, notebook_path, debug=False):
+    def __init__(self, notebook_path, debug=False, dump_ai_requests=False):
         print(f"Initializing Plainbook for {notebook_path}...")
         self.path = notebook_path
         self.debug = debug
+        self.dump_ai_requests = dump_ai_requests
         self.name = os.path.splitext(os.path.basename(notebook_path))[0]
         self.nb = None
         self._lock = threading.Lock()
@@ -855,7 +856,8 @@ class Plainbook:
                     variable_context=variable_context,
                     validation_context=validation_feedback,
                     model=model,
-                    debug=self.debug)
+                    debug=self.debug,
+                    dump_ai_requests=self.dump_ai_requests)
                 # If we are still in a request, update the cell.
                 if self.ai_request_pending:
                     cell.source = new_code
@@ -915,7 +917,8 @@ class Plainbook:
                     variable_context=variable_context,
                     validation_context=validation_feedback,
                     model=model,
-                    debug=self.debug)
+                    debug=self.debug,
+                    dump_ai_requests=self.dump_ai_requests)
                 if self.ai_request_pending:
                     cell.source = new_code
                     cell.metadata['code_timestamp'] = datetime.datetime.now().isoformat()
@@ -1005,7 +1008,8 @@ class Plainbook:
                 validate_fn = AI_PROVIDERS[ai_provider]["validate"]
                 validation_result = validate_fn(api_key, previous_code, code_to_validate,
                                                 instructions, variable_context=variable_context,
-                                                model=model, debug=self.debug)
+                                                model=model, debug=self.debug,
+                                                dump_ai_requests=self.dump_ai_requests)
                 validation_result['is_hidden'] = False
                 cell.metadata['validation'] = validation_result
                 self._write()
@@ -1093,7 +1097,7 @@ class Plainbook:
                 return None
             name_fn = AI_PROVIDERS[ai_provider]["name"]
         # Call AI outside the lock (network I/O)
-        raw_name = name_fn(api_key, explanation, model=model, debug=self.debug)
+        raw_name = name_fn(api_key, explanation, model=model, debug=self.debug, dump_ai_requests=self.dump_ai_requests)
         # Sanitize: split into words, keep first 3, lowercase, remove punctuation, join with underscores
         words = raw_name.split()[:3]
         words = [re.sub(r'[^a-z0-9]', '', w.lower()) for w in words]

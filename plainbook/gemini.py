@@ -8,6 +8,7 @@ from .ai_common import (
     NAME_GENERATION_INSTRUCTIONS,
     build_context_prompt,
     build_name_prompt,
+    dump_ai_request,
     log_ai_request_size,
     parse_validation_response,
     strip_markdown_code_fences,
@@ -48,7 +49,8 @@ def gemini_generate_code(
     variable_context=None,
     validation_context=None,
     model=None,
-    debug=False):
+    debug=False,
+    dump_ai_requests=False):
     # 1. Initialize the Gemini client
     client = genai.Client(api_key=api_key)
     model = model or GEMINI_GENERATE_MODEL
@@ -70,6 +72,8 @@ Code:
 
     if debug:
         log_ai_request_size("gemini generate_code", SYSTEM_INSTRUCTIONS, prompt)
+    if dump_ai_requests:
+        dump_ai_request("gemini generate_code", SYSTEM_INSTRUCTIONS, prompt)
 
     # 3. Generate content
     response = client.models.generate_content(
@@ -96,7 +100,8 @@ def gemini_generate_test_code(
     variable_context=None,
     validation_context=None,
     model=None,
-    debug=False):
+    debug=False,
+    dump_ai_requests=False):
     client = genai.Client(api_key=api_key)
     model = model or GEMINI_GENERATE_MODEL
 
@@ -116,6 +121,8 @@ Code:
 
     if debug:
         log_ai_request_size("gemini generate_test_code", TEST_SYSTEM_INSTRUCTIONS, prompt)
+    if dump_ai_requests:
+        dump_ai_request("gemini generate_test_code", TEST_SYSTEM_INSTRUCTIONS, prompt)
 
     response = client.models.generate_content(
         model=model,
@@ -130,7 +137,7 @@ Code:
     return code
 
 
-def gemini_validate_code(api_key, previous_code, code_to_validate, instructions, variable_context=None, model=None, debug=False):
+def gemini_validate_code(api_key, previous_code, code_to_validate, instructions, variable_context=None, model=None, debug=False, dump_ai_requests=False):
     client = genai.Client(api_key=api_key)
     model = model or GEMINI_VALIDATE_MODEL
 
@@ -151,6 +158,8 @@ Validation Result:
 
     if debug:
         log_ai_request_size("gemini validate_code", CHECKING_INSTRUCTIONS, prompt)
+    if dump_ai_requests:
+        dump_ai_request("gemini validate_code", CHECKING_INSTRUCTIONS, prompt)
 
     response = client.models.generate_content(
         model=model,
@@ -164,12 +173,14 @@ Validation Result:
     return parse_validation_response(response.text)
 
 
-def gemini_generate_cell_name(api_key, explanation, model=None, debug=False):
+def gemini_generate_cell_name(api_key, explanation, model=None, debug=False, dump_ai_requests=False):
     client = genai.Client(api_key=api_key)
     model = model or GEMINI_GENERATE_MODEL
     prompt = build_name_prompt(explanation)
     if debug:
         log_ai_request_size("gemini generate_name", NAME_GENERATION_INSTRUCTIONS, prompt)
+    if dump_ai_requests:
+        dump_ai_request("gemini generate_name", NAME_GENERATION_INSTRUCTIONS, prompt)
     response = client.models.generate_content(
         model=model,
         contents=prompt,

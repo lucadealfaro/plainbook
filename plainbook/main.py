@@ -42,6 +42,8 @@ parser.add_argument('notebook',
                     help='Path to the notebook file to open')
 parser.add_argument('--debug', action='store_true', default=False,
                     help='Enable debug mode')
+parser.add_argument('--dump-ai-requests', action='store_true', default=False,
+                    help='Dump the full text of AI requests to stdout')
 parser.add_argument('--port', type=int, default=8080,
                     help='Port to run the server on')
 args = parser.parse_args()
@@ -169,7 +171,7 @@ AUTH_TOKEN = _get_or_create_debug_token() if args.debug else secrets.token_hex(3
 notebook_path = os.path.abspath(args.notebook)
 
 from .plainbook import Plainbook
-notebook = Plainbook(notebook_path, debug=args.debug)
+notebook = Plainbook(notebook_path, debug=args.debug, dump_ai_requests=args.dump_ai_requests)
 assert notebook.kc is not None
 assert notebook.km.is_alive()
                     
