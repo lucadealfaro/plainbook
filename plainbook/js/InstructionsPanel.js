@@ -66,7 +66,7 @@ export default {
             ></textarea>
             <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.5rem;">
                 <button class="button is-light" :disabled="!isDirty" @click="cancel">Cancel</button>
-                <button class="button is-link" :disabled="!isDirty || isSaving" :class="{ 'is-loading': isSaving }" @click="save">Save</button>
+                <button class="button is-link" :disabled="isSaving" :class="{ 'is-loading': isSaving }" @click="save">Save</button>
             </div>
         </div>
     `

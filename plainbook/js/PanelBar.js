@@ -23,13 +23,14 @@ export default {
     },
     template: /* html */ `
         <div style="background-color: #f5f5f5; border: 1px solid #dbdbdb; border-radius: 4px;">
-            <div style="display: flex; gap: 0; background: transparent; padding: 0;">
-                <button
+            <div style="display: flex; align-items: stretch; background: transparent; padding: 0;">
+                <button class="button is-ghost"
                     @click="toggleTab('files')"
-                    style="background: transparent; border: none; padding: 0.6rem 1rem; cursor: pointer; font-size: 0.9rem; border-bottom: 2px solid transparent;"
+                    style="border: none; border-radius: 0; border-bottom: 2px solid transparent; text-decoration: none;"
                     :style="activeTab === 'files' ? 'font-weight: 700; border-bottom-color: #3273dc; color: #3273dc;' : 'color: #555;'"
                 >
-                    <span style="margin-right: 0.3rem;">&#128193;</span> Files
+                    <span class="icon is-small"><i class="bx bx-folder"></i></span>
+                    <span>Files</span>
                     <span style="display: inline-block; background: gray; color: white; border-radius: 999px; padding: 0.12rem 0.45rem; margin-left: 0.4rem; font-size: 0.8rem; font-weight: 600;">
                         {{ selectedCount }}
                     </span>
@@ -37,12 +38,14 @@ export default {
                         {{ missingCount }}
                     </span>
                 </button>
-                <button
+                <div style="width: 1px; background: #dbdbdb; align-self: stretch; margin: 0.4rem 0;"></div>
+                <button class="button is-ghost"
                     @click="toggleTab('instructions')"
-                    style="background: transparent; border: none; padding: 0.6rem 1rem; cursor: pointer; font-size: 0.9rem; border-bottom: 2px solid transparent;"
+                    style="border: none; border-radius: 0; border-bottom: 2px solid transparent; text-decoration: none;"
                     :style="activeTab === 'instructions' ? 'font-weight: 700; border-bottom-color: #3273dc; color: #3273dc;' : 'color: #555;'"
                 >
-                    <span style="margin-right: 0.3rem;">&#128220;</span> Instructions
+                    <span class="icon is-small"><i class="bx bx-book"></i></span>
+                    <span>Instructions</span>
                 </button>
             </div>
             <div v-show="activeTab === 'files'" style="border-top: 1px solid #dbdbdb;">
