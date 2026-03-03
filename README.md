@@ -1,4 +1,4 @@
-# Plainbook: Natural Language Notebooks. 
+# <img src="https://github.com/lucadealfaro/plainbook/raw/main/plainbook/images/Plainbook_logo.png" height="40"> Plainbook: Natural Language Notebooks.
 
 Authors: 
 
@@ -27,7 +27,7 @@ plainbook notebook.nlb
 
 You can use any file name you like, with any extension you like.  
 
-Here is a plainbook on football matches to get you started: [![Download football.plb](https://github.com/lucadealfaro/plainbook/raw/main/football.plb)]
+Here is a plainbook on football matches to get you started: [<img src="https://github.com/lucadealfaro/plainbook/raw/main/plainbook/images/Plainbook_logo.png" height="40">](https://github.com/lucadealfaro/plainbook/raw/main/football.plb)
 
 You need a Gemini or Claude API key to use Plainbook.  Click on the Settings button (the gear on the top right) and it will contain links where to get such keys. 
 
