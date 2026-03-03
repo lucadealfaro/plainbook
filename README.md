@@ -1,4 +1,4 @@
-# <img src="https://github.com/lucadealfaro/plainbook/raw/main/plainbook/images/Plainbook_logo.png" height="40"> Plainbook: Natural Language Notebooks.
+# <img src="https://github.com/lucadealfaro/plainbook/raw/main/plainbook/images/Plainbook_logo.png" height="30"> Plainbook: Natural Language Notebooks.
 
 Authors: 
 
