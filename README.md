@@ -27,9 +27,9 @@ plainbook notebook.nlb
 
 You can use any file name you like, with any extension you like.  
 
-Here is a plainbook on football matches to get you started: [<img src="https://github.com/lucadealfaro/plainbook/raw/main/plainbook/images/Plainbook_logo.png" height="20"> football.plb](https://raw.githubusercontent.com/lucadealfaro/plainbook/refs/heads/main/examples/football.plb)
+Here is a plainbook on football matches to get you started: [<img src="https://github.com/lucadealfaro/plainbook/raw/main/plainbook/images/Plainbook_logo.png" height="20"> football.plb(https://raw.githubusercontent.com/lucadealfaro/plainbook/refs/heads/main/examples/football.plb)]
 
-Here is a plainbook on football matches to get you started: [<img src="https://github.com/lucadealfaro/plainbook/raw/main/plainbook/images/Plainbook_logo.png" height="20"> football.plb](https://github.com/lucadealfaro/plainbook/raw/main/examples/football.plb)
+Here is a plainbook on football matches to get you started: [<img src="https://github.com/lucadealfaro/plainbook/raw/main/plainbook/images/Plainbook_logo.png" height="20">(https://github.com/lucadealfaro/plainbook/raw/main/examples/football.plb)]
 
 
 You need a Gemini or Claude API key to use Plainbook.  Click on the Settings button (the gear on the top right) and it will contain links where to get such keys. 
