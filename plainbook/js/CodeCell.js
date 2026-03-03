@@ -176,7 +176,7 @@ export default {
                 </button>
             </div>
             <div v-if="!isCollapsed" style="padding-left: 2.25rem;">
-                <div v-if="!isEditing" class="p-2 overflow-x-auto" @dblclick="enterEditMode">
+                <div v-if="!isEditing" class="p-2 overflow-x-auto is-size-7" @dblclick="enterEditMode">
                     <pre class="language-python"><code class="language-python" v-html="highlightedCode"></code></pre>
                 </div>
 
@@ -185,7 +185,7 @@ export default {
                         ref="textareaEl"
                         placeholder="Write the code for this action..."
                         v-model="localSource" 
-                        class="textarea is-family-monospace mb-2" 
+                        class="textarea is-family-monospace is-size-7 mb-2" 
                         rows="1"
                         style="overflow: hidden; resize: none; height: 0;"
                         @input="autoResize"

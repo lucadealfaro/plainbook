@@ -949,12 +949,15 @@ class Plainbook:
 
             # Build state mapping from named code cells before this index
             state_mapping = {}
+            default_state = None
             for i in range(index):
                 c = self.nb.cells[i]
                 if c.cell_type == 'code':
                     name = c.metadata.get('name')
                     if name and c.id in self._cell_states:
                         state_mapping[f"__state__{name}"] = self._cell_states[c.id]
+                    if c.id in self._cell_states:
+                        default_state = self._cell_states[c.id]
 
             exec_id = uuid.uuid4().hex
             self._current_exec_id = exec_id
@@ -963,6 +966,7 @@ class Plainbook:
                     "code": cell.source,
                     "exec_id": exec_id,
                     "state_mapping": state_mapping,
+                    "default_state": default_state,
                 })
             finally:
                 self._current_exec_id = None

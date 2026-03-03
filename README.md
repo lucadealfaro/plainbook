@@ -22,8 +22,12 @@ source plainbook-env/bin/activate  # On Windows, use `plainbook-env\Scripts\acti
 Then, you can run Plainbook on a notebook file (which will be created if it does not exist):
 
 ```bash
-plainbook path/to/notebook.nlb
+plainbook notebook.nlb
 ```
+
+You can use any file name you like, with any extension you like.  
+
+Here is a plainbook on football matches to get you started: [![Download football.plb](https://github.com/lucadealfaro/plainbook/raw/main/football.plb)]
 
 You need a Gemini or Claude API key to use Plainbook.  Click on the Settings button (the gear on the top right) and it will contain links where to get such keys. 
 
