@@ -4,6 +4,29 @@ Authors:
 
 Luca de Alfaro, dealfaro@acm.org
 
+## Installation and use
+
+To install Plainbook, you can use pip:
+
+```bash
+pip install plainbook
+```
+
+To run Plainbook, you might first want to create a Python environment, in case you need to install packages: 
+
+```bash
+
+python -m venv plainbook-env
+source plainbook-env/bin/activate  # On Windows, use `plainbook-env\Scripts\activate`
+```
+Then, you can run Plainbook on a notebook file (which will be created if it does not exist):
+
+```bash
+plainbook path/to/notebook.nlb
+```
+
+You need a Gemini or Claude API key to use Plainbook.  Click on the Settings button (the gear on the top right) and it will contain links where to get such keys. 
+
 ## Overview
 
 The gloal of Plainbook is to allow users to create and communicate data analysis and science using natural language. 
@@ -32,21 +55,4 @@ Differently from other notebook systems, Plainbooks are executed from start to e
 **AI Providers**
 Plainbook is designed to work with multiple AI providers, and users can choose which provider to use for code generation and checking.  The system is designed to allow users to easily switch between providers, so that users can cross-check that the implementation obtained from one provider is considered valid by another provider.  This avoids over-reliance on a single class of AI models. 
 Currently, Plainbook supports Gemini and Claude models.  You will need an API key for at least one such provider to use Plainbook.
-
-## Running Plainbook
-
-```bash
-
-plainbook path/to/notebook.nlb
-``` 
-
-(where `.nlb` is a Natural Language Notebook file; you can use other extensions if you wish). 
-The file is created if it does not exist.
-For a list of command-lien options, do: 
-
-```bash
-plainbook --help
-```
-
-If you want to be able to generate or check code from explanations, you need to add a Gemini API key in the settings (click on the gear icon in the top-right corner of the web interface).
 
