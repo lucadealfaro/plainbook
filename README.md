@@ -60,6 +60,6 @@ Currently, Plainbook supports Gemini and Claude models.  You will need an API ke
 
 ## Contributors
 
-* [Luca de Alfaro](https://luca.dealfaro.com), lead developer, UC Santa Cruz. 
-* Mathis Aubert, UC Santa Cruz. 
-* Ranjit Jhala, UC San Diego.
+* [Luca de Alfaro](https://github.com/lucadealfaro), lead developer, UC Santa Cruz. 
+* [Mathis Aubert](https://github.com/Maths-A), UC Santa Cruz. 
+* [Ranjit Jhala](https://github.com/ranjitjhala), UC San Diego.
