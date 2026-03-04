@@ -27,7 +27,7 @@ You can use any file name you like, with any extension you like.
 * [Introductory video](https://youtu.be/Mkv5cl5rA7s). 
 * Plainbook on football matches: [Download football.plb](https://github.com/lucadealfaro/plainbook/raw/main/examples/football.plb).  
 
-You need a Gemini or Claude API key to use Plainbook.  Click on the Settings button (the gear on the top right) and it will contain links where to get such keys. 
+You need a Gemini or Claude API key to use Plainbook.  Click on the Settings button (the gear on the top right) and it will contain links where to get such keys.  The lead developer is spending only about $2/month on Gemini and Claude together, so the cost should be very low.
 
 ## Overview
 
