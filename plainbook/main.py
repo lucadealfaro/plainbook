@@ -653,7 +653,9 @@ def logger_middleware(app):
     return wrapper
     
     
-def main():   
+def main():
+    from . import __version__
+    print(f"Plainbook {__version__}")
     port = find_free_port()
     url = f"http://127.0.0.1:{port}/?token={AUTH_TOKEN}"
     if args.debug:  

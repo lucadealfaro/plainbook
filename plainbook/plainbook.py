@@ -108,6 +108,16 @@ This is the previous code for the cell; it might need revision as some of the pr
 """
 
 
+def _generate_random_name():
+    """Generates a random pronounceable name like 'bakace_runabi'."""
+    import random
+    vowels = 'aeiou'
+    consonants = 'bcdfghjklmnpqrstvwxyz'
+    def _random_word():
+        return ''.join(random.choice(consonants) + random.choice(vowels) for _ in range(3))
+    return _random_word() + '_' + _random_word()
+
+
 class Plainbook:
     """Plainbook implementation backed by the snapshot kernel."""
 
@@ -1131,6 +1141,8 @@ class Plainbook:
             name_fn = AI_PROVIDERS[ai_provider]["name"]
         # Call AI outside the lock (network I/O)
         raw_name = name_fn(api_key, explanation, model=model, debug=self.debug, dump_ai_requests=self.dump_ai_requests)
+        if not raw_name:
+            raw_name = _generate_random_name()
         # Sanitize: split into words, keep first 3, lowercase, remove punctuation, join with underscores
         words = raw_name.split()[:3]
         words = [re.sub(r'[^a-z0-9]', '', w.lower()) for w in words]
