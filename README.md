@@ -10,7 +10,7 @@ This allows you to share your data analysis and science with a much wider audien
 When you share a plainbook, recipients can use AI to check that the "notebook does not lie", that is, that the code implementation is faithful to the natural language description, and they can also run tests, as a further check. 
 Recipients can also edit the natural language description, and regenerate the code, to adapt the notebook to their needs.
 
-In other words, the goal of Plainbooks is to replicate in natural language what made Juptyter notebooks so successful: the ability to share together code and results, the ability to inspect how the results are obtained, and the ability to modify the notebook. 
+In other words, the goal of the Plainbook project is to replicate in natural language what made Juptyter notebooks so successful: the ability to share together code and results, the ability to inspect how the results are obtained, and the ability to modify the notebook. 
 
 ## Installation and use
 
