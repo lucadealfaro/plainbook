@@ -14,13 +14,6 @@ In other words, the goal of the Plainbook project is to replicate in natural lan
 
 ## Installation and use
 
-To install Plainbook, you might first want to create a Python environment:
-
-```bash
-python -m venv .venv
-source .venv/bin/activate  # On Windows, use `.venv\Scripts\activate`
-```
-
 You can install Plainbook with pip: 
 
 ```bash
