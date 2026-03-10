@@ -6,11 +6,13 @@ This is a project to create a plain language version of Python notebooks.
 
 Plainbooks are stored using the same format as Jupyter notebooks, but differ in the way in 
 which the format is interpreted. 
-A plainbook has two kinds of cells: 
+A plainbook has three kinds of cells: 
 
 * **Action Cells:** In an action cell, the cell.markdown.explanation contains a description in plain language of what the cell should do.  The cell is represented similarly to a code cell of Jupyter.  The source code is generated automatically from the explanation using an LLM, and it is stored in cell.source. 
 
-* **Comment cells:** These are like the markdown cells in Jupyter. 
+* **Comment cells:** These are like the markdown cells in Jupyter.
+
+* **Test cells:** These are cells, from which tests are generated automatically using AI. Unlike in action cells, test cells have access to the status of all prior cells, so that one can write assertions that compare the status across different cells.  The source code is generated automatically, and stored in cell.source. 
 
 ## Code organization
 
@@ -22,6 +24,7 @@ The server code is written in Python, on top of the bottle.py web server.
 The main files are as follows:
 * main.py : web interface.
 * plainbook.py : contains the `Plainbook` class, with methods for saving cell content, executing cells, and so on. It uses the snapshot kernel (https://github.com/lucadealfaro/snapshot-kernel) for code execution.
+* ai_common.py : common code for AI interfaces.
 * gemini.py : interface to Gemini LLM for code generation and verification.
 * claude.py : interface to Claude LLM for code generation and verification.
 
@@ -44,6 +47,13 @@ The CSS is in css/main.css.  This file is not edited per se; see the css/README.
 Essentially, the css/main.css file is generated from css/main.scss using: 
 
     npm run build
+
+#### HTML conventions
+
+We use boxincons, that have a form such as <i class="bx bx-play"></i>.
+Communication with the server for the notebook is done in nb.js.  
+Communication for other purposes is done in the various vue compoments as appropriate. 
+
 
 ## Architecture note
 
