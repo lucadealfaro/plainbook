@@ -10,7 +10,15 @@ This allows you to share your data analysis and science with a much wider audien
 When you share a plainbook, recipients can use AI to check that the "notebook does not lie", that is, that the code implementation is faithful to the natural language description, and they can also run tests, as a further check. 
 Recipients can also edit the natural language description, and regenerate the code, to adapt the notebook to their needs.
 
-In other words, the goal of the Plainbook project is to replicate in natural language what made Juptyter notebooks so successful: the ability to share together code and results, the ability to inspect how the results are obtained, and the ability to modify the notebook. 
+Thus, the goal of the Plainbook project is to replicate in natural language what made Juptyter notebooks so successful: the ability to share together code and results, so that any recipient can validate and modify the notebook.
+
+### Trying Plainbook 
+
+* [30s short video](https://youtu.be/0t4ND8wPoYA)
+* [5 min Introductory video](https://youtu.be/Mkv5cl5rA7s). 
+* Plainbook on soccer matches: [Download Soccer_w_Tests.plnb](https://github.com/lucadealfaro/plainbook/raw/main/examples/Soccer_w_Tests.plnb).  
+
+You can also run plainbook on codespaces. Just open the codespace (Click on Code > Codespaces in the GitHub interface), be patient while it installs the dependencies, and then click on the green "Open in Browser" button on the bottom right.  This will open the Soccer plainbook of the short video above, which you can edit and run.
 
 ## Installation and use
 
@@ -29,14 +37,6 @@ plainbook notebook.nlb
 You can use any file name you like, with any extension you like. 
 
 **AI API Keys.** You need a Gemini or Claude API key to use Plainbook.  Click on the Settings button (the gear on the top right) and it will contain links where to get such keys.  The lead developer is spending only about $2/month on Gemini and Claude together, so the cost should be very low.
-
-### Examples 
-
-* [30s short video](https://youtu.be/0t4ND8wPoYA)
-* [5 min Introductory video](https://youtu.be/Mkv5cl5rA7s). 
-* Plainbook on soccer matches: [Download Soccer_w_Tests.plnb](https://github.com/lucadealfaro/plainbook/raw/main/examples/Soccer_w_Tests.plnb).  
-
-You can also run plainbook on codespaces. Just open the codespace, be patient while it installs the dependencies, and then click on the green "Open in Browser" button on the bottom right.  This will open the Soccer plainbook of the short video above, which you can edit and run.
 
 ### Resources
 
