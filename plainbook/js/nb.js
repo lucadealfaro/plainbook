@@ -205,6 +205,28 @@ createApp({
             }
         };
 
+        const ui_generateNotebookSummary = async () => {
+            if (!activeAiProvider.value) {
+                throw new Error('No AI provider is active. Please set an API key in Settings.');
+            }
+            flushActiveEdits();
+            await waitForPendingSaves();
+            asRead.value = false;
+            try {
+                running.value = true;
+                runningActivity.value = { type: 'generating', cellIndex: 0, cellName: 'Notebook summary' };
+                const r = await apiCall('/generate_notebook_summary', 'POST');
+                if (r.status !== 'success') throw new Error(r.message || 'Summary generation failed');
+                await reloadNotebook();
+                activeIndex.value = 0;
+            } catch (err) {
+                throw new Error('Failed to generate notebook summary', { cause: err });
+            } finally {
+                running.value = false;
+                runningActivity.value = { type: null, cellIndex: null };
+            }
+        };
+
         const sendExplanationToServer = async (content, cellIndex) => {
             asRead.value = false;
             const savePromise = (async () => {
@@ -867,7 +889,8 @@ createApp({
             explanationEditKey, deleteCell, moveCell,
             clearOutputs, activeAiProvider, availableAiProviders, setActiveAiProvider, isCodespace, hasGeminiKey, hasClaudeKey,
             restarting, ui_restart,
-            ui_runTestCell, ui_runAllTests, ui_saveExplanationAndRunTest, ui_forceRegenerateTestCode };
+            ui_runTestCell, ui_runAllTests, ui_saveExplanationAndRunTest, ui_forceRegenerateTestCode,
+            ui_generateNotebookSummary };
     },
 
 template: `#app-template`,

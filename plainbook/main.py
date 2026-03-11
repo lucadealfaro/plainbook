@@ -512,6 +512,24 @@ def generate_test_code():
         return dict(status='cancelled', code=None)
 
 
+@post('/generate_notebook_summary')
+@stateful
+@require_token
+def generate_notebook_summary():
+    api_key, ai_provider, model, error = _get_ai_config()
+    if error:
+        return dict(status='error', message=error)
+    try:
+        cell, index = notebook.generate_notebook_summary(
+            api_key, ai_provider=ai_provider, model=model)
+    except Exception as e:
+        friendly = _check_billing_error(e)
+        if friendly:
+            return dict(status='error', message=friendly)
+        raise
+    return dict(status='success', cell=cell, index=index)
+
+
 @post('/execute_test_cell')
 @stateful
 @require_token

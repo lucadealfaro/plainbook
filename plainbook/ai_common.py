@@ -45,6 +45,17 @@ Return ONLY the code, no markdown formatting or explanations.
 Use assert statements for testing.
 """
 
+NOTEBOOK_SUMMARY_INSTRUCTIONS = """
+You are an assistant that writes a concise markdown summary for a Jupyter notebook.
+You are given the notebook cells in JSON format, along with outputs (if any) and
+available variable descriptions.
+Write a short first comment cell in markdown that summarizes:
+- the notebook goal
+- the main steps or sections
+- the key outputs or findings when they are visible
+Return ONLY markdown. Do not wrap the result in code fences.
+"""
+
 NAME_GENERATION_INSTRUCTIONS = """You need to summarize what a notebook cell does using two or three words.
 You will be given the cell's explanation, which describes what the cell does.
 Please return at least 2 words, and at most 3. Return only these words."""
@@ -224,6 +235,20 @@ def strip_markdown_code_fences(code):
     if code.endswith("```"):
         code = code[:-3].strip()
     return code
+
+
+def strip_markdown_fences(text):
+    """Strip markdown fences from generated markdown text."""
+    text = text.strip()
+    if text.startswith("```markdown"):
+        text = text[len("```markdown"):].strip()
+    elif text.startswith("```md"):
+        text = text[len("```md"):].strip()
+    elif text.startswith("```"):
+        text = text[3:].strip()
+    if text.endswith("```"):
+        text = text[:-3].strip()
+    return text
 
 
 def parse_validation_response(text):

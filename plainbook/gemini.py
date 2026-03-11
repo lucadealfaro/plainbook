@@ -4,6 +4,7 @@ from google.genai import types
 from .ai_common import (
     SYSTEM_INSTRUCTIONS,
     TEST_SYSTEM_INSTRUCTIONS,
+    NOTEBOOK_SUMMARY_INSTRUCTIONS,
     CHECKING_INSTRUCTIONS,
     NAME_GENERATION_INSTRUCTIONS,
     build_context_prompt,
@@ -11,6 +12,7 @@ from .ai_common import (
     dump_ai_request,
     log_ai_request_size,
     parse_validation_response,
+    strip_markdown_fences,
     strip_markdown_code_fences,
 )
 
@@ -143,6 +145,46 @@ Code:
         print("Response:", response.text)
     code = strip_markdown_code_fences(response.text)
     return code
+
+
+def gemini_generate_notebook_summary(
+    api_key,
+    preceding_code=None,
+    file_context=None,
+    model=None,
+    debug=False,
+    dump_ai_requests=False):
+    client = genai.Client(api_key=api_key)
+    model = model or GEMINI_GENERATE_MODEL
+
+    prompt = build_context_prompt(
+        preceding=preceding_code,
+        file_context=file_context)
+    prompt += """
+INSTRUCTIONS for Notebook Summary:
+Write a concise markdown summary for the notebook to be inserted as the first comment cell.
+Prefer a short title and 2-4 bullet points covering the notebook goal, main steps,
+and key findings when visible.
+
+Markdown:
+"""
+
+    if debug:
+        log_ai_request_size("gemini generate_notebook_summary", NOTEBOOK_SUMMARY_INSTRUCTIONS, prompt,
+                            preceding=preceding_code, file_context=file_context)
+    if dump_ai_requests:
+        dump_ai_request("gemini generate_notebook_summary", NOTEBOOK_SUMMARY_INSTRUCTIONS, prompt)
+
+    response = client.models.generate_content(
+        model=model,
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            system_instruction=NOTEBOOK_SUMMARY_INSTRUCTIONS
+        )
+    )
+    if debug:
+        print("Response:", response.text)
+    return strip_markdown_fences(response.text)
 
 
 def gemini_validate_code(api_key, previous_code, code_to_validate, instructions, variable_context=None, model=None, debug=False, dump_ai_requests=False):

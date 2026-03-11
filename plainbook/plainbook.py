@@ -15,12 +15,12 @@ import uuid
 import nbformat
 import requests
 
-from .gemini import gemini_generate_code, gemini_validate_code, gemini_generate_cell_name, gemini_generate_test_code
-from .claude import claude_generate_code, claude_validate_code, claude_generate_cell_name, claude_generate_test_code
+from .gemini import gemini_generate_code, gemini_validate_code, gemini_generate_cell_name, gemini_generate_test_code, gemini_generate_notebook_summary
+from .claude import claude_generate_code, claude_validate_code, claude_generate_cell_name, claude_generate_test_code, claude_generate_notebook_summary
 
 AI_PROVIDERS = {
-    "gemini": {"generate": gemini_generate_code, "validate": gemini_validate_code, "name": gemini_generate_cell_name, "generate_test": gemini_generate_test_code},
-    "claude": {"generate": claude_generate_code, "validate": claude_validate_code, "name": claude_generate_cell_name, "generate_test": claude_generate_test_code},
+    "gemini": {"generate": gemini_generate_code, "validate": gemini_validate_code, "name": gemini_generate_cell_name, "generate_test": gemini_generate_test_code, "summarize_notebook": gemini_generate_notebook_summary},
+    "claude": {"generate": claude_generate_code, "validate": claude_validate_code, "name": claude_generate_cell_name, "generate_test": claude_generate_test_code, "summarize_notebook": claude_generate_notebook_summary},
 }
 
 MAX_OUTPUT_CHARS_FOR_AI = 2000
@@ -945,6 +945,58 @@ class Plainbook:
                     return new_code, True
                 else:
                     return None, False
+            finally:
+                self.ai_request_pending = False
+
+    def generate_notebook_summary(self, api_key, ai_provider="gemini", model=None):
+        """Generate or refresh the notebook summary markdown cell at index 0."""
+        with self._lock:
+            summary_exists = (
+                len(self.nb.cells) > 0 and
+                self.nb.cells[0].cell_type == 'markdown' and
+                self.nb.cells[0].metadata.get('plainbook_summary')
+            )
+            cells = [
+                self._get_cell_json_for_ai(i)
+                for i in range(len(self.nb.cells))
+                if self.nb.cells[i].cell_type != 'test' and not (summary_exists and i == 0)
+            ]
+            context_nb = nbformat.v4.new_notebook()
+            context_nb.cells = cells
+            preceding_code = nbformat.writes(context_nb, indent=4)
+            files_context = self._get_files_context()
+            if self.ai_request_pending:
+                raise RuntimeError("An AI request is already pending.")
+            try:
+                self.ai_request_pending = True
+                summarize_fn = AI_PROVIDERS[ai_provider]["summarize_notebook"]
+                summary_md = summarize_fn(
+                    api_key,
+                    preceding_code=preceding_code,
+                    file_context=files_context,
+                    model=model,
+                    debug=self.debug,
+                    dump_ai_requests=self.dump_ai_requests)
+                summary_md = tostring(summary_md).strip()
+                if not summary_md:
+                    raise RuntimeError("AI summary generation returned empty content.")
+                if summary_exists:
+                    cell = self.nb.cells[0]
+                    cell.source = summary_md
+                else:
+                    cell = nbformat.v4.new_markdown_cell(source=summary_md)
+                    self.nb.cells.insert(0, cell)
+                    if self.last_executed_cell >= 0:
+                        self.last_executed_cell += 1
+                    if self.last_valid_code_cell >= 0:
+                        self.last_valid_code_cell += 1
+                    if self.last_valid_output_cell >= 0:
+                        self.last_valid_output_cell += 1
+                    if self.last_valid_test_cell >= 0:
+                        self.last_valid_test_cell += 1
+                cell.metadata['plainbook_summary'] = True
+                self._write()
+                return cell, 0
             finally:
                 self.ai_request_pending = False
 
