@@ -64,8 +64,7 @@ createApp({
 
         // For settings modal
         const showSettings = ref(false);
-        const geminiApiKey = ref('');
-        const claudeApiKey = ref('');
+        // API keys are never stored client-side; only presence flags are used.
         const activeAiProvider = ref(null);
         const aiProviderRegistry = ref([]);
         const isCodespace = ref(false);
@@ -74,8 +73,8 @@ createApp({
 
         const availableAiProviders = computed(() => {
             const apiKeys = {
-                'gemini_api_key': geminiApiKey.value || hasGeminiKey.value,
-                'claude_api_key': claudeApiKey.value || hasClaudeKey.value,
+                'gemini_api_key': hasGeminiKey.value,
+                'claude_api_key': hasClaudeKey.value,
             };
             return aiProviderRegistry.value.filter(p => !!apiKeys[p.key_setting]);
         });
@@ -158,8 +157,6 @@ createApp({
                 loading.value = true;
                 const r = await apiCall('/get_notebook');
                 notebook.value = r.nb;
-                geminiApiKey.value = r.gemini_api_key || '';
-                claudeApiKey.value = r.claude_api_key || '';
                 activeAiProvider.value = r.active_ai_provider || null;
                 aiProviderRegistry.value = r.ai_providers || [];
                 debug.value = r.debug || false;
@@ -802,11 +799,16 @@ createApp({
                 if (r.active_ai_provider !== undefined) {
                     activeAiProvider.value = r.active_ai_provider;
                 }
+                // Update presence flags from server response
+                if (r.has_gemini_key !== undefined) {
+                    hasGeminiKey.value = r.has_gemini_key;
+                }
+                if (r.has_claude_key !== undefined) {
+                    hasClaudeKey.value = r.has_claude_key;
+                }
             } catch (err) {
                 throw new Error('Error saving API keys', { cause: err });
             }
-            geminiApiKey.value = keys.gemini_api_key;
-            claudeApiKey.value = keys.claude_api_key;
         };
 
         const setActiveAiProvider = async (providerId) => {
@@ -862,7 +864,7 @@ createApp({
             last_valid_test_cell_index,
             saveSettings, showSettings, showInfo, showTestHelp,
             genError, uiError, closeUiError, debug, sendDebugRequest,
-            explanationEditKey, deleteCell, moveCell, geminiApiKey, claudeApiKey,
+            explanationEditKey, deleteCell, moveCell,
             clearOutputs, activeAiProvider, availableAiProviders, setActiveAiProvider, isCodespace, hasGeminiKey, hasClaudeKey,
             restarting, ui_restart,
             ui_runTestCell, ui_runAllTests, ui_saveExplanationAndRunTest, ui_forceRegenerateTestCode };

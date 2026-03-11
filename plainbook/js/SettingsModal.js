@@ -1,34 +1,54 @@
 import { ref, watch } from './vue.esm-browser.js';
 
 export default {
-    props: ['isActive', 'geminiApiKey', 'claudeApiKey', 'isCodespace', 'hasGeminiKey', 'hasClaudeKey'],
+    props: ['isActive', 'isCodespace', 'hasGeminiKey', 'hasClaudeKey'],
     emits: ['close', 'save'],
     setup(props, { emit }) {
-        const localGeminiKey = ref(props.geminiApiKey);
-        const localClaudeKey = ref(props.claudeApiKey);
+        const localGeminiKey = ref('');
+        const localClaudeKey = ref('');
+        // Track whether the user has clicked to edit each field
+        const geminiEditing = ref(false);
+        const claudeEditing = ref(false);
+        // Track whether the user wants to remove a key
+        const geminiRemoved = ref(false);
+        const claudeRemoved = ref(false);
 
-        // Sync local drafts whenever the modal is opened
+        // Reset inputs whenever the modal is opened
         watch(() => props.isActive, (active) => {
             if (active) {
-                if (props.isCodespace) {
-                    // In Codespaces, always show empty inputs (never reveal existing keys)
-                    localGeminiKey.value = '';
-                    localClaudeKey.value = '';
-                } else {
-                    localGeminiKey.value = props.geminiApiKey;
-                    localClaudeKey.value = props.claudeApiKey;
-                }
+                localGeminiKey.value = '';
+                localClaudeKey.value = '';
+                geminiEditing.value = false;
+                claudeEditing.value = false;
+                geminiRemoved.value = false;
+                claudeRemoved.value = false;
             }
         });
 
+        const startEditing = (provider) => {
+            if (provider === 'gemini') {
+                geminiEditing.value = true;
+            } else {
+                claudeEditing.value = true;
+            }
+        };
+
+        const removeKey = (provider) => {
+            if (provider === 'gemini') {
+                geminiRemoved.value = true;
+            } else {
+                claudeRemoved.value = true;
+            }
+        };
+
         const handleSave = () => {
             emit('save', {
-                gemini_api_key: localGeminiKey.value || '',
-                claude_api_key: localClaudeKey.value || '',
+                gemini_api_key: geminiRemoved.value ? null : ((geminiEditing.value || !props.hasGeminiKey) ? localGeminiKey.value : ''),
+                claude_api_key: claudeRemoved.value ? null : ((claudeEditing.value || !props.hasClaudeKey) ? localClaudeKey.value : ''),
             });
         };
 
-        return { localGeminiKey, localClaudeKey, handleSave };
+        return { localGeminiKey, localClaudeKey, geminiEditing, claudeEditing, geminiRemoved, claudeRemoved, startEditing, removeKey, handleSave };
     },
     template: /* html */ `
     <div class="modal" :class="{'is-active': isActive}">
@@ -39,32 +59,57 @@ export default {
                 <button class="delete" aria-label="close" @click="$emit('close')"></button>
             </header>
             <section class="modal-card-body">
-                <div v-if="isCodespace && (hasGeminiKey || hasClaudeKey)" class="notification is-info is-light mb-4">
-                    Default API keys are pre-configured. You can enter your own keys below to override them.
-                </div>
                 <div class="field">
                     <label class="label">Gemini API Key</label>
-                    <div class="control">
+                    <div class="control" v-if="geminiRemoved">
+                        <div class="input" style="color: #b5b5b5; background-color: #f5f5f5; font-style: italic;">
+                            Key will be removed on save
+                        </div>
+                    </div>
+                    <div class="control" v-else-if="hasGeminiKey && !geminiEditing">
+                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                            <div class="input" style="cursor: pointer; color: #888; background-color: #f5f5f5;"
+                                 @click="startEditing('gemini')">
+                                ●●●●●●●●●●●●
+                            </div>
+                            <button class="button is-small is-danger is-outlined" @click="removeKey('gemini')"><i class="bx bx-trash"></i></button>
+                        </div>
+                    </div>
+                    <div class="control" v-else>
                         <input class="input" type="text"
                                v-model="localGeminiKey"
-                               :placeholder="isCodespace && hasGeminiKey ? 'Pre-configured key in use' : 'Enter your Gemini API key (optional)'">
+                               :placeholder="hasGeminiKey ? 'Enter new key (leave blank to keep current)' : 'Enter your Gemini API key (optional)'">
                     </div>
                     <p class="help">
                         <a href="https://aistudio.google.com/app/apikey" target="_blank" class="button is-small is-link is-light" style="margin-top: 0.5rem;">
-                            {{ localGeminiKey ? 'Manage Gemini API Key' : 'Get Gemini API Key' }}
+                            {{ hasGeminiKey ? 'Manage Gemini API Key' : 'Get Gemini API Key' }}
                         </a>
                     </p>
                 </div>
                 <div class="field">
                     <label class="label">Claude API Key</label>
-                    <div class="control">
+                    <div class="control" v-if="claudeRemoved">
+                        <div class="input" style="color: #b5b5b5; background-color: #f5f5f5; font-style: italic;">
+                            Key will be removed on save
+                        </div>
+                    </div>
+                    <div class="control" v-else-if="hasClaudeKey && !claudeEditing">
+                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                            <div class="input" style="cursor: pointer; color: #888; background-color: #f5f5f5;"
+                                 @click="startEditing('claude')">
+                                ●●●●●●●●●●●●
+                            </div>
+                            <button class="button is-small is-danger is-outlined" @click="removeKey('claude')"><i class="bx bx-trash"></i></button>
+                        </div>
+                    </div>
+                    <div class="control" v-else>
                         <input class="input" type="text"
                                v-model="localClaudeKey"
-                               :placeholder="isCodespace && hasClaudeKey ? 'Pre-configured key in use' : 'Enter your Claude API key (optional)'">
+                               :placeholder="hasClaudeKey ? 'Enter new key (leave blank to keep current)' : 'Enter your Claude API key (optional)'">
                     </div>
                     <p class="help">
                         <a href="https://console.anthropic.com/settings/keys" target="_blank" class="button is-small is-link is-light" style="margin-top: 0.5rem;">
-                            {{ localClaudeKey ? 'Manage Claude API Key' : 'Get Claude API Key' }}
+                            {{ hasClaudeKey ? 'Manage Claude API Key' : 'Get Claude API Key' }}
                         </a>
                     </p>
                 </div>

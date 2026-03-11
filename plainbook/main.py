@@ -59,6 +59,11 @@ try:
 except FileNotFoundError:
     settings = {}
 
+# _saved_settings tracks what was loaded from (and should be written to) the file.
+# Environment-variable keys are applied only to the in-memory settings dict so
+# they are never persisted to disk.
+_saved_settings = dict(settings)
+
 # Fill in missing API keys from environment variables (e.g. Codespaces secrets)
 for env_var, setting_key in [('CLAUDE_API_KEY', 'claude_api_key'), ('GEMINI_API_KEY', 'gemini_api_key')]:
     if not settings.get(setting_key) and os.environ.get(env_var):
@@ -246,8 +251,6 @@ def get_notebook():
     _in_codespace = bool(os.environ.get('CODESPACES'))
     return dict(
         nb=notebook.get_json(),
-        gemini_api_key=('' if _in_codespace else settings.get('gemini_api_key')),
-        claude_api_key=('' if _in_codespace else settings.get('claude_api_key')),
         has_gemini_key=bool(settings.get('gemini_api_key')),
         has_claude_key=bool(settings.get('claude_api_key')),
         debug=args.debug,
@@ -262,22 +265,38 @@ def set_key():
     data = request.json
     gemini_api_key = data.get('gemini_api_key', '')
     claude_api_key = data.get('claude_api_key', '')
-    # In Codespaces, preserve env-var keys when user saves with empty fields
-    if os.environ.get('CODESPACES'):
-        if not gemini_api_key and os.environ.get('GEMINI_API_KEY'):
-            gemini_api_key = os.environ['GEMINI_API_KEY']
-        if not claude_api_key and os.environ.get('CLAUDE_API_KEY'):
-            claude_api_key = os.environ['CLAUDE_API_KEY']
+    # Protocol: null = explicitly remove, '' = unchanged, non-empty = set new key.
+    if gemini_api_key is None:
+        gemini_api_key = ''
+    elif gemini_api_key == '':
+        gemini_api_key = _saved_settings.get('gemini_api_key', '')
+    if claude_api_key is None:
+        claude_api_key = ''
+    elif claude_api_key == '':
+        claude_api_key = _saved_settings.get('claude_api_key', '')
+    # Save only user-provided keys to the file (never env-var keys)
+    _saved_settings['gemini_api_key'] = gemini_api_key
+    _saved_settings['claude_api_key'] = claude_api_key
     settings['gemini_api_key'] = gemini_api_key
     settings['claude_api_key'] = claude_api_key
-    # Save settings to file
     try:
         with open(SETTINGS_FILE, 'w') as f:
-            yaml.dump(settings, f)
-        active = _ensure_active_ai_provider()
-        return dict(status='success', active_ai_provider=active)
+            yaml.dump(dict(_saved_settings), f)
     except Exception as e:
         return dict(status='error', message=str(e))
+    # After saving, apply env-var fallbacks to in-memory settings only
+    if os.environ.get('CODESPACES'):
+        if not settings['gemini_api_key'] and os.environ.get('GEMINI_API_KEY'):
+            settings['gemini_api_key'] = os.environ['GEMINI_API_KEY']
+        if not settings['claude_api_key'] and os.environ.get('CLAUDE_API_KEY'):
+            settings['claude_api_key'] = os.environ['CLAUDE_API_KEY']
+    active = _ensure_active_ai_provider()
+    return dict(
+        status='success',
+        active_ai_provider=active,
+        has_gemini_key=bool(settings.get('gemini_api_key')),
+        has_claude_key=bool(settings.get('claude_api_key')),
+    )
 
 @post('/set_active_ai')
 @require_token
