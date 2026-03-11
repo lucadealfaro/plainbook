@@ -16,7 +16,7 @@ Thus, the goal of the Plainbook project is to replicate in natural language what
 
 * [30s short video](https://youtu.be/0t4ND8wPoYA)
 * [5 min Introductory video](https://youtu.be/Mkv5cl5rA7s). 
-* **Run it on Codespaces:** You can run plainbook right here on GitHub. Create a codespace (Click on Code > Codespaces in the GitHub interface); be patient while it installs the dependencies. After about 3 minutes, there will be a browser tab / popup window created, with the example Soccer plainbook in it. You need API keys for Gemini or Claude to use AI features.  You can contact the lead developer for test keys. 
+* **Run it on Codespaces:** You can run plainbook right here on GitHub. Create a codespace (Click on Code > Codespaces in the GitHub interface); be patient while it installs the dependencies. After about 3 minutes, there will be a browser tab / popup window created, with the example Soccer plainbook in it.  You will need to add a Gemini or Claude key in the settings.
 
 Example plainbooks:
 * Plainbook on soccer matches: [Download Soccer_w_Tests.plnb](https://github.com/lucadealfaro/plainbook/raw/main/examples/Soccer_w_Tests.plnb).  
