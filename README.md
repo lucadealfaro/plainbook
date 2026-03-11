@@ -17,9 +17,9 @@ Thus, the goal of the Plainbook project is to replicate in natural language what
 * [5 min Introductory video](https://youtu.be/Mkv5cl5rA7s). 
 * **Run it on Codespaces:** You can run plainbook right here on GitHub, with a trial Claude key, as follows:
     * Create a codespace (Click on Code > Codespaces in the GitHub interface).
-    * Wait about 3 minutes, until after it finishes the postStartCommand.  Be patient, it takes long time. 
-    * Once you see the green "Open in Browser" button, press it. 
-    * The Claude key provided in the trial has limited spend that may run out. 
+    * Wait about 3 minutes, until after it finishes the postStartCommand.
+    * Once you see the button "Open in Browser" for port 8080 on the lower right, press it. 
+    * The Claude key provided in the trial has a low spending limit, and might not work.  You can add your own keys. 
 
 Example plainbooks:
 * Plainbook on soccer matches: [Download Soccer_w_Tests.plnb](https://github.com/lucadealfaro/plainbook/raw/main/examples/Soccer_w_Tests.plnb).  
@@ -41,7 +41,7 @@ plainbook notebook.nlb
 
 You can use any file name you like, with any extension you like. 
 
-**AI API Keys.** You need a Gemini or Claude API key to use Plainbook.  Click on the Settings button (the gear on the top right) and it will contain links where to get such keys.  The lead developer is spending only about $2/month on Gemini and Claude together, so the cost should be very low.
+**AI API Keys.** You need a Gemini or Claude API key to use Plainbook.  Click on the Settings button (the gear on the top right) to see instructions on how to set them.  The lead developer is spending only about $2/month on Gemini and Claude together, so the expense should be very low.
 
 ### Resources
 
