@@ -36,6 +36,7 @@ APP_NAME = "plainbook"
 CONFIG_DIR = Path.home() / ".config" / APP_NAME
 CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 SETTINGS_FILE = CONFIG_DIR / "settings.yaml"
+INVALID_TOKEN_MESSAGE = '<p class="has-text-danger has-text-centered mb-4">Invalid token. Please try again.</p>'
 
 # Parse command line arguments
 parser = argparse.ArgumentParser(description='Run the plainbook notebook server')
@@ -222,6 +223,8 @@ def index():
     token = request.query.get('token')
     if token == AUTH_TOKEN:
         return static_file('index.html', root=os.path.join(APP_FOLDER, 'views'))
+    if os.environ.get('CODESPACES'):
+        redirect('/?token=' + AUTH_TOKEN)
     return template('login', error_message='')
 
 @post('/login')
@@ -229,7 +232,7 @@ def login():
     token = request.forms.get('token', '').strip()
     if token == AUTH_TOKEN:
         redirect('/?token=' + AUTH_TOKEN)
-    return template('login', error_message='<p class="has-text-danger has-text-centered mb-4">Invalid token. Please try again.</p>')
+    return template('login', error_message=INVALID_TOKEN_MESSAGE)
 
 @get('/get_notebook')
 @stateful
