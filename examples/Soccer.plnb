@@ -802,13 +802,7 @@
  ],
  "metadata": {
   "ai_instructions": "",
-  "input_files": [
-   {
-    "name": "soccer.csv",
-    "path": "/Users/luca/Lavoro/work/Plainbook_example/SimpleExamples/soccer.csv",
-    "type": "file"
-   }
-  ],
+  "input_files": [],
   "is_locked": false,
   "last_valid_code_cell": 2,
   "last_valid_output": 2,
