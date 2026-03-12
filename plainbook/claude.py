@@ -3,6 +3,7 @@ import anthropic
 from .ai_common import (
     SYSTEM_INSTRUCTIONS,
     TEST_SYSTEM_INSTRUCTIONS,
+    NOTEBOOK_SUMMARY_INSTRUCTIONS,
     CHECKING_INSTRUCTIONS,
     NAME_GENERATION_INSTRUCTIONS,
     build_context_prompt,
@@ -10,6 +11,7 @@ from .ai_common import (
     dump_ai_request,
     log_ai_request_size,
     parse_validation_response,
+    strip_markdown_fences,
     strip_markdown_code_fences,
 )
 
@@ -141,6 +143,46 @@ Code:
         print("Response:", response_text)
     code = strip_markdown_code_fences(response_text)
     return code
+
+
+def claude_generate_notebook_summary(
+    api_key,
+    preceding_code=None,
+    file_context=None,
+    model=None,
+    debug=False,
+    dump_ai_requests=False):
+    client = anthropic.Anthropic(api_key=api_key)
+    model = model or CLAUDE_MODEL
+
+    prompt = build_context_prompt(
+        preceding=preceding_code,
+        file_context=file_context)
+    prompt += """
+INSTRUCTIONS for Notebook Summary:
+Write a concise markdown summary for the notebook to be inserted as the first comment cell.
+Prefer a short title and 2-4 bullet points covering the notebook goal, main steps,
+and key findings when visible.
+
+Markdown:
+"""
+
+    if debug:
+        log_ai_request_size("claude generate_notebook_summary", NOTEBOOK_SUMMARY_INSTRUCTIONS, prompt,
+                            preceding=preceding_code, file_context=file_context)
+    if dump_ai_requests:
+        dump_ai_request("claude generate_notebook_summary", NOTEBOOK_SUMMARY_INSTRUCTIONS, prompt)
+
+    message = client.messages.create(
+        model=model,
+        max_tokens=1024,
+        system=NOTEBOOK_SUMMARY_INSTRUCTIONS,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    response_text = message.content[0].text
+    if debug:
+        print("Response:", response_text)
+    return strip_markdown_fences(response_text)
 
 
 def claude_validate_code(api_key, previous_code, code_to_validate, instructions, variable_context=None, model=None, debug=False, dump_ai_requests=False):

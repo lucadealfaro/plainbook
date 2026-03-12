@@ -4,7 +4,7 @@ export default {
     emits: [
         'lock', 'refresh', 'interrupt', 'regenerate-all',
         'restart', 'reset-run-all', 'run-all', 'run-all-tests', 'clear-outputs', 'open-info', 'open-settings', 'debug-request',
-        'set-ai-provider', 'toggle-share-output'
+        'set-ai-provider', 'toggle-share-output', 'generate-summary'
         ],
     data() {
         return { aiDropdownOpen: false };
@@ -149,6 +149,16 @@ export default {
                             class="button is-warning">
                             <span class="icon"><i class="bx bx-seal-check"></i></span>
                             <span>Run tests</span>
+                        </button>
+
+                        <button v-if="hasNotebook"
+                            :disabled="cellCount === 0 || running"
+                            @mousedown.prevent
+                            @click="$emit('generate-summary')"
+                            title="Generate notebook summary"
+                            class="button is-link">
+                            <span class="icon"><i class="bx bx-notepad"></i></span>
+                            <span>Summary</span>
                         </button>
 
         </div>
