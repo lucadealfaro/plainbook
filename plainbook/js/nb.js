@@ -29,6 +29,7 @@ createApp({
         const explanationEditKey = ref({});
         const isLocked = ref(false);
         const shareOutputWithAi = ref(true);
+        const aiTokens = ref({input: 0, output: 0});
         const debug = ref(false);
         // For running a notebook.
         const running = ref(false);
@@ -130,6 +131,9 @@ createApp({
             last_valid_test_cell_index.value = state.last_valid_test_cell;
             isLocked.value = state.is_locked;
             shareOutputWithAi.value = state.share_output_with_ai;
+            if (state.ai_tokens) {
+                aiTokens.value = state.ai_tokens;
+            }
             if (notebook.value && notebook.value.metadata) {
                 notebook.value.metadata.is_locked = state.is_locked;
             }
@@ -853,7 +857,7 @@ createApp({
             window.removeEventListener('click', handleClickOutside);
         });
 
-        return { notebook, notebook_name, loading, error, isLocked, lockNotebook, shareOutputWithAi, toggleShareOutput,
+        return { notebook, notebook_name, loading, error, isLocked, lockNotebook, shareOutputWithAi, aiTokens, toggleShareOutput,
             sendExplanationToServer, authToken,
             sendCodeToServer, clearCellCode, ui_saveExplanationAndRun,
             sendMarkdownToServer, generateCode, activeIndex, reloadNotebook,

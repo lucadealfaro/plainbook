@@ -5,6 +5,7 @@ from .ai_common import (
     TEST_SYSTEM_INSTRUCTIONS,
     CHECKING_INSTRUCTIONS,
     NAME_GENERATION_INSTRUCTIONS,
+    add_tokens,
     build_context_prompt,
     build_name_prompt,
     dump_ai_request,
@@ -85,6 +86,7 @@ Code:
         system=SYSTEM_INSTRUCTIONS,
         messages=[{"role": "user", "content": prompt}],
     )
+    add_tokens(message.usage.input_tokens, message.usage.output_tokens)
     response_text = message.content[0].text
     if debug:
         print("Response:", response_text)
@@ -136,6 +138,7 @@ Code:
         system=TEST_SYSTEM_INSTRUCTIONS,
         messages=[{"role": "user", "content": prompt}],
     )
+    add_tokens(message.usage.input_tokens, message.usage.output_tokens)
     response_text = message.content[0].text
     if debug:
         print("Response:", response_text)
@@ -175,6 +178,7 @@ Validation Result:
         system=CHECKING_INSTRUCTIONS,
         messages=[{"role": "user", "content": prompt}],
     )
+    add_tokens(message.usage.input_tokens, message.usage.output_tokens)
     response_text = message.content[0].text
     if debug:
         print("Response:", response_text)
@@ -195,6 +199,7 @@ def claude_generate_cell_name(api_key, explanation, model=None, debug=False, dum
         system=NAME_GENERATION_INSTRUCTIONS,
         messages=[{"role": "user", "content": prompt}],
     )
+    add_tokens(message.usage.input_tokens, message.usage.output_tokens)
     response_text = message.content[0].text
     if debug:
         print("Response to name generation:", response_text)

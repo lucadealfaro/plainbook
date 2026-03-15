@@ -1,6 +1,6 @@
 export default {
     props: ['isLocked', 'running', 'restarting', 'runningActivity', 'hasNotebook', 'upToDate', 'cellCount', 'hasApiKey', 'debug',
-            'activeAiProvider', 'availableAiProviders', 'shareOutputWithAi'],
+            'activeAiProvider', 'availableAiProviders', 'shareOutputWithAi', 'aiTokens'],
     emits: [
         'lock', 'refresh', 'interrupt', 'regenerate-all',
         'restart', 'reset-run-all', 'run-all', 'run-all-tests', 'clear-outputs', 'open-info', 'open-settings', 'debug-request',
@@ -10,6 +10,16 @@ export default {
         return { aiDropdownOpen: false };
     },
     computed: {
+        totalTokens() {
+            if (!this.aiTokens) return 0;
+            return (this.aiTokens.input || 0) + (this.aiTokens.output || 0);
+        },
+        formattedTokens() {
+            const t = this.totalTokens;
+            if (t >= 1_000_000) return (t / 1_000_000).toFixed(1) + 'M';
+            if (t >= 1_000) return (t / 1_000).toFixed(1) + 'k';
+            return String(t);
+        },
         activeProviderName() {
             if (!this.availableAiProviders || this.availableAiProviders.length === 0) return 'No AI Keys';
             const active = this.availableAiProviders.find(p => p.id === this.activeAiProvider);
@@ -165,6 +175,10 @@ export default {
                                 <i :class="shareOutputWithAi ? 'bx bx-shield' : 'bx bx-check-shield'"></i>
                             </span>
                         </button>
+                        <span v-if="debug" class="tag is-dark" :title="'AI tokens: ' + (aiTokens.input || 0) + ' input, ' + (aiTokens.output || 0) + ' output'" style="cursor: default; margin-right: 0.25rem;">
+                            <span class="icon is-small" style="margin-right: 0.25rem;"><i class="bx bx-chip"></i></span>
+                            {{ formattedTokens }}
+                        </span>
                         <div ref="aiDropdown">
                             <div class="dropdown" :class="{'is-active': aiDropdownOpen}">
                                 <div class="dropdown-trigger">

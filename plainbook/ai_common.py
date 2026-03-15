@@ -10,6 +10,23 @@ CHARS_PER_TOKEN = 4
 MAX_TOKENS_PER_ARGUMENT = 10_000
 _MAX_CHARS_PER_ARGUMENT = MAX_TOKENS_PER_ARGUMENT * CHARS_PER_TOKEN
 
+# Session-level token accumulator
+_session_tokens = {"input": 0, "output": 0}
+
+def add_tokens(input_tokens, output_tokens):
+    """Accumulate token usage from an AI API call."""
+    _session_tokens["input"] += input_tokens or 0
+    _session_tokens["output"] += output_tokens or 0
+
+def get_session_tokens():
+    """Return current session token totals."""
+    return dict(_session_tokens)
+
+def reset_session_tokens():
+    """Zero out session token counters."""
+    _session_tokens["input"] = 0
+    _session_tokens["output"] = 0
+
 SYSTEM_INSTRUCTIONS = """
 You are an assistant that writes Python code for Jupyter cells, and your task is to
 write the code for one Jupyter cell.

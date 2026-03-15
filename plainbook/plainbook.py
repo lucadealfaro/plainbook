@@ -15,6 +15,7 @@ import uuid
 import nbformat
 import requests
 
+from .ai_common import get_session_tokens
 from .gemini import gemini_generate_code, gemini_validate_code, gemini_generate_cell_name, gemini_generate_test_code
 from .claude import claude_generate_code, claude_validate_code, claude_generate_cell_name, claude_generate_test_code
 
@@ -465,6 +466,7 @@ class Plainbook:
             'last_valid_test_cell': self.last_valid_test_cell,
             'is_locked': self.nb.metadata.get('is_locked', False),
             'share_output_with_ai': self.nb.metadata.get('share_output_with_ai', True),
+            'ai_tokens': get_session_tokens(),
         }
         if self.debug:
             print("State: ", json.dumps(state, indent=2))

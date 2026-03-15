@@ -6,6 +6,7 @@ from .ai_common import (
     TEST_SYSTEM_INSTRUCTIONS,
     CHECKING_INSTRUCTIONS,
     NAME_GENERATION_INSTRUCTIONS,
+    add_tokens,
     build_context_prompt,
     build_name_prompt,
     dump_ai_request,
@@ -87,6 +88,8 @@ Code:
             system_instruction=SYSTEM_INSTRUCTIONS
         )
     )
+    if response.usage_metadata:
+        add_tokens(response.usage_metadata.prompt_token_count, response.usage_metadata.candidates_token_count)
     if debug:
         print("Response:", response.text)
     # 4. Process the response
@@ -139,6 +142,8 @@ Code:
             system_instruction=TEST_SYSTEM_INSTRUCTIONS
         )
     )
+    if response.usage_metadata:
+        add_tokens(response.usage_metadata.prompt_token_count, response.usage_metadata.candidates_token_count)
     if debug:
         print("Response:", response.text)
     code = strip_markdown_code_fences(response.text)
@@ -178,6 +183,8 @@ Validation Result:
             system_instruction=CHECKING_INSTRUCTIONS
         )
     )
+    if response.usage_metadata:
+        add_tokens(response.usage_metadata.prompt_token_count, response.usage_metadata.candidates_token_count)
     if debug:
         print("Response:", response.text)
     return parse_validation_response(response.text)
@@ -199,6 +206,8 @@ def gemini_generate_cell_name(api_key, explanation, model=None, debug=False, dum
             max_output_tokens=50,
         ),
     )
+    if response.usage_metadata:
+        add_tokens(response.usage_metadata.prompt_token_count, response.usage_metadata.candidates_token_count)
     if debug:
         print("Response to name generation:", response.text)
     return response.text.strip()
