@@ -671,6 +671,68 @@ def get_ai_instructions():
     return dict(ai_instructions=notebook.get_ai_instructions())
 
 
+## Unit test stub endpoints
+
+@post('/save_unit_tests')
+@stateful
+@require_token
+def save_unit_tests():
+    data = request.json
+    cell_index = data.get('cell_index')
+    unit_tests = data.get('unit_tests', [])
+    notebook.save_unit_tests(cell_index, unit_tests)
+    return dict(status='success')
+
+@post('/save_unit_test_explanation')
+@stateful
+@require_token
+def save_unit_test_explanation():
+    data = request.json
+    cell_index = data.get('cell_index')
+    test_index = data.get('test_index')
+    role = data.get('role')
+    explanation = data.get('explanation')
+    notebook.save_unit_test_explanation(cell_index, test_index, role, explanation)
+    return dict(status='success')
+
+@post('/save_unit_test_code')
+@stateful
+@require_token
+def save_unit_test_code():
+    data = request.json
+    cell_index = data.get('cell_index')
+    test_index = data.get('test_index')
+    role = data.get('role')
+    source = data.get('source')
+    notebook.save_unit_test_code(cell_index, test_index, role, source)
+    return dict(status='success')
+
+@post('/clear_unit_test_code')
+@stateful
+@require_token
+def clear_unit_test_code():
+    data = request.json
+    cell_index = data.get('cell_index')
+    test_index = data.get('test_index')
+    role = data.get('role')
+    notebook.clear_unit_test_code(cell_index, test_index, role)
+    return dict(status='success')
+
+@post('/run_unit_test')
+@stateful
+@require_token
+def run_unit_test():
+    # Stub: no actual execution yet
+    return dict(status='success', setup_outputs=[], target_outputs=[], test_outputs=[])
+
+@post('/generate_unit_test_code')
+@stateful
+@require_token
+def generate_unit_test_code():
+    # Stub: no actual code generation yet
+    return dict(status='success', code='# TODO: implement')
+
+
 @post('/debug_request')
 @require_token
 @stateful

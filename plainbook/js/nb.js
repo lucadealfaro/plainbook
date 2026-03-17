@@ -10,9 +10,10 @@ import TestHelpModal from './TestHelpModal.js';
 import UiError from './UiError.js';
 import PanelBar from './PanelBar.js';
 import NotebookHelp from './NotebookHelp.js';
+import UnitTestView from './UnitTestView.js';
 
 createApp({
-    components: { AppNavbar, NotebookCell, CellInsertionZone, CellLabel, SettingsModal, InfoModal, TestHelpModal, UiError, PanelBar, NotebookHelp },
+    components: { AppNavbar, NotebookCell, CellInsertionZone, CellLabel, SettingsModal, InfoModal, TestHelpModal, UiError, PanelBar, NotebookHelp, UnitTestView },
     setup() {
         // Extract token from URL
         const urlParams = new URLSearchParams(window.location.search);
@@ -770,6 +771,173 @@ createApp({
             }
         };
 
+        // Unit test mode state and methods
+
+        const unitTestTargetIndex = ref(null);
+
+        function newSubCell() {
+            return {
+                cell_type: "code",
+                source: "",
+                outputs: [],
+                execution_count: null,
+                id: crypto.randomUUID(),
+                metadata: {
+                    explanation: "",
+                    explanation_timestamp: "",
+                    code_timestamp: "",
+                    name: "",
+                    variables: {},
+                    validation: null
+                }
+            };
+        }
+
+        const enterUnitTestMode = (cellIndex) => {
+            const cell = notebook.value.cells[cellIndex];
+            if (!cell.metadata.unit_tests || cell.metadata.unit_tests.length === 0) {
+                cell.metadata.unit_tests = [{
+                    name: "Test 1",
+                    setup: newSubCell(),
+                    test: newSubCell()
+                }];
+                saveUnitTests(cellIndex);
+            }
+            unitTestTargetIndex.value = cellIndex;
+        };
+
+        const exitUnitTestMode = () => {
+            unitTestTargetIndex.value = null;
+        };
+
+        const saveUnitTests = async (cellIndex) => {
+            const cell = notebook.value.cells[cellIndex];
+            try {
+                await apiCall('/save_unit_tests', 'POST', {
+                    cell_index: cellIndex,
+                    unit_tests: cell.metadata.unit_tests
+                });
+                console.log('Unit tests saved:', cellIndex);
+            } catch (err) {
+                throw new Error('Failed to save unit tests', { cause: err });
+            }
+        };
+
+        const addUnitTest = async (cellIndex) => {
+            const cell = notebook.value.cells[cellIndex];
+            if (!cell.metadata.unit_tests) cell.metadata.unit_tests = [];
+            const testNum = cell.metadata.unit_tests.length + 1;
+            cell.metadata.unit_tests.push({
+                name: `Test ${testNum}`,
+                setup: newSubCell(),
+                test: newSubCell()
+            });
+            await saveUnitTests(cellIndex);
+        };
+
+        const deleteUnitTest = async (cellIndex, testIndex) => {
+            const cell = notebook.value.cells[cellIndex];
+            if (!cell.metadata.unit_tests) return;
+            cell.metadata.unit_tests.splice(testIndex, 1);
+            await saveUnitTests(cellIndex);
+        };
+
+        const renameUnitTest = async (cellIndex, testIndex, newName) => {
+            const cell = notebook.value.cells[cellIndex];
+            if (!cell.metadata.unit_tests || !cell.metadata.unit_tests[testIndex]) return;
+            cell.metadata.unit_tests[testIndex].name = newName;
+            await saveUnitTests(cellIndex);
+        };
+
+        const saveUnitTestExplanation = async (cellIndex, testIndex, role, content) => {
+            try {
+                await apiCall('/save_unit_test_explanation', 'POST', {
+                    cell_index: cellIndex,
+                    test_index: testIndex,
+                    role: role,
+                    explanation: content
+                });
+                console.log('Unit test explanation saved:', cellIndex, testIndex, role);
+            } catch (err) {
+                throw new Error('Failed to save unit test explanation', { cause: err });
+            }
+        };
+
+        const saveUnitTestCode = async (cellIndex, testIndex, role, content) => {
+            try {
+                await apiCall('/save_unit_test_code', 'POST', {
+                    cell_index: cellIndex,
+                    test_index: testIndex,
+                    role: role,
+                    source: content
+                });
+                console.log('Unit test code saved:', cellIndex, testIndex, role);
+            } catch (err) {
+                throw new Error('Failed to save unit test code', { cause: err });
+            }
+        };
+
+        const clearUnitTestCode = async (cellIndex, testIndex, role) => {
+            try {
+                await apiCall('/clear_unit_test_code', 'POST', {
+                    cell_index: cellIndex,
+                    test_index: testIndex,
+                    role: role
+                });
+                // Update local state
+                const cell = notebook.value.cells[cellIndex];
+                const test = cell.metadata.unit_tests[testIndex];
+                const subCell = test[role];
+                subCell.source = '';
+                subCell.outputs = [];
+                console.log('Unit test code cleared:', cellIndex, testIndex, role);
+            } catch (err) {
+                throw new Error('Failed to clear unit test code', { cause: err });
+            }
+        };
+
+        const ui_runUnitTest = async (cellIndex, testIndex) => {
+            if (!running.value) {
+                running.value = true;
+                try {
+                    const r = await apiCall('/run_unit_test', 'POST', {
+                        cell_index: cellIndex,
+                        test_index: testIndex
+                    });
+                    console.log('Unit test run result:', r);
+                } catch (err) {
+                    throw new Error('Failed to run unit test', { cause: err });
+                } finally {
+                    running.value = false;
+                    runningActivity.value = { type: null, cellIndex: null };
+                }
+            }
+        };
+
+        const generateUnitTestCode = async (cellIndex, testIndex, role) => {
+            if (!running.value) {
+                running.value = true;
+                try {
+                    const r = await apiCall('/generate_unit_test_code', 'POST', {
+                        cell_index: cellIndex,
+                        test_index: testIndex,
+                        role: role
+                    });
+                    if (r.status === 'success' && r.code) {
+                        const cell = notebook.value.cells[cellIndex];
+                        const test = cell.metadata.unit_tests[testIndex];
+                        test[role].source = r.code;
+                    }
+                    console.log('Unit test code generated:', r);
+                } catch (err) {
+                    throw new Error('Failed to generate unit test code', { cause: err });
+                } finally {
+                    running.value = false;
+                    runningActivity.value = { type: null, cellIndex: null };
+                }
+            }
+        };
+
         const handleKeydown = (e) => {
             const total = notebook.value?.cells?.length ?? 0;
             if (total === 0) return;
@@ -871,7 +1039,11 @@ createApp({
             explanationEditKey, deleteCell, moveCell,
             clearOutputs, activeAiProvider, availableAiProviders, setActiveAiProvider, isCodespace, hasGeminiKey, hasClaudeKey,
             restarting, ui_restart,
-            ui_runTestCell, ui_runAllTests, ui_saveExplanationAndRunTest, ui_forceRegenerateTestCode };
+            ui_runTestCell, ui_runAllTests, ui_saveExplanationAndRunTest, ui_forceRegenerateTestCode,
+            unitTestTargetIndex, enterUnitTestMode, exitUnitTestMode,
+            addUnitTest, deleteUnitTest, renameUnitTest,
+            saveUnitTestExplanation, saveUnitTestCode, clearUnitTestCode,
+            ui_runUnitTest, generateUnitTestCode };
     },
 
 template: `#app-template`,

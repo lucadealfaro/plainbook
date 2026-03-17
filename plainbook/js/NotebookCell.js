@@ -16,7 +16,8 @@ export default {
         'validate-code', 'dismiss-validation',
         'delete', 'move-up', 'move-down',
         'activate', 'interrupt',
-        'run-test', 'save-and-run-test', 'generate-test-code', 'open-test-help'
+        'run-test', 'save-and-run-test', 'generate-test-code', 'open-test-help',
+        'open-unit-test'
     ],
     setup(props, { emit }) {
         const hasError = computed(() => {
@@ -73,10 +74,11 @@ export default {
                         @saveandrun="$emit('save-and-run', $event)"
                         @delete="$emit('delete')"
                         @moveUp="$emit('move-up')"
-                        @moveDown="$emit('move-down')" />
+                        @moveDown="$emit('move-down')"
+                        @open-unit-test="$emit('open-unit-test')" />
                 </div>
 
-                <validation-cell 
+                <validation-cell
                     v-if="cell.metadata?.validation && !cell.metadata?.validation.is_hidden"
                     :validation="cell.metadata.validation" 
                     @dismiss_validation="$emit('dismiss-validation')" />

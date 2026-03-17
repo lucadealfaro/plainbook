@@ -694,6 +694,52 @@ class Plainbook:
             self._write()
 
 
+    # Unit test metadata methods (stubs for Phase 1)
+
+    def save_unit_tests(self, cell_index, unit_tests):
+        """Save the full unit_tests list to cell metadata."""
+        with self._lock:
+            assert 0 <= cell_index < len(self.nb.cells)
+            cell = self.nb.cells[cell_index]
+            cell.metadata['unit_tests'] = unit_tests
+            self._write()
+
+    def save_unit_test_explanation(self, cell_index, test_index, role, explanation):
+        """Update the explanation of a unit test sub-cell."""
+        with self._lock:
+            assert 0 <= cell_index < len(self.nb.cells)
+            cell = self.nb.cells[cell_index]
+            tests = cell.metadata.get('unit_tests', [])
+            assert 0 <= test_index < len(tests)
+            assert role in ('setup', 'test')
+            tests[test_index][role]['metadata']['explanation'] = explanation
+            tests[test_index][role]['metadata']['explanation_timestamp'] = datetime.datetime.now().isoformat()
+            self._write()
+
+    def save_unit_test_code(self, cell_index, test_index, role, source):
+        """Update the source code of a unit test sub-cell."""
+        with self._lock:
+            assert 0 <= cell_index < len(self.nb.cells)
+            cell = self.nb.cells[cell_index]
+            tests = cell.metadata.get('unit_tests', [])
+            assert 0 <= test_index < len(tests)
+            assert role in ('setup', 'test')
+            tests[test_index][role]['source'] = source
+            tests[test_index][role]['metadata']['code_timestamp'] = datetime.datetime.now().isoformat()
+            self._write()
+
+    def clear_unit_test_code(self, cell_index, test_index, role):
+        """Clear the source code and outputs of a unit test sub-cell."""
+        with self._lock:
+            assert 0 <= cell_index < len(self.nb.cells)
+            cell = self.nb.cells[cell_index]
+            tests = cell.metadata.get('unit_tests', [])
+            assert 0 <= test_index < len(tests)
+            assert role in ('setup', 'test')
+            tests[test_index][role]['source'] = ''
+            tests[test_index][role]['outputs'] = []
+            self._write()
+
     # Methods to support AI
 
     def _get_cell_for_ai(self, index):

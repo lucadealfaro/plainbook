@@ -74,7 +74,34 @@
         @close="closeUiError" 
     />
 
-    <div class="section notebook-area">
+    <unit-test-view
+        v-if="unitTestTargetIndex !== null"
+        :notebook="notebook"
+        :target-cell-index="unitTestTargetIndex"
+        :auth-token="authToken"
+        :running="running"
+        :running-activity="runningActivity"
+        :is-locked="isLocked"
+        :last-valid-code-cell-index="last_valid_code_cell_index"
+        :last-valid-output-cell-index="last_valid_output_cell_index"
+        @exit="exitUnitTestMode"
+        @add-unit-test="addUnitTest"
+        @delete-unit-test="deleteUnitTest"
+        @rename-unit-test="renameUnitTest"
+        @save-unit-test-explanation="saveUnitTestExplanation"
+        @save-unit-test-code="saveUnitTestCode"
+        @clear-unit-test-code="clearUnitTestCode"
+        @run-unit-test="ui_runUnitTest"
+        @generate-unit-test-code="generateUnitTestCode"
+        @save-explanation="(content) => sendExplanationToServer(content, unitTestTargetIndex)"
+        @save-code="(content) => sendCodeToServer(content, unitTestTargetIndex)"
+        @gencode="ui_forceRegenerateCellCode(unitTestTargetIndex)"
+        @clearcode="clearCellCode(unitTestTargetIndex)"
+        @validate="ui_validateCode(unitTestTargetIndex)"
+        @interrupt="ui_interruptKernel"
+    />
+
+    <div v-else class="section notebook-area">
         <h1 class="title">
             {{ notebook_name }}
         </h1>
@@ -88,7 +115,7 @@
                 <strong>Error:</strong> {{ error }}
             </div>
             <div v-else="notebook">
-                
+
                 <template v-for="(cell, index) in notebook.cells" :key="index">
 
                     <cell-insertion-zone v-if="!isLocked"
@@ -133,13 +160,15 @@
                         @generate-test-code="ui_forceRegenerateTestCode(index)"
                         @open-test-help="showTestHelp = true"
 
+                        @open-unit-test="enterUnitTestMode(index)"
+
                         @delete="deleteCell(index)"
                         @move-up="moveCell(index, -1)"
                         @move-down="moveCell(index, 1)"
                     />
-                    
+
                 </template>
-                
+
                 <cell-insertion-zone v-if="!isLocked"
                     :is-active="(activeIndex === -1 && notebook.cells.length === 0) || activeIndex === notebook.cells.length - 1"
                     :cell-count="notebook.cells.length"
