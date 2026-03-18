@@ -774,6 +774,7 @@ createApp({
         // Unit test mode state and methods
 
         const unitTestTargetIndex = ref(null);
+        const unitTestValidity = ref([]);
 
         function newSubCell() {
             return {
@@ -793,7 +794,18 @@ createApp({
             };
         }
 
-        const enterUnitTestMode = (cellIndex) => {
+        const fetchUnitTestState = async (cellIndex) => {
+            try {
+                const r = await apiCall('/get_unit_test_state', 'POST', { cell_index: cellIndex });
+                if (r.status === 'success' && r.unit_test_state) {
+                    unitTestValidity.value = r.unit_test_state;
+                }
+            } catch (err) {
+                console.error('Failed to fetch unit test state:', err);
+            }
+        };
+
+        const enterUnitTestMode = async (cellIndex) => {
             const cell = notebook.value.cells[cellIndex];
             if (!cell.metadata.unit_tests || cell.metadata.unit_tests.length === 0) {
                 cell.metadata.unit_tests = [{
@@ -804,10 +816,12 @@ createApp({
                 saveUnitTests(cellIndex);
             }
             unitTestTargetIndex.value = cellIndex;
+            await fetchUnitTestState(cellIndex);
         };
 
         const exitUnitTestMode = () => {
             unitTestTargetIndex.value = null;
+            unitTestValidity.value = [];
         };
 
         const saveUnitTests = async (cellIndex) => {
@@ -857,7 +871,7 @@ createApp({
                     role: role,
                     explanation: content
                 });
-                console.log('Unit test explanation saved:', cellIndex, testIndex, role);
+                await fetchUnitTestState(cellIndex);
             } catch (err) {
                 throw new Error('Failed to save unit test explanation', { cause: err });
             }
@@ -871,7 +885,7 @@ createApp({
                     role: role,
                     source: content
                 });
-                console.log('Unit test code saved:', cellIndex, testIndex, role);
+                await fetchUnitTestState(cellIndex);
             } catch (err) {
                 throw new Error('Failed to save unit test code', { cause: err });
             }
@@ -890,23 +904,106 @@ createApp({
                 const subCell = test[role];
                 subCell.source = '';
                 subCell.outputs = [];
-                console.log('Unit test code cleared:', cellIndex, testIndex, role);
+                await fetchUnitTestState(cellIndex);
             } catch (err) {
                 throw new Error('Failed to clear unit test code', { cause: err });
             }
         };
 
+        const executeUnitTestCell = async (cellIndex, testIndex, role) => {
+            runningActivity.value = { type: `unit-test-${role}`, cellIndex };
+            const r = await apiCall('/run_unit_test_cell', 'POST', {
+                cell_index: cellIndex,
+                test_index: testIndex,
+                role: role
+            });
+            // Update local outputs
+            const cell = notebook.value.cells[cellIndex];
+            const test = cell.metadata.unit_tests[testIndex];
+            if (role === 'setup') {
+                test.setup.outputs = r.outputs || [];
+            } else if (role === 'target') {
+                if (!test.target) test.target = {};
+                test.target.outputs = r.outputs || [];
+            } else {
+                test.test.outputs = r.outputs || [];
+            }
+            if (r.details === 'CellExecutionError') {
+                const err = new Error(`Unit test ${role} execution error`);
+                err.cellIndex = cellIndex;
+                throw err;
+            }
+            return r;
+        };
+
+        const generateUnitTestCodeInner = async (cellIndex, testIndex, role) => {
+            runningActivity.value = { type: `unit-test-gen-${role}`, cellIndex };
+            const r = await apiCall('/generate_unit_test_cell_code', 'POST', {
+                cell_index: cellIndex,
+                test_index: testIndex,
+                role: role
+            });
+            if (r.status === 'success' && r.code) {
+                const cell = notebook.value.cells[cellIndex];
+                const test = cell.metadata.unit_tests[testIndex];
+                if (role === 'target') {
+                    cell.source = r.code;
+                } else {
+                    test[role].source = r.code;
+                }
+            } else if (r.status === 'error') {
+                throw new Error(r.message || 'Failed to generate unit test code');
+            }
+            return r;
+        };
+
+        const executeUnitTest = async (cellIndex, testIndex) => {
+            // 1. Ensure main notebook cells up to cellIndex-1 are executed
+            if (cellIndex > 0 && last_executed_cell_index.value < cellIndex - 1) {
+                await runCells(cellIndex - 1);
+            }
+            if (!running.value) return;
+
+            const cell = notebook.value.cells[cellIndex];
+            const test = cell.metadata.unit_tests[testIndex];
+
+            // 2. Generate setup code if needed, then execute setup
+            if (!(test.setup.source || '').trim() && (test.setup.metadata?.explanation || '').trim()) {
+                await generateUnitTestCodeInner(cellIndex, testIndex, 'setup');
+            }
+            if (!running.value) return;
+            // Execute setup (even if empty — server handles no-op)
+            await executeUnitTestCell(cellIndex, testIndex, 'setup');
+            if (!running.value) return;
+
+            // 3. Ensure target has code, then execute target
+            if (last_valid_code_cell_index.value < cellIndex) {
+                await generateCode(cellIndex);
+            }
+            if (!running.value) return;
+            await executeUnitTestCell(cellIndex, testIndex, 'target');
+            if (!running.value) return;
+
+            // 4. Generate test code if needed, then execute test
+            if (!(test.test.source || '').trim() && (test.test.metadata?.explanation || '').trim()) {
+                await generateUnitTestCodeInner(cellIndex, testIndex, 'test');
+            }
+            if (!running.value) return;
+            if ((test.test.source || '').trim()) {
+                await executeUnitTestCell(cellIndex, testIndex, 'test');
+            }
+
+            // 5. Refresh validity flags
+            await fetchUnitTestState(cellIndex);
+        };
+
         const ui_runUnitTest = async (cellIndex, testIndex) => {
+            flushActiveEdits();
+            await waitForPendingSaves();
             if (!running.value) {
                 running.value = true;
                 try {
-                    const r = await apiCall('/run_unit_test', 'POST', {
-                        cell_index: cellIndex,
-                        test_index: testIndex
-                    });
-                    console.log('Unit test run result:', r);
-                } catch (err) {
-                    throw new Error('Failed to run unit test', { cause: err });
+                    await executeUnitTest(cellIndex, testIndex);
                 } finally {
                     running.value = false;
                     runningActivity.value = { type: null, cellIndex: null };
@@ -918,19 +1015,8 @@ createApp({
             if (!running.value) {
                 running.value = true;
                 try {
-                    const r = await apiCall('/generate_unit_test_code', 'POST', {
-                        cell_index: cellIndex,
-                        test_index: testIndex,
-                        role: role
-                    });
-                    if (r.status === 'success' && r.code) {
-                        const cell = notebook.value.cells[cellIndex];
-                        const test = cell.metadata.unit_tests[testIndex];
-                        test[role].source = r.code;
-                    }
-                    console.log('Unit test code generated:', r);
-                } catch (err) {
-                    throw new Error('Failed to generate unit test code', { cause: err });
+                    await generateUnitTestCodeInner(cellIndex, testIndex, role);
+                    await fetchUnitTestState(cellIndex);
                 } finally {
                     running.value = false;
                     runningActivity.value = { type: null, cellIndex: null };
@@ -1043,7 +1129,7 @@ createApp({
             unitTestTargetIndex, enterUnitTestMode, exitUnitTestMode,
             addUnitTest, deleteUnitTest, renameUnitTest,
             saveUnitTestExplanation, saveUnitTestCode, clearUnitTestCode,
-            ui_runUnitTest, generateUnitTestCode };
+            ui_runUnitTest, generateUnitTestCode, unitTestValidity };
     },
 
 template: `#app-template`,

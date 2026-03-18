@@ -146,6 +146,8 @@ class Plainbook:
         self._sk_base_url = f"http://127.0.0.1:{self._sk_port}"
         self._current_exec_id = None
         self._cell_states = {}
+        self._unit_test_states = {}     # "{cell_id}:{test_index}:{role}" -> kernel state name
+        self._unit_test_validity = {}   # (cell_id, test_index) -> {5 boolean flags}
         self._sk_process = subprocess.Popen(
             [sys.executable, "-m", "snapshot_kernel.main",
              "--bind", f"127.0.0.1:{self._sk_port}",
@@ -216,6 +218,63 @@ class Plainbook:
                 if state:
                     return state
         return "initial"
+
+    # Unit test validity tracking
+
+    _UT_CASCADE = ['setup_code', 'setup_output', 'target_output', 'test_code', 'test_output']
+    _UT_STATE_ROLES = {'setup_output': 'setup', 'target_output': 'target', 'test_output': 'test'}
+
+    def _ut_state_key(self, cell_index, test_index, role):
+        return f"{self.nb.cells[cell_index].id}:{test_index}:{role}"
+
+    def _get_ut_validity(self, cell_index, test_index):
+        """Get or create validity dict for a unit test."""
+        key = (self.nb.cells[cell_index].id, test_index)
+        if key not in self._unit_test_validity:
+            self._unit_test_validity[key] = {
+                'setup_code_valid': False,
+                'setup_output_valid': False,
+                'target_output_valid': False,
+                'test_code_valid': False,
+                'test_output_valid': False,
+            }
+        return self._unit_test_validity[key]
+
+    def _invalidate_unit_test(self, cell_index, test_index, from_point):
+        """Cascade invalidation from from_point onward for a unit test."""
+        v = self._get_ut_validity(cell_index, test_index)
+        start = self._UT_CASCADE.index(from_point)
+        for point in self._UT_CASCADE[start:]:
+            v[point + '_valid'] = False
+            if point in self._UT_STATE_ROLES:
+                sk = self._ut_state_key(cell_index, test_index, self._UT_STATE_ROLES[point])
+                if sk in self._unit_test_states:
+                    try:
+                        self._sk_request("DELETE", f"/states/{self._unit_test_states[sk]}")
+                    except Exception:
+                        pass
+                    del self._unit_test_states[sk]
+
+    def _invalidate_all_unit_tests(self, cell_index, from_point):
+        """Invalidate all unit tests for a cell from from_point onward."""
+        cell = self.nb.cells[cell_index]
+        tests = cell.metadata.get('unit_tests', [])
+        for i in range(len(tests)):
+            self._invalidate_unit_test(cell_index, i, from_point)
+
+    def get_unit_test_state(self, cell_index):
+        """Returns validity flags for all unit tests of a specific target cell."""
+        cell = self.nb.cells[cell_index]
+        tests = cell.metadata.get('unit_tests', [])
+        result = []
+        for i in range(len(tests)):
+            v = self._get_ut_validity(cell_index, i)
+            result.append({
+                'setup': {'code_valid': v['setup_code_valid'], 'output_valid': v['setup_output_valid']},
+                'target': {'output_valid': v['target_output_valid']},
+                'test': {'code_valid': v['test_code_valid'], 'output_valid': v['test_output_valid']},
+            })
+        return result
 
     # Kernel methods
 
@@ -292,16 +351,16 @@ class Plainbook:
             self._write()
             return cell.outputs, 'ok'
 
-    def _get_variables(self):
-        """Execute the variable inspection code against the last executed state."""
-        # Find the most recent valid state
-        state_name = None
-        for i in range(len(self.nb.cells) - 1, -1, -1):
-            cell = self.nb.cells[i]
-            if cell.cell_type == 'code' and i <= self.last_executed_cell:
-                state_name = self._cell_states.get(cell.id)
-                if state_name:
-                    break
+    def _get_variables(self, state_name=None):
+        """Execute the variable inspection code against a given or last executed state."""
+        if state_name is None:
+            # Find the most recent valid state
+            for i in range(len(self.nb.cells) - 1, -1, -1):
+                cell = self.nb.cells[i]
+                if cell.cell_type == 'code' and i <= self.last_executed_cell:
+                    state_name = self._cell_states.get(cell.id)
+                    if state_name:
+                        break
         if not state_name:
             return {}
 
@@ -337,6 +396,8 @@ class Plainbook:
         self._sk_request("POST", "/reset")
         self.last_executed_cell = -1
         self._cell_states.clear()
+        self._unit_test_states.clear()
+        self._unit_test_validity.clear()
         if self.debug:
             print("Snapshot kernel reset complete.")
 
@@ -356,6 +417,9 @@ class Plainbook:
                 except Exception:
                     pass
                 # Keep dict entry — name will be reused on re-execution
+            # Invalidate unit tests for cells at or after the invalidation point
+            if cell.metadata.get('unit_tests'):
+                self._invalidate_all_unit_tests(i, 'setup_output')
         self.last_executed_cell = min(self.last_executed_cell, index - 1)
 
     def interrupt_kernel(self):
@@ -691,6 +755,9 @@ class Plainbook:
                 self.last_valid_code_cell = min(self.last_valid_code_cell, index - 1)
                 self.last_valid_output_cell = min(self.last_valid_output_cell, index - 1)
                 self.last_valid_test_cell = min(self.last_valid_test_cell, index - 1)
+                # Invalidate unit tests: target explanation changed
+                if cell.metadata.get('unit_tests'):
+                    self._invalidate_all_unit_tests(index, 'target_output')
             self._write()
 
 
@@ -714,6 +781,11 @@ class Plainbook:
             assert role in ('setup', 'test')
             tests[test_index][role]['metadata']['explanation'] = explanation
             tests[test_index][role]['metadata']['explanation_timestamp'] = datetime.datetime.now().isoformat()
+            # Invalidate from the appropriate point
+            if role == 'setup':
+                self._invalidate_unit_test(cell_index, test_index, 'setup_code')
+            else:
+                self._invalidate_unit_test(cell_index, test_index, 'test_code')
             self._write()
 
     def save_unit_test_code(self, cell_index, test_index, role, source):
@@ -726,6 +798,11 @@ class Plainbook:
             assert role in ('setup', 'test')
             tests[test_index][role]['source'] = source
             tests[test_index][role]['metadata']['code_timestamp'] = datetime.datetime.now().isoformat()
+            # Invalidate from the appropriate point
+            if role == 'setup':
+                self._invalidate_unit_test(cell_index, test_index, 'setup_output')
+            else:
+                self._invalidate_unit_test(cell_index, test_index, 'test_output')
             self._write()
 
     def clear_unit_test_code(self, cell_index, test_index, role):
@@ -738,7 +815,301 @@ class Plainbook:
             assert role in ('setup', 'test')
             tests[test_index][role]['source'] = ''
             tests[test_index][role]['outputs'] = []
+            # Invalidate from the appropriate point
+            if role == 'setup':
+                self._invalidate_unit_test(cell_index, test_index, 'setup_code')
+            else:
+                self._invalidate_unit_test(cell_index, test_index, 'test_code')
             self._write()
+
+    # Unit test execution and generation
+
+    def execute_unit_test_cell(self, cell_index, test_index, role):
+        """Execute a unit test sub-cell (setup, target, or test)."""
+        with self._lock:
+            assert 0 <= cell_index < len(self.nb.cells)
+            cell = self.nb.cells[cell_index]
+            tests = cell.metadata.get('unit_tests', [])
+            assert 0 <= test_index < len(tests)
+            assert role in ('setup', 'target', 'test')
+            unit_test = tests[test_index]
+
+            # Determine input state
+            if role == 'setup':
+                input_state = self._find_input_state(cell_index)
+            elif role == 'target':
+                setup_key = self._ut_state_key(cell_index, test_index, 'setup')
+                if setup_key not in self._unit_test_states:
+                    raise ExecutionError("Setup must be executed before target")
+                input_state = self._unit_test_states[setup_key]
+            else:  # test
+                target_key = self._ut_state_key(cell_index, test_index, 'target')
+                if target_key not in self._unit_test_states:
+                    raise ExecutionError("Target must be executed before test")
+                input_state = self._unit_test_states[target_key]
+
+            # Determine source code
+            if role == 'setup':
+                source = unit_test['setup'].get('source', '')
+                # Handle empty setup: skip execution, just record the input state
+                if not source.strip():
+                    setup_key = self._ut_state_key(cell_index, test_index, 'setup')
+                    self._unit_test_states[setup_key] = input_state
+                    v = self._get_ut_validity(cell_index, test_index)
+                    v['setup_output_valid'] = True
+                    unit_test['setup']['outputs'] = []
+                    self._write()
+                    return []
+            elif role == 'target':
+                source = cell.source
+            else:
+                source = unit_test['test'].get('source', '')
+
+            # Allocate/reuse state name
+            state_key = self._ut_state_key(cell_index, test_index, role)
+            if state_key in self._unit_test_states:
+                new_state_name = self._unit_test_states[state_key]
+            else:
+                existing_names = set(self._cell_states.values()) | set(self._unit_test_states.values())
+                new_state_name = uuid.uuid4().hex
+                while new_state_name in existing_names:
+                    new_state_name = uuid.uuid4().hex
+                self._unit_test_states[state_key] = new_state_name
+
+            exec_id = uuid.uuid4().hex
+            self._current_exec_id = exec_id
+            try:
+                result = self._sk_request("POST", "/execute", {
+                    "code": source,
+                    "exec_id": exec_id,
+                    "state_name": input_state,
+                    "new_state_name": new_state_name,
+                })
+            finally:
+                self._current_exec_id = None
+
+            # Convert outputs
+            outputs = []
+            for out in result.get("output", []):
+                outputs.append(nbformat.from_dict(out))
+
+            # Store outputs in appropriate location
+            if role == 'setup':
+                unit_test['setup']['outputs'] = outputs
+            elif role == 'target':
+                if 'target' not in unit_test:
+                    unit_test['target'] = {}
+                unit_test['target']['outputs'] = outputs
+            else:
+                unit_test['test']['outputs'] = outputs
+
+            if result.get("error"):
+                err = result["error"]
+                error_output = nbformat.from_dict({
+                    "output_type": "error",
+                    "ename": err.get("ename", "Error"),
+                    "evalue": err.get("evalue", ""),
+                    "traceback": err.get("traceback", []),
+                })
+                if role == 'setup':
+                    if not any(o.get("output_type") == "error" for o in unit_test['setup']['outputs']):
+                        unit_test['setup']['outputs'].append(error_output)
+                elif role == 'target':
+                    if not any(o.get("output_type") == "error" for o in unit_test['target']['outputs']):
+                        unit_test['target']['outputs'].append(error_output)
+                else:
+                    if not any(o.get("output_type") == "error" for o in unit_test['test']['outputs']):
+                        unit_test['test']['outputs'].append(error_output)
+                self._write()
+                raise CellExecutionError(
+                    traceback="\n".join(err.get("traceback", [])),
+                    ename=err.get("ename", "Error"),
+                    evalue=err.get("evalue", ""),
+                )
+
+            # Get variables and store them
+            variables = self._get_variables(state_name=new_state_name)
+            if role == 'target':
+                unit_test['target']['variables'] = variables
+            elif role == 'setup':
+                unit_test['setup']['metadata']['variables'] = variables
+            else:
+                # For test, add success message
+                outputs.append(nbformat.from_dict({
+                    "output_type": "stream",
+                    "name": "stdout",
+                    "text": "The test passed.\n",
+                }))
+                if role == 'test':
+                    unit_test['test']['outputs'] = outputs
+
+            # Set validity flag
+            v = self._get_ut_validity(cell_index, test_index)
+            if role == 'setup':
+                v['setup_output_valid'] = True
+            elif role == 'target':
+                v['target_output_valid'] = True
+            else:
+                v['test_output_valid'] = True
+
+            self._write()
+            return outputs
+
+    def generate_unit_test_code_cell(self, api_key, cell_index, test_index, role,
+                                     ai_provider="gemini", model=None, validation_feedback=None):
+        """Generate code for a unit test sub-cell."""
+        if role == 'target':
+            # Delegate to existing generate_code_cell
+            return self.generate_code_cell(api_key, cell_index,
+                                           ai_provider=ai_provider, model=model,
+                                           validation_feedback=validation_feedback)
+
+        with self._lock:
+            assert 0 <= cell_index < len(self.nb.cells)
+            cell = self.nb.cells[cell_index]
+            tests = cell.metadata.get('unit_tests', [])
+            assert 0 <= test_index < len(tests)
+            unit_test = tests[test_index]
+
+            if self.ai_request_pending:
+                raise RuntimeError("An AI request is already pending.")
+
+            ai_instructions = self.nb.metadata.get('ai_instructions', '')
+
+            if role == 'setup':
+                instructions = unit_test['setup']['metadata'].get('explanation', '')
+                if ai_instructions:
+                    instructions = instructions + "\n\nADDITIONAL INSTRUCTIONS:\n" + ai_instructions
+                files_context = self._get_files_context()
+                # Error context from setup outputs
+                error_context = None
+                for output in reversed(unit_test['setup'].get('outputs', [])):
+                    if output.get('output_type') == 'error':
+                        error_context = "The previous attempt to run this cell resulted in this error traceback:\n"
+                        error_context += "\n".join(getlist(output.get('traceback', [])))
+                        break
+                variable_context = self._get_variables_for_ai(cell_index)
+                preceding_code = self._get_preceding_code_json_for_ai(cell_index, include_all_variables=False)
+                # Previous code for setup
+                previous_code = None
+                setup_source = unit_test['setup'].get('source', '').strip()
+                if setup_source:
+                    previous_code = PREVIOUS_CODE_EXPLANATION_CHANGED.format(code_string=setup_source)
+
+                try:
+                    self.ai_request_pending = True
+                    generate_fn = AI_PROVIDERS[ai_provider]["generate"]
+                    new_code = generate_fn(
+                        api_key,
+                        preceding_code=preceding_code,
+                        previous_code=previous_code,
+                        instructions=instructions,
+                        file_context=files_context,
+                        error_context=error_context,
+                        variable_context=variable_context,
+                        validation_context=validation_feedback,
+                        model=model,
+                        debug=self.debug,
+                        dump_ai_requests=self.dump_ai_requests)
+                    if self.ai_request_pending:
+                        unit_test['setup']['source'] = new_code
+                        unit_test['setup']['metadata']['code_timestamp'] = datetime.datetime.now().isoformat()
+                        unit_test['setup']['outputs'] = []
+                        v = self._get_ut_validity(cell_index, test_index)
+                        v['setup_code_valid'] = True
+                        self._invalidate_unit_test(cell_index, test_index, 'setup_output')
+                        self._write()
+                        return new_code, True
+                    else:
+                        return None, False
+                finally:
+                    self.ai_request_pending = False
+
+            elif role == 'test':
+                # Prerequisite: target must have been executed
+                v = self._get_ut_validity(cell_index, test_index)
+                if not v['target_output_valid']:
+                    raise RuntimeError("Target must be executed before generating test code.")
+
+                instructions = unit_test['test']['metadata'].get('explanation', '')
+                if ai_instructions:
+                    instructions = instructions + "\n\nADDITIONAL INSTRUCTIONS:\n" + ai_instructions
+
+                files_context = self._get_files_context()
+                # Error context from test outputs
+                error_context = None
+                for output in reversed(unit_test['test'].get('outputs', [])):
+                    if output.get('output_type') == 'error':
+                        error_context = "The previous attempt to run this cell resulted in this error traceback:\n"
+                        error_context += "\n".join(getlist(output.get('traceback', [])))
+                        break
+
+                # Build preceding code with setup and target appended
+                preceding_code = self._get_preceding_code_json_for_ai(cell_index, include_all_variables=False)
+
+                # Build extra context: setup explanation+code and target explanation+code
+                extra_context_parts = []
+                setup_explanation = unit_test['setup']['metadata'].get('explanation', '')
+                setup_source = unit_test['setup'].get('source', '')
+                if setup_explanation or setup_source:
+                    extra_context_parts.append("\n# UNIT TEST SETUP CELL:")
+                    if setup_explanation:
+                        extra_context_parts.append(f"# Setup explanation: {setup_explanation}")
+                    if setup_source:
+                        extra_context_parts.append(f"# Setup code:\n{setup_source}")
+
+                target_explanation = cell.metadata.get('explanation', '')
+                target_source = cell.source
+                if target_explanation or target_source:
+                    extra_context_parts.append("\n# TARGET CELL BEING TESTED:")
+                    if target_explanation:
+                        extra_context_parts.append(f"# Target explanation: {target_explanation}")
+                    if target_source:
+                        extra_context_parts.append(f"# Target code:\n{target_source}")
+
+                if extra_context_parts:
+                    preceding_code = preceding_code + "\n" + "\n".join(extra_context_parts)
+
+                # Variable context from target execution
+                target_variables = unit_test.get('target', {}).get('variables', {})
+                variable_context = self._format_variables_for_ai(target_variables)
+
+                # Previous code for test
+                previous_code = None
+                test_source = unit_test['test'].get('source', '').strip()
+                if test_source:
+                    previous_code = PREVIOUS_CODE_EXPLANATION_CHANGED.format(code_string=test_source)
+
+                try:
+                    self.ai_request_pending = True
+                    generate_fn = AI_PROVIDERS[ai_provider]["generate_test"]
+                    new_code = generate_fn(
+                        api_key,
+                        preceding_code=preceding_code,
+                        previous_code=previous_code,
+                        instructions=instructions,
+                        file_context=files_context,
+                        error_context=error_context,
+                        variable_context=variable_context,
+                        validation_context=validation_feedback,
+                        model=model,
+                        debug=self.debug,
+                        dump_ai_requests=self.dump_ai_requests)
+                    if self.ai_request_pending:
+                        unit_test['test']['source'] = new_code
+                        unit_test['test']['metadata']['code_timestamp'] = datetime.datetime.now().isoformat()
+                        unit_test['test']['outputs'] = []
+                        v['test_code_valid'] = True
+                        self._invalidate_unit_test(cell_index, test_index, 'test_output')
+                        self._write()
+                        return new_code, True
+                    else:
+                        return None, False
+                finally:
+                    self.ai_request_pending = False
+
+            else:
+                raise ValueError(f"Invalid role for unit test code generation: {role}")
 
     # Methods to support AI
 
@@ -798,21 +1169,8 @@ class Plainbook:
         return new_cell
 
 
-    def _get_variables_for_ai(self, index):
-        """Returns a formatted text summary of variables in the kernel
-        that are defined just _before_ the cell at index is executed."""
-
-        assert 0 <= index < len(self.nb.cells)
-        # Finds the last code cell before index.
-        prev_code_cell_idx = -1
-        for i in range(index - 1, -1, -1):
-            cell = self.nb.cells[i]
-            if cell.cell_type == 'code':
-                prev_code_cell_idx = i
-                break
-        if prev_code_cell_idx == -1:
-            return ""
-        variables = self.nb.cells[prev_code_cell_idx].metadata.get('variables', {})
+    def _format_variables_for_ai(self, variables):
+        """Format a variables dict into a text summary for AI context."""
         lines = []
         for name, info in variables.items():
             if name in self.default_variables:
@@ -832,6 +1190,23 @@ class Plainbook:
                 for col in info['columns']:
                     lines.append(f"  * {col['name']} ({col['dtype']})")
         return "\n".join(lines)
+
+    def _get_variables_for_ai(self, index):
+        """Returns a formatted text summary of variables in the kernel
+        that are defined just _before_ the cell at index is executed."""
+
+        assert 0 <= index < len(self.nb.cells)
+        # Finds the last code cell before index.
+        prev_code_cell_idx = -1
+        for i in range(index - 1, -1, -1):
+            cell = self.nb.cells[i]
+            if cell.cell_type == 'code':
+                prev_code_cell_idx = i
+                break
+        if prev_code_cell_idx == -1:
+            return ""
+        variables = self.nb.cells[prev_code_cell_idx].metadata.get('variables', {})
+        return self._format_variables_for_ai(variables)
 
 
     def debug_request(self, nb):
@@ -930,6 +1305,9 @@ class Plainbook:
                         self._invalidate_execution(index)
                     # No output is valid after this.
                     self.last_valid_output_cell = min(self.last_valid_output_cell, index - 1)
+                    # Invalidate unit tests: target code changed
+                    if cell.metadata.get('unit_tests'):
+                        self._invalidate_all_unit_tests(index, 'target_output')
                     self._write()
                     # Sets last valid code cell to this cell.
                     self.last_valid_code_cell = index

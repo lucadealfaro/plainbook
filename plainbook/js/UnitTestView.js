@@ -10,7 +10,7 @@ import CellLabel from './CellLabel.js';
 export default {
     components: { UnitTestTabBar, UnitTestSubCell, ExplanationEditor, CodeCell, ValidationCell, OutputRenderer, CellLabel },
     props: ['notebook', 'targetCellIndex', 'authToken', 'running', 'runningActivity',
-            'isLocked', 'lastValidCodeCellIndex', 'lastValidOutputCellIndex'],
+            'isLocked', 'lastValidCodeCellIndex', 'lastValidOutputCellIndex', 'unitTestValidity'],
     emits: ['exit',
             'save-unit-tests', 'save-unit-test-explanation', 'save-unit-test-code',
             'clear-unit-test-code', 'run-unit-test', 'generate-unit-test-code',
@@ -45,6 +45,20 @@ export default {
         const targetOutputValid = computed(() => props.lastValidOutputCellIndex >= props.targetCellIndex);
         const targetOutputVisible = ref(true);
 
+        const activeTestValidity = computed(() => {
+            if (!props.unitTestValidity || activeTestIndex.value >= props.unitTestValidity.length) return null;
+            return props.unitTestValidity[activeTestIndex.value];
+        });
+
+        const setupCodeValid = computed(() => activeTestValidity.value?.setup?.code_valid ?? false);
+        const setupOutputValid = computed(() => activeTestValidity.value?.setup?.output_valid ?? false);
+        const testCodeValid = computed(() => activeTestValidity.value?.test?.code_valid ?? false);
+        const testOutputValid = computed(() => activeTestValidity.value?.test?.output_valid ?? false);
+
+        const targetTestOutputs = computed(() => {
+            return activeTest.value?.target?.outputs || targetCell.value?.outputs || [];
+        });
+
         // Keep activeTestIndex in range
         watch(unitTests, (tests) => {
             if (tests.length === 0) {
@@ -56,7 +70,9 @@ export default {
 
         return {
             activeTestIndex, activeSubCell, targetCell, unitTests, activeTest,
-            hasTargetError, targetCodeValid, targetOutputValid, targetOutputVisible
+            hasTargetError, targetCodeValid, targetOutputValid, targetOutputVisible,
+            activeTestValidity, setupCodeValid, setupOutputValid, testCodeValid, testOutputValid,
+            targetTestOutputs
         };
     },
     template: /* html */ `
@@ -71,7 +87,7 @@ export default {
             />
 
             <!-- Action buttons bar (between tab bar and scrollable area) -->
-            <div v-if="activeTest" class="px-4 py-2" style="display: flex; justify-content: space-between; align-items: center; flex-shrink: 0;">
+            <div v-if="activeTest" class="px-4 py-2" style="display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
                 <button class="button is-small is-warning"
                         :disabled="running || isLocked"
                         @click="$emit('run-unit-test', targetCellIndex, activeTestIndex)">
@@ -97,8 +113,8 @@ export default {
                     @activate="activeSubCell = 'setup'"
                     :is-locked="isLocked"
                     :running="running"
-                    :code-valid="true"
-                    :output-valid="true"
+                    :code-valid="setupCodeValid"
+                    :output-valid="setupOutputValid"
                     @save-explanation="(content) => $emit('save-unit-test-explanation', targetCellIndex, activeTestIndex, 'setup', content)"
                     @save-code="(content) => $emit('save-unit-test-code', targetCellIndex, activeTestIndex, 'setup', content)"
                     @save-and-run="(content) => { $emit('save-unit-test-explanation', targetCellIndex, activeTestIndex, 'setup', content); $emit('run-unit-test', targetCellIndex, activeTestIndex); }"
@@ -162,8 +178,8 @@ export default {
                         @save="(content) => $emit('save-code', content)"
                         @activate="" />
 
-                    <div v-if="targetOutputVisible && targetCell.outputs?.length" class="p-2 border-top has-background-white">
-                        <output-renderer v-for="(out, oIdx) in targetCell.outputs" :key="oIdx" :output="out" />
+                    <div v-if="targetOutputVisible && targetTestOutputs.length" class="p-2 border-top has-background-white">
+                        <output-renderer v-for="(out, oIdx) in targetTestOutputs" :key="oIdx" :output="out" />
                     </div>
                 </div>
 
@@ -175,8 +191,8 @@ export default {
                     @activate="activeSubCell = 'test'"
                     :is-locked="isLocked"
                     :running="running"
-                    :code-valid="true"
-                    :output-valid="true"
+                    :code-valid="testCodeValid"
+                    :output-valid="testOutputValid"
                     @save-explanation="(content) => $emit('save-unit-test-explanation', targetCellIndex, activeTestIndex, 'test', content)"
                     @save-code="(content) => $emit('save-unit-test-code', targetCellIndex, activeTestIndex, 'test', content)"
                     @save-and-run="(content) => { $emit('save-unit-test-explanation', targetCellIndex, activeTestIndex, 'test', content); $emit('run-unit-test', targetCellIndex, activeTestIndex); }"

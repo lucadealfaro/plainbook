@@ -718,19 +718,67 @@ def clear_unit_test_code():
     notebook.clear_unit_test_code(cell_index, test_index, role)
     return dict(status='success')
 
-@post('/run_unit_test')
+@post('/get_unit_test_state')
+@require_token
+def get_unit_test_state():
+    data = request.json
+    cell_index = data.get('cell_index')
+    try:
+        state = notebook.get_unit_test_state(cell_index)
+        return dict(status='success', unit_test_state=state)
+    except Exception as e:
+        return dict(status='error', message=str(e))
+
+@post('/run_unit_test_cell')
 @stateful
 @require_token
-def run_unit_test():
-    # Stub: no actual execution yet
-    return dict(status='success', setup_outputs=[], target_outputs=[], test_outputs=[])
+def run_unit_test_cell():
+    data = request.json
+    cell_index = data.get('cell_index')
+    test_index = data.get('test_index')
+    role = data.get('role')
+    try:
+        outputs = notebook.execute_unit_test_cell(cell_index, test_index, role)
+        return dict(status='ok', outputs=outputs, role=role)
+    except CellExecutionError:
+        cell = notebook.nb.cells[cell_index]
+        test = cell.metadata.get('unit_tests', [])[test_index]
+        if role == 'setup':
+            outs = test['setup'].get('outputs', [])
+        elif role == 'target':
+            outs = test.get('target', {}).get('outputs', [])
+        else:
+            outs = test['test'].get('outputs', [])
+        return dict(status='ok', details='CellExecutionError', outputs=outs, role=role)
+    except Exception as e:
+        return dict(status='error', message=str(e))
 
-@post('/generate_unit_test_code')
+@post('/generate_unit_test_cell_code')
 @stateful
 @require_token
 def generate_unit_test_code():
-    # Stub: no actual code generation yet
-    return dict(status='success', code='# TODO: implement')
+    data = request.json
+    cell_index = data.get('cell_index')
+    test_index = data.get('test_index')
+    role = data.get('role')
+    validation_feedback = data.get('validation_feedback')
+    api_key, ai_provider, model, error = _get_ai_config()
+    if error:
+        return dict(status='error', message=error)
+    try:
+        new_code, success = notebook.generate_unit_test_code_cell(
+            api_key, cell_index, test_index, role,
+            ai_provider=ai_provider, model=model,
+            validation_feedback=validation_feedback)
+    except Exception as e:
+        friendly = _check_billing_error(e)
+        if friendly:
+            return dict(status='error', message=friendly)
+        raise
+    if success:
+        return dict(status='success', code=new_code)
+    else:
+        return dict(status='cancelled', code=None)
 
 
 @post('/debug_request')

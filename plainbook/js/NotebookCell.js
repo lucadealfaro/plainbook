@@ -64,6 +64,7 @@ export default {
                         :hasError="hasError"
                         :outputVisible="outputVisible"
                         :start-edit-key="explanationEditKey"
+                        :unit-test-count="(cell.metadata.unit_tests || []).length"
                         @save="$emit('save-explanation', $event)"
                         @toggle-output="outputVisible = !outputVisible"
                         @gencode="$emit('generate-code')"

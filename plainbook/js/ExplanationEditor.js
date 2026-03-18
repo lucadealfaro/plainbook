@@ -2,19 +2,20 @@ import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from './vu
 
 const ExplanationRenderer = {
     props: ['source', 'isActive', 'codeValid', 'outputValid', 'executed', 'hasError',
-            'asRead', 'startEditKey', 'isLocked', 'running', 'hasCode', 'outputVisible', 'cellMode'],
+            'asRead', 'startEditKey', 'isLocked', 'running', 'hasCode', 'outputVisible', 'cellMode',
+            'unitTestCount'],
     emits: ['update:source', 'save', 'saveandrun', 'gencode', 'clearcode', 'validate',
             'run', 'interrupt', 'delete', 'moveUp', 'moveDown', 'toggle-output', 'open-test-help',
             'open-unit-test'],
     setup(props, { emit }) {
         const mode = computed(() => props.cellMode || 'normal');
         const isTestCell = computed(() => mode.value === 'test');
-        const showRun = computed(() => ['normal', 'test', 'unit_setup', 'target'].includes(mode.value));
+        const showRun = computed(() => ['normal', 'test', 'unit_setup', 'target', 'unit_test'].includes(mode.value));
         const showMoveUpDown = computed(() => ['normal', 'test'].includes(mode.value));
         const showDelete = computed(() => ['normal', 'test'].includes(mode.value));
         const showTestHelp = computed(() => mode.value === 'test');
         const showUnitTest = computed(() => mode.value === 'normal');
-        const showSaveAndRun = computed(() => ['normal', 'test', 'unit_setup', 'target'].includes(mode.value));
+        const showSaveAndRun = computed(() => ['normal', 'test', 'unit_setup', 'target', 'unit_test'].includes(mode.value));
         const isEditing = ref(false);
         const localSource = ref((Array.isArray(props.source) ? props.source.join('') : props.source) || '');
         const originalSource = ref(localSource.value);
@@ -44,6 +45,9 @@ const ExplanationRenderer = {
         watch(() => props.isActive, (newVal) => {
             if (!newVal && isEditing.value) {
                 saveChanges();
+            }
+            if (newVal && isTestCell.value && !localSource.value.trim()) {
+                enterEditMode();
             }
         });
 
@@ -208,6 +212,7 @@ const ExplanationRenderer = {
                 </button>
                 <button v-if="showUnitTest" class="button is-small is-warning" title="Unit Test"
                         @click.stop="$emit('open-unit-test')">
+                    <span v-if="unitTestCount" class="unit-test-counter mr-1" style="font-weight: 600;">{{ unitTestCount }}</span>
                     <span class="icon"><i class="bx bx-medical-flask"></i></span>
                     <span>Test cell</span>
                 </button>

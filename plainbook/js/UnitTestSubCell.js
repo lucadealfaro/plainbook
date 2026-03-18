@@ -37,16 +37,21 @@ export default {
             }
         });
 
-        return { mode, hint, hasError, hasCode, explanation, outputVisible, startEditKey };
+        const triggerEdit = () => {
+            startEditKey.value = Date.now();
+        };
+
+        return { mode, hint, hasError, hasCode, explanation, outputVisible, startEditKey, triggerEdit };
     },
     template: /* html */ `
         <div class="unit-test-sub-cell box p-0 mb-5 is-clipped shadow-sm"
              @click="$emit('activate')"
              :style="{ border: isActive ? '2px solid #1d4ed8' : '1px solid transparent', cursor: 'pointer' }">
-            <div class="p-2 has-text-weight-semibold is-size-7 has-text-grey has-background-warning-light">
+            <div class="p-2 has-text-weight-semibold is-size-7 has-text-grey has-background-warning-light"
+                 @dblclick="triggerEdit">
                 {{ role === 'setup' ? 'Setup' : 'Test' }}
             </div>
-            <div class="p-0 border-bottom has-background-warning-light">
+            <div class="p-0 border-bottom has-background-warning-light" @dblclick="triggerEdit">
                 <explanation-editor
                     v-model:source="cell.metadata.explanation"
                     :hasCode="hasCode"

@@ -71,7 +71,7 @@ pre[class*="language-"] {
 
 .explanation-toolbar .toolbar-right .button {
   @media (max-width: 900px) {
-    span:not(.icon) {
+    span:not(.icon):not(.unit-test-counter) {
       display: none !important;
     }
     span.icon {
