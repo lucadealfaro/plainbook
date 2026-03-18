@@ -955,14 +955,22 @@ class Plainbook:
             self._write()
             return outputs
 
+    def _ut_extract_error_context(self, outputs):
+        """Extract error traceback from unit test sub-cell outputs."""
+        for output in reversed(outputs):
+            if output.get('output_type') == 'error':
+                return ("The previous attempt to run this cell resulted in this error traceback:\n"
+                        + "\n".join(getlist(output.get('traceback', []))))
+        return None
+
     def generate_unit_test_code_cell(self, api_key, cell_index, test_index, role,
                                      ai_provider="gemini", model=None, validation_feedback=None):
         """Generate code for a unit test sub-cell."""
         if role == 'target':
-            # Delegate to existing generate_code_cell
             return self.generate_code_cell(api_key, cell_index,
                                            ai_provider=ai_provider, model=model,
                                            validation_feedback=validation_feedback)
+        assert role in ('setup', 'test'), f"Invalid role: {role}"
 
         with self._lock:
             assert 0 <= cell_index < len(self.nb.cells)
@@ -974,142 +982,84 @@ class Plainbook:
             if self.ai_request_pending:
                 raise RuntimeError("An AI request is already pending.")
 
-            ai_instructions = self.nb.metadata.get('ai_instructions', '')
-
-            if role == 'setup':
-                instructions = unit_test['setup']['metadata'].get('explanation', '')
-                if ai_instructions:
-                    instructions = instructions + "\n\nADDITIONAL INSTRUCTIONS:\n" + ai_instructions
-                files_context = self._get_files_context()
-                # Error context from setup outputs
-                error_context = None
-                for output in reversed(unit_test['setup'].get('outputs', [])):
-                    if output.get('output_type') == 'error':
-                        error_context = "The previous attempt to run this cell resulted in this error traceback:\n"
-                        error_context += "\n".join(getlist(output.get('traceback', [])))
-                        break
-                variable_context = self._get_variables_for_ai(cell_index)
-                preceding_code = self._get_preceding_code_json_for_ai(cell_index, include_all_variables=False)
-                # Previous code for setup
-                previous_code = None
-                setup_source = unit_test['setup'].get('source', '').strip()
-                if setup_source:
-                    previous_code = PREVIOUS_CODE_EXPLANATION_CHANGED.format(code_string=setup_source)
-
-                try:
-                    self.ai_request_pending = True
-                    generate_fn = AI_PROVIDERS[ai_provider]["generate"]
-                    new_code = generate_fn(
-                        api_key,
-                        preceding_code=preceding_code,
-                        previous_code=previous_code,
-                        instructions=instructions,
-                        file_context=files_context,
-                        error_context=error_context,
-                        variable_context=variable_context,
-                        validation_context=validation_feedback,
-                        model=model,
-                        debug=self.debug,
-                        dump_ai_requests=self.dump_ai_requests)
-                    if self.ai_request_pending:
-                        unit_test['setup']['source'] = new_code
-                        unit_test['setup']['metadata']['code_timestamp'] = datetime.datetime.now().isoformat()
-                        unit_test['setup']['outputs'] = []
-                        v = self._get_ut_validity(cell_index, test_index)
-                        v['setup_code_valid'] = True
-                        self._invalidate_unit_test(cell_index, test_index, 'setup_output')
-                        self._write()
-                        return new_code, True
-                    else:
-                        return None, False
-                finally:
-                    self.ai_request_pending = False
-
-            elif role == 'test':
-                # Prerequisite: target must have been executed
+            if role == 'test':
                 v = self._get_ut_validity(cell_index, test_index)
                 if not v['target_output_valid']:
                     raise RuntimeError("Target must be executed before generating test code.")
 
-                instructions = unit_test['test']['metadata'].get('explanation', '')
-                if ai_instructions:
-                    instructions = instructions + "\n\nADDITIONAL INSTRUCTIONS:\n" + ai_instructions
+            # Common context
+            sub_cell = unit_test[role]
+            ai_instructions = self.nb.metadata.get('ai_instructions', '')
+            instructions = sub_cell['metadata'].get('explanation', '')
+            if ai_instructions:
+                instructions = instructions + "\n\nADDITIONAL INSTRUCTIONS:\n" + ai_instructions
+            files_context = self._get_files_context()
+            error_context = self._ut_extract_error_context(sub_cell.get('outputs', []))
+            preceding_code = self._get_preceding_code_json_for_ai(cell_index, include_all_variables=False)
 
-                files_context = self._get_files_context()
-                # Error context from test outputs
-                error_context = None
-                for output in reversed(unit_test['test'].get('outputs', [])):
-                    if output.get('output_type') == 'error':
-                        error_context = "The previous attempt to run this cell resulted in this error traceback:\n"
-                        error_context += "\n".join(getlist(output.get('traceback', [])))
-                        break
+            # Previous code
+            existing_source = sub_cell.get('source', '').strip()
+            previous_code = (PREVIOUS_CODE_EXPLANATION_CHANGED.format(code_string=existing_source)
+                             if existing_source else None)
 
-                # Build preceding code with setup and target appended
-                preceding_code = self._get_preceding_code_json_for_ai(cell_index, include_all_variables=False)
-
-                # Build extra context: setup explanation+code and target explanation+code
-                extra_context_parts = []
+            # Role-specific context
+            if role == 'setup':
+                variable_context = self._get_variables_for_ai(cell_index)
+                generate_fn = AI_PROVIDERS[ai_provider]["generate"]
+            else:  # test
+                # Append setup and target context to preceding code
+                extra_parts = []
                 setup_explanation = unit_test['setup']['metadata'].get('explanation', '')
                 setup_source = unit_test['setup'].get('source', '')
                 if setup_explanation or setup_source:
-                    extra_context_parts.append("\n# UNIT TEST SETUP CELL:")
+                    extra_parts.append("\n# UNIT TEST SETUP CELL:")
                     if setup_explanation:
-                        extra_context_parts.append(f"# Setup explanation: {setup_explanation}")
+                        extra_parts.append(f"# Setup explanation: {setup_explanation}")
                     if setup_source:
-                        extra_context_parts.append(f"# Setup code:\n{setup_source}")
-
+                        extra_parts.append(f"# Setup code:\n{setup_source}")
                 target_explanation = cell.metadata.get('explanation', '')
                 target_source = cell.source
                 if target_explanation or target_source:
-                    extra_context_parts.append("\n# TARGET CELL BEING TESTED:")
+                    extra_parts.append("\n# TARGET CELL BEING TESTED:")
                     if target_explanation:
-                        extra_context_parts.append(f"# Target explanation: {target_explanation}")
+                        extra_parts.append(f"# Target explanation: {target_explanation}")
                     if target_source:
-                        extra_context_parts.append(f"# Target code:\n{target_source}")
+                        extra_parts.append(f"# Target code:\n{target_source}")
+                if extra_parts:
+                    preceding_code = preceding_code + "\n" + "\n".join(extra_parts)
+                variable_context = self._format_variables_for_ai(
+                    unit_test.get('target', {}).get('variables', {}))
+                generate_fn = AI_PROVIDERS[ai_provider]["generate_test"]
 
-                if extra_context_parts:
-                    preceding_code = preceding_code + "\n" + "\n".join(extra_context_parts)
-
-                # Variable context from target execution
-                target_variables = unit_test.get('target', {}).get('variables', {})
-                variable_context = self._format_variables_for_ai(target_variables)
-
-                # Previous code for test
-                previous_code = None
-                test_source = unit_test['test'].get('source', '').strip()
-                if test_source:
-                    previous_code = PREVIOUS_CODE_EXPLANATION_CHANGED.format(code_string=test_source)
-
-                try:
-                    self.ai_request_pending = True
-                    generate_fn = AI_PROVIDERS[ai_provider]["generate_test"]
-                    new_code = generate_fn(
-                        api_key,
-                        preceding_code=preceding_code,
-                        previous_code=previous_code,
-                        instructions=instructions,
-                        file_context=files_context,
-                        error_context=error_context,
-                        variable_context=variable_context,
-                        validation_context=validation_feedback,
-                        model=model,
-                        debug=self.debug,
-                        dump_ai_requests=self.dump_ai_requests)
-                    if self.ai_request_pending:
-                        unit_test['test']['source'] = new_code
-                        unit_test['test']['metadata']['code_timestamp'] = datetime.datetime.now().isoformat()
-                        unit_test['test']['outputs'] = []
-                        v['test_code_valid'] = True
-                        self._invalidate_unit_test(cell_index, test_index, 'test_output')
-                        self._write()
-                        return new_code, True
-                    else:
-                        return None, False
-                finally:
-                    self.ai_request_pending = False
-
-            else:
-                raise ValueError(f"Invalid role for unit test code generation: {role}")
+            # Call AI
+            try:
+                self.ai_request_pending = True
+                new_code = generate_fn(
+                    api_key,
+                    preceding_code=preceding_code,
+                    previous_code=previous_code,
+                    instructions=instructions,
+                    file_context=files_context,
+                    error_context=error_context,
+                    variable_context=variable_context,
+                    validation_context=validation_feedback,
+                    model=model,
+                    debug=self.debug,
+                    dump_ai_requests=self.dump_ai_requests)
+                if self.ai_request_pending:
+                    sub_cell['source'] = new_code
+                    sub_cell['metadata']['code_timestamp'] = datetime.datetime.now().isoformat()
+                    sub_cell['outputs'] = []
+                    v = self._get_ut_validity(cell_index, test_index)
+                    v[f'{role}_code_valid'] = True
+                    self._invalidate_unit_test(cell_index, test_index,
+                                               'setup_output' if role == 'setup' else 'test_output')
+                    self._write()
+                    return new_code, True
+                else:
+                    return None, False
+            finally:
+                self.ai_request_pending = False
 
     # Methods to support AI
 
