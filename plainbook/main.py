@@ -679,7 +679,7 @@ def get_ai_instructions():
 def save_unit_tests():
     data = request.json
     cell_index = data.get('cell_index')
-    unit_tests = data.get('unit_tests', [])
+    unit_tests = data.get('unit_tests', {})
     notebook.save_unit_tests(cell_index, unit_tests)
     return dict(status='success')
 
@@ -689,10 +689,10 @@ def save_unit_tests():
 def save_unit_test_explanation():
     data = request.json
     cell_index = data.get('cell_index')
-    test_index = data.get('test_index')
+    test_name = data.get('test_name')
     role = data.get('role')
     explanation = data.get('explanation')
-    notebook.save_unit_test_explanation(cell_index, test_index, role, explanation)
+    notebook.save_unit_test_explanation(cell_index, test_name, role, explanation)
     return dict(status='success')
 
 @post('/save_unit_test_code')
@@ -701,10 +701,10 @@ def save_unit_test_explanation():
 def save_unit_test_code():
     data = request.json
     cell_index = data.get('cell_index')
-    test_index = data.get('test_index')
+    test_name = data.get('test_name')
     role = data.get('role')
     source = data.get('source')
-    notebook.save_unit_test_code(cell_index, test_index, role, source)
+    notebook.save_unit_test_code(cell_index, test_name, role, source)
     return dict(status='success')
 
 @post('/clear_unit_test_code')
@@ -713,9 +713,9 @@ def save_unit_test_code():
 def clear_unit_test_code():
     data = request.json
     cell_index = data.get('cell_index')
-    test_index = data.get('test_index')
+    test_name = data.get('test_name')
     role = data.get('role')
-    notebook.clear_unit_test_code(cell_index, test_index, role)
+    notebook.clear_unit_test_code(cell_index, test_name, role)
     return dict(status='success')
 
 @post('/get_unit_test_state')
@@ -735,14 +735,14 @@ def get_unit_test_state():
 def run_unit_test_cell():
     data = request.json
     cell_index = data.get('cell_index')
-    test_index = data.get('test_index')
+    test_name = data.get('test_name')
     role = data.get('role')
     try:
-        outputs = notebook.execute_unit_test_cell(cell_index, test_index, role)
+        outputs = notebook.execute_unit_test_cell(cell_index, test_name, role)
         return dict(status='ok', outputs=outputs, role=role)
     except CellExecutionError:
         cell = notebook.nb.cells[cell_index]
-        test = cell.metadata.get('unit_tests', [])[test_index]
+        test = cell.metadata.get('unit_tests', {})[test_name]
         if role == 'setup':
             outs = test['setup'].get('outputs', [])
         elif role == 'target':
@@ -759,15 +759,15 @@ def run_unit_test_cell():
 def generate_unit_test_code():
     data = request.json
     cell_index = data.get('cell_index')
-    test_index = data.get('test_index')
+    test_name = data.get('test_name')
     role = data.get('role')
     validation_feedback = data.get('validation_feedback')
     api_key, ai_provider, model, error = _get_ai_config()
     if error:
         return dict(status='error', message=error)
     try:
-        new_code, success = notebook.generate_unit_test_code_cell(
-            api_key, cell_index, test_index, role,
+        new_code, success = notebook.generate_unit_test_cell(
+            api_key, cell_index, test_name, role,
             ai_provider=ai_provider, model=model,
             validation_feedback=validation_feedback)
     except Exception as e:

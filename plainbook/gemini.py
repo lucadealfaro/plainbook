@@ -4,10 +4,12 @@ from google.genai import types
 from .ai_common import (
     SYSTEM_INSTRUCTIONS,
     TEST_SYSTEM_INSTRUCTIONS,
+    UNIT_TEST_SYSTEM_INSTRUCTIONS,
     CHECKING_INSTRUCTIONS,
     NAME_GENERATION_INSTRUCTIONS,
     add_tokens,
     build_context_prompt,
+    build_unit_test_prompt,
     build_name_prompt,
     dump_ai_request,
     log_ai_request_size,
@@ -140,6 +142,64 @@ Code:
         contents=prompt,
         config=types.GenerateContentConfig(
             system_instruction=TEST_SYSTEM_INSTRUCTIONS
+        )
+    )
+    if response.usage_metadata:
+        add_tokens(response.usage_metadata.prompt_token_count, response.usage_metadata.candidates_token_count)
+    if debug:
+        print("Response:", response.text)
+    code = strip_markdown_code_fences(response.text)
+    return code
+
+
+def gemini_generate_unit_test_code(
+    api_key,
+    preceding_code=None,
+    previous_code=None,
+    instructions=None,
+    file_context=None,
+    error_context=None,
+    variable_context=None,
+    validation_context=None,
+    setup_cell_context=None,
+    target_cell_context=None,
+    test_cell_context=None,
+    variables_for_target_context=None,
+    role=None,
+    model=None,
+    debug=False,
+    dump_ai_requests=False):
+    client = genai.Client(api_key=api_key)
+    model = model or GEMINI_GENERATE_MODEL
+
+    prompt = build_unit_test_prompt(
+        preceding=preceding_code,
+        previous=previous_code,
+        instructions=instructions,
+        file_context=file_context,
+        error_context=error_context,
+        variable_context=variable_context,
+        validation_context=validation_context,
+        setup_cell_context=setup_cell_context,
+        target_cell_context=target_cell_context,
+        test_cell_context=test_cell_context,
+        variables_for_target_context=variables_for_target_context,
+        role=role)
+
+    if debug:
+        log_ai_request_size("gemini generate_unit_test", UNIT_TEST_SYSTEM_INSTRUCTIONS, prompt,
+                            preceding=preceding_code, instructions=instructions,
+                            previous=previous_code, file_context=file_context,
+                            error_context=error_context, variable_context=variable_context,
+                            validation_context=validation_context)
+    if dump_ai_requests:
+        dump_ai_request("gemini generate_unit_test", UNIT_TEST_SYSTEM_INSTRUCTIONS, prompt)
+
+    response = client.models.generate_content(
+        model=model,
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            system_instruction=UNIT_TEST_SYSTEM_INSTRUCTIONS
         )
     )
     if response.usage_metadata:

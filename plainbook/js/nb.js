@@ -774,7 +774,7 @@ createApp({
         // Unit test mode state and methods
 
         const unitTestTargetIndex = ref(null);
-        const unitTestValidity = ref([]);
+        const unitTestValidity = ref({});
 
         function newSubCell() {
             return {
@@ -807,12 +807,10 @@ createApp({
 
         const enterUnitTestMode = async (cellIndex) => {
             const cell = notebook.value.cells[cellIndex];
-            if (!cell.metadata.unit_tests || cell.metadata.unit_tests.length === 0) {
-                cell.metadata.unit_tests = [{
-                    name: "Test 1",
-                    setup: newSubCell(),
-                    test: newSubCell()
-                }];
+            if (!cell.metadata.unit_tests || Object.keys(cell.metadata.unit_tests).length === 0) {
+                cell.metadata.unit_tests = {
+                    "Test 1": { setup: newSubCell(), test: newSubCell() }
+                };
                 saveUnitTests(cellIndex);
             }
             unitTestTargetIndex.value = cellIndex;
@@ -821,7 +819,7 @@ createApp({
 
         const exitUnitTestMode = () => {
             unitTestTargetIndex.value = null;
-            unitTestValidity.value = [];
+            unitTestValidity.value = {};
         };
 
         const saveUnitTests = async (cellIndex) => {
@@ -839,35 +837,42 @@ createApp({
 
         const addUnitTest = async (cellIndex) => {
             const cell = notebook.value.cells[cellIndex];
-            if (!cell.metadata.unit_tests) cell.metadata.unit_tests = [];
-            const testNum = cell.metadata.unit_tests.length + 1;
-            cell.metadata.unit_tests.push({
-                name: `Test ${testNum}`,
+            if (!cell.metadata.unit_tests) cell.metadata.unit_tests = {};
+            let testNum = Object.keys(cell.metadata.unit_tests).length + 1;
+            while (`Test ${testNum}` in cell.metadata.unit_tests) testNum++;
+            cell.metadata.unit_tests[`Test ${testNum}`] = {
                 setup: newSubCell(),
                 test: newSubCell()
-            });
+            };
             await saveUnitTests(cellIndex);
         };
 
-        const deleteUnitTest = async (cellIndex, testIndex) => {
+        const deleteUnitTest = async (cellIndex, testName) => {
             const cell = notebook.value.cells[cellIndex];
             if (!cell.metadata.unit_tests) return;
-            cell.metadata.unit_tests.splice(testIndex, 1);
+            delete cell.metadata.unit_tests[testName];
             await saveUnitTests(cellIndex);
+            await fetchUnitTestState(cellIndex);
         };
 
-        const renameUnitTest = async (cellIndex, testIndex, newName) => {
+        const renameUnitTest = async (cellIndex, oldName, newName) => {
             const cell = notebook.value.cells[cellIndex];
-            if (!cell.metadata.unit_tests || !cell.metadata.unit_tests[testIndex]) return;
-            cell.metadata.unit_tests[testIndex].name = newName;
+            if (!cell.metadata.unit_tests || !(oldName in cell.metadata.unit_tests)) return;
+            if (newName in cell.metadata.unit_tests) return;
+            const newTests = {};
+            for (const [key, value] of Object.entries(cell.metadata.unit_tests)) {
+                newTests[key === oldName ? newName : key] = value;
+            }
+            cell.metadata.unit_tests = newTests;
             await saveUnitTests(cellIndex);
+            await fetchUnitTestState(cellIndex);
         };
 
-        const saveUnitTestExplanation = async (cellIndex, testIndex, role, content) => {
+        const saveUnitTestExplanation = async (cellIndex, testName, role, content) => {
             try {
                 await apiCall('/save_unit_test_explanation', 'POST', {
                     cell_index: cellIndex,
-                    test_index: testIndex,
+                    test_name: testName,
                     role: role,
                     explanation: content
                 });
@@ -877,11 +882,11 @@ createApp({
             }
         };
 
-        const saveUnitTestCode = async (cellIndex, testIndex, role, content) => {
+        const saveUnitTestCode = async (cellIndex, testName, role, content) => {
             try {
                 await apiCall('/save_unit_test_code', 'POST', {
                     cell_index: cellIndex,
-                    test_index: testIndex,
+                    test_name: testName,
                     role: role,
                     source: content
                 });
@@ -891,16 +896,16 @@ createApp({
             }
         };
 
-        const clearUnitTestCode = async (cellIndex, testIndex, role) => {
+        const clearUnitTestCode = async (cellIndex, testName, role) => {
             try {
                 await apiCall('/clear_unit_test_code', 'POST', {
                     cell_index: cellIndex,
-                    test_index: testIndex,
+                    test_name: testName,
                     role: role
                 });
                 // Update local state
                 const cell = notebook.value.cells[cellIndex];
-                const test = cell.metadata.unit_tests[testIndex];
+                const test = cell.metadata.unit_tests[testName];
                 const subCell = test[role];
                 subCell.source = '';
                 subCell.outputs = [];
@@ -910,16 +915,16 @@ createApp({
             }
         };
 
-        const executeUnitTestCell = async (cellIndex, testIndex, role) => {
+        const executeUnitTestCell = async (cellIndex, testName, role) => {
             runningActivity.value = { type: `unit-test-${role}`, cellIndex };
             const r = await apiCall('/run_unit_test_cell', 'POST', {
                 cell_index: cellIndex,
-                test_index: testIndex,
+                test_name: testName,
                 role: role
             });
             // Update local outputs
             const cell = notebook.value.cells[cellIndex];
-            const test = cell.metadata.unit_tests[testIndex];
+            const test = cell.metadata.unit_tests[testName];
             if (role === 'setup') {
                 test.setup.outputs = r.outputs || [];
             } else if (role === 'target') {
@@ -936,16 +941,16 @@ createApp({
             return r;
         };
 
-        const generateUnitTestCodeInner = async (cellIndex, testIndex, role) => {
+        const generateUnitTestCodeInner = async (cellIndex, testName, role) => {
             runningActivity.value = { type: `unit-test-gen-${role}`, cellIndex };
             const r = await apiCall('/generate_unit_test_cell_code', 'POST', {
                 cell_index: cellIndex,
-                test_index: testIndex,
+                test_name: testName,
                 role: role
             });
             if (r.status === 'success' && r.code) {
                 const cell = notebook.value.cells[cellIndex];
-                const test = cell.metadata.unit_tests[testIndex];
+                const test = cell.metadata.unit_tests[testName];
                 if (role === 'target') {
                     cell.source = r.code;
                 } else {
@@ -957,7 +962,7 @@ createApp({
             return r;
         };
 
-        const executeUnitTest = async (cellIndex, testIndex) => {
+        const executeUnitTest = async (cellIndex, testName) => {
             // 1. Ensure main notebook cells up to cellIndex-1 are executed
             if (cellIndex > 0 && last_executed_cell_index.value < cellIndex - 1) {
                 await runCells(cellIndex - 1);
@@ -965,15 +970,15 @@ createApp({
             if (!running.value) return;
 
             const cell = notebook.value.cells[cellIndex];
-            const test = cell.metadata.unit_tests[testIndex];
+            const test = cell.metadata.unit_tests[testName];
 
             // 2. Generate setup code if needed, then execute setup
             if (!(test.setup.source || '').trim() && (test.setup.metadata?.explanation || '').trim()) {
-                await generateUnitTestCodeInner(cellIndex, testIndex, 'setup');
+                await generateUnitTestCodeInner(cellIndex, testName, 'setup');
             }
             if (!running.value) return;
             // Execute setup (even if empty — server handles no-op)
-            await executeUnitTestCell(cellIndex, testIndex, 'setup');
+            await executeUnitTestCell(cellIndex, testName, 'setup');
             if (!running.value) return;
 
             // 3. Ensure target has code, then execute target
@@ -981,29 +986,29 @@ createApp({
                 await generateCode(cellIndex);
             }
             if (!running.value) return;
-            await executeUnitTestCell(cellIndex, testIndex, 'target');
+            await executeUnitTestCell(cellIndex, testName, 'target');
             if (!running.value) return;
 
             // 4. Generate test code if needed, then execute test
             if (!(test.test.source || '').trim() && (test.test.metadata?.explanation || '').trim()) {
-                await generateUnitTestCodeInner(cellIndex, testIndex, 'test');
+                await generateUnitTestCodeInner(cellIndex, testName, 'test');
             }
             if (!running.value) return;
             if ((test.test.source || '').trim()) {
-                await executeUnitTestCell(cellIndex, testIndex, 'test');
+                await executeUnitTestCell(cellIndex, testName, 'test');
             }
 
             // 5. Refresh validity flags
             await fetchUnitTestState(cellIndex);
         };
 
-        const ui_runUnitTest = async (cellIndex, testIndex) => {
+        const ui_runUnitTest = async (cellIndex, testName) => {
             flushActiveEdits();
             await waitForPendingSaves();
             if (!running.value) {
                 running.value = true;
                 try {
-                    await executeUnitTest(cellIndex, testIndex);
+                    await executeUnitTest(cellIndex, testName);
                 } finally {
                     running.value = false;
                     runningActivity.value = { type: null, cellIndex: null };
@@ -1011,11 +1016,11 @@ createApp({
             }
         };
 
-        const generateUnitTestCode = async (cellIndex, testIndex, role) => {
+        const generateUnitTestCode = async (cellIndex, testName, role) => {
             if (!running.value) {
                 running.value = true;
                 try {
-                    await generateUnitTestCodeInner(cellIndex, testIndex, role);
+                    await generateUnitTestCodeInner(cellIndex, testName, role);
                     await fetchUnitTestState(cellIndex);
                 } finally {
                     running.value = false;

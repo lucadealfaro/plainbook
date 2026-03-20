@@ -16,12 +16,12 @@ import nbformat
 import requests
 
 from .ai_common import get_session_tokens
-from .gemini import gemini_generate_code, gemini_validate_code, gemini_generate_cell_name, gemini_generate_test_code
-from .claude import claude_generate_code, claude_validate_code, claude_generate_cell_name, claude_generate_test_code
+from .gemini import gemini_generate_code, gemini_validate_code, gemini_generate_cell_name, gemini_generate_test_code, gemini_generate_unit_test_code
+from .claude import claude_generate_code, claude_validate_code, claude_generate_cell_name, claude_generate_test_code, claude_generate_unit_test_code
 
 AI_PROVIDERS = {
-    "gemini": {"generate": gemini_generate_code, "validate": gemini_validate_code, "name": gemini_generate_cell_name, "generate_test": gemini_generate_test_code},
-    "claude": {"generate": claude_generate_code, "validate": claude_validate_code, "name": claude_generate_cell_name, "generate_test": claude_generate_test_code},
+    "gemini": {"generate": gemini_generate_code, "validate": gemini_validate_code, "name": gemini_generate_cell_name, "generate_test": gemini_generate_test_code, "generate_unit_test": gemini_generate_unit_test_code},
+    "claude": {"generate": claude_generate_code, "validate": claude_validate_code, "name": claude_generate_cell_name, "generate_test": claude_generate_test_code, "generate_unit_test": claude_generate_unit_test_code},
 }
 
 MAX_OUTPUT_CHARS_FOR_AI = 2000
@@ -146,8 +146,8 @@ class Plainbook:
         self._sk_base_url = f"http://127.0.0.1:{self._sk_port}"
         self._current_exec_id = None
         self._cell_states = {}
-        self._unit_test_states = {}     # "{cell_id}:{test_index}:{role}" -> kernel state name
-        self._unit_test_validity = {}   # (cell_id, test_index) -> {5 boolean flags}
+        self._unit_test_states = {}     # "{cell_id}:{test_name}:{role}" -> kernel state name
+        self._unit_test_validity = {}   # (cell_id, test_name) -> {5 boolean flags}
         self._sk_process = subprocess.Popen(
             [sys.executable, "-m", "snapshot_kernel.main",
              "--bind", f"127.0.0.1:{self._sk_port}",
@@ -224,12 +224,12 @@ class Plainbook:
     _UT_CASCADE = ['setup_code', 'setup_output', 'target_output', 'test_code', 'test_output']
     _UT_STATE_ROLES = {'setup_output': 'setup', 'target_output': 'target', 'test_output': 'test'}
 
-    def _ut_state_key(self, cell_index, test_index, role):
-        return f"{self.nb.cells[cell_index].id}:{test_index}:{role}"
+    def _ut_state_key(self, cell_index, test_name, role):
+        return f"{self.nb.cells[cell_index].id}:{test_name}:{role}"
 
-    def _get_ut_validity(self, cell_index, test_index):
+    def _get_ut_validity(self, cell_index, test_name):
         """Get or create validity dict for a unit test."""
-        key = (self.nb.cells[cell_index].id, test_index)
+        key = (self.nb.cells[cell_index].id, test_name)
         if key not in self._unit_test_validity:
             self._unit_test_validity[key] = {
                 'setup_code_valid': False,
@@ -240,14 +240,14 @@ class Plainbook:
             }
         return self._unit_test_validity[key]
 
-    def _invalidate_unit_test(self, cell_index, test_index, from_point):
+    def _invalidate_unit_test(self, cell_index, test_name, from_point):
         """Cascade invalidation from from_point onward for a unit test."""
-        v = self._get_ut_validity(cell_index, test_index)
+        v = self._get_ut_validity(cell_index, test_name)
         start = self._UT_CASCADE.index(from_point)
         for point in self._UT_CASCADE[start:]:
             v[point + '_valid'] = False
             if point in self._UT_STATE_ROLES:
-                sk = self._ut_state_key(cell_index, test_index, self._UT_STATE_ROLES[point])
+                sk = self._ut_state_key(cell_index, test_name, self._UT_STATE_ROLES[point])
                 if sk in self._unit_test_states:
                     try:
                         self._sk_request("DELETE", f"/states/{self._unit_test_states[sk]}")
@@ -258,22 +258,22 @@ class Plainbook:
     def _invalidate_all_unit_tests(self, cell_index, from_point):
         """Invalidate all unit tests for a cell from from_point onward."""
         cell = self.nb.cells[cell_index]
-        tests = cell.metadata.get('unit_tests', [])
-        for i in range(len(tests)):
-            self._invalidate_unit_test(cell_index, i, from_point)
+        tests = cell.metadata.get('unit_tests', {})
+        for test_name in tests:
+            self._invalidate_unit_test(cell_index, test_name, from_point)
 
     def get_unit_test_state(self, cell_index):
         """Returns validity flags for all unit tests of a specific target cell."""
         cell = self.nb.cells[cell_index]
-        tests = cell.metadata.get('unit_tests', [])
-        result = []
-        for i in range(len(tests)):
-            v = self._get_ut_validity(cell_index, i)
-            result.append({
+        tests = cell.metadata.get('unit_tests', {})
+        result = {}
+        for test_name in tests:
+            v = self._get_ut_validity(cell_index, test_name)
+            result[test_name] = {
                 'setup': {'code_valid': v['setup_code_valid'], 'output_valid': v['setup_output_valid']},
                 'target': {'output_valid': v['target_output_valid']},
                 'test': {'code_valid': v['test_code_valid'], 'output_valid': v['test_output_valid']},
-            })
+            }
         return result
 
     # Kernel methods
@@ -764,86 +764,97 @@ class Plainbook:
     # Unit test metadata methods (stubs for Phase 1)
 
     def save_unit_tests(self, cell_index, unit_tests):
-        """Save the full unit_tests list to cell metadata."""
+        """Save the full unit_tests dict to cell metadata."""
         with self._lock:
             assert 0 <= cell_index < len(self.nb.cells)
             cell = self.nb.cells[cell_index]
+            cell_id = cell.id
+            # Clear validity entries for this cell
+            for k in [k for k in self._unit_test_validity if k[0] == cell_id]:
+                del self._unit_test_validity[k]
+            # Clear and delete kernel state entries for this cell
+            for sk in [sk for sk in self._unit_test_states if sk.startswith(f"{cell_id}:")]:
+                try:
+                    self._sk_request("DELETE", f"/states/{self._unit_test_states[sk]}")
+                except Exception:
+                    pass
+                del self._unit_test_states[sk]
             cell.metadata['unit_tests'] = unit_tests
             self._write()
 
-    def save_unit_test_explanation(self, cell_index, test_index, role, explanation):
+    def save_unit_test_explanation(self, cell_index, test_name, role, explanation):
         """Update the explanation of a unit test sub-cell."""
         with self._lock:
             assert 0 <= cell_index < len(self.nb.cells)
             cell = self.nb.cells[cell_index]
-            tests = cell.metadata.get('unit_tests', [])
-            assert 0 <= test_index < len(tests)
+            tests = cell.metadata.get('unit_tests', {})
+            assert test_name in tests
             assert role in ('setup', 'test')
-            tests[test_index][role]['metadata']['explanation'] = explanation
-            tests[test_index][role]['metadata']['explanation_timestamp'] = datetime.datetime.now().isoformat()
+            tests[test_name][role]['metadata']['explanation'] = explanation
+            tests[test_name][role]['metadata']['explanation_timestamp'] = datetime.datetime.now().isoformat()
             # Invalidate from the appropriate point
             if role == 'setup':
-                self._invalidate_unit_test(cell_index, test_index, 'setup_code')
+                self._invalidate_unit_test(cell_index, test_name, 'setup_code')
             else:
-                self._invalidate_unit_test(cell_index, test_index, 'test_code')
+                self._invalidate_unit_test(cell_index, test_name, 'test_code')
             self._write()
 
-    def save_unit_test_code(self, cell_index, test_index, role, source):
+    def save_unit_test_code(self, cell_index, test_name, role, source):
         """Update the source code of a unit test sub-cell."""
         with self._lock:
             assert 0 <= cell_index < len(self.nb.cells)
             cell = self.nb.cells[cell_index]
-            tests = cell.metadata.get('unit_tests', [])
-            assert 0 <= test_index < len(tests)
+            tests = cell.metadata.get('unit_tests', {})
+            assert test_name in tests
             assert role in ('setup', 'test')
-            tests[test_index][role]['source'] = source
-            tests[test_index][role]['metadata']['code_timestamp'] = datetime.datetime.now().isoformat()
+            tests[test_name][role]['source'] = source
+            tests[test_name][role]['metadata']['code_timestamp'] = datetime.datetime.now().isoformat()
             # Invalidate from the appropriate point
             if role == 'setup':
-                self._invalidate_unit_test(cell_index, test_index, 'setup_output')
+                self._invalidate_unit_test(cell_index, test_name, 'setup_output')
             else:
-                self._invalidate_unit_test(cell_index, test_index, 'test_output')
+                self._invalidate_unit_test(cell_index, test_name, 'test_output')
             self._write()
 
-    def clear_unit_test_code(self, cell_index, test_index, role):
+    def clear_unit_test_code(self, cell_index, test_name, role):
         """Clear the source code and outputs of a unit test sub-cell."""
         with self._lock:
             assert 0 <= cell_index < len(self.nb.cells)
             cell = self.nb.cells[cell_index]
-            tests = cell.metadata.get('unit_tests', [])
-            assert 0 <= test_index < len(tests)
+            tests = cell.metadata.get('unit_tests', {})
+            assert test_name in tests
             assert role in ('setup', 'test')
-            tests[test_index][role]['source'] = ''
-            tests[test_index][role]['outputs'] = []
+            tests[test_name][role]['source'] = ''
+            tests[test_name][role]['outputs'] = []
             # Invalidate from the appropriate point
             if role == 'setup':
-                self._invalidate_unit_test(cell_index, test_index, 'setup_code')
+                self._invalidate_unit_test(cell_index, test_name, 'setup_code')
             else:
-                self._invalidate_unit_test(cell_index, test_index, 'test_code')
+                self._invalidate_unit_test(cell_index, test_name, 'test_code')
             self._write()
 
     # Unit test execution and generation
 
-    def execute_unit_test_cell(self, cell_index, test_index, role):
+    def execute_unit_test_cell(self, cell_index, test_name, role):
         """Execute a unit test sub-cell (setup, target, or test)."""
         with self._lock:
             assert 0 <= cell_index < len(self.nb.cells)
             cell = self.nb.cells[cell_index]
-            tests = cell.metadata.get('unit_tests', [])
-            assert 0 <= test_index < len(tests)
+            tests = cell.metadata.get('unit_tests', {})
+            assert test_name in tests
             assert role in ('setup', 'target', 'test')
-            unit_test = tests[test_index]
+            unit_test = tests[test_name]
 
             # Determine input state
             if role == 'setup':
                 input_state = self._find_input_state(cell_index)
             elif role == 'target':
-                setup_key = self._ut_state_key(cell_index, test_index, 'setup')
+                setup_key = self._ut_state_key(cell_index, test_name, 'setup')
                 if setup_key not in self._unit_test_states:
                     raise ExecutionError("Setup must be executed before target")
                 input_state = self._unit_test_states[setup_key]
             else:  # test
-                target_key = self._ut_state_key(cell_index, test_index, 'target')
+                target_key = self._ut_state_key(cell_index, test_name, 'target')
                 if target_key not in self._unit_test_states:
                     raise ExecutionError("Target must be executed before test")
                 input_state = self._unit_test_states[target_key]
@@ -853,9 +864,9 @@ class Plainbook:
                 source = unit_test['setup'].get('source', '')
                 # Handle empty setup: skip execution, just record the input state
                 if not source.strip():
-                    setup_key = self._ut_state_key(cell_index, test_index, 'setup')
+                    setup_key = self._ut_state_key(cell_index, test_name, 'setup')
                     self._unit_test_states[setup_key] = input_state
-                    v = self._get_ut_validity(cell_index, test_index)
+                    v = self._get_ut_validity(cell_index, test_name)
                     v['setup_output_valid'] = True
                     unit_test['setup']['outputs'] = []
                     self._write()
@@ -865,8 +876,8 @@ class Plainbook:
             else:
                 source = unit_test['test'].get('source', '')
 
-            # Allocate/reuse state name
-            state_key = self._ut_state_key(cell_index, test_index, role)
+            # Allocate/reuse state name guaranteeing uniqueness across all unit test sub-cells and main cells.
+            state_key = self._ut_state_key(cell_index, test_name, role)
             if state_key in self._unit_test_states:
                 new_state_name = self._unit_test_states[state_key]
             else:
@@ -944,7 +955,7 @@ class Plainbook:
                     unit_test['test']['outputs'] = outputs
 
             # Set validity flag
-            v = self._get_ut_validity(cell_index, test_index)
+            v = self._get_ut_validity(cell_index, test_name)
             if role == 'setup':
                 v['setup_output_valid'] = True
             elif role == 'target':
@@ -955,6 +966,27 @@ class Plainbook:
             self._write()
             return outputs
 
+
+    def _format_ut_subcell_for_ai(self, cell_or_dict, label):
+        """Format a unit test sub-cell (or main cell) for AI context.
+        Works with both nbformat cell objects (for target) and plain dicts (for setup/test).
+        Returns a string like '# Explanation: ...\ncode...' or None if empty."""
+        # Handle both nbformat objects (attribute access) and plain dicts
+        if hasattr(cell_or_dict, 'metadata'):
+            explanation = cell_or_dict.metadata.get('explanation', '')
+            source = cell_or_dict.source or ''
+        else:
+            explanation = cell_or_dict.get('metadata', {}).get('explanation', '')
+            source = cell_or_dict.get('source', '')
+        if not explanation and not source:
+            return None
+        parts = []
+        if explanation:
+            parts.append(f"# {label.capitalize()} explanation: {explanation}")
+        if source:
+            parts.append(f"# {label.capitalize()} code:\n{source}")
+        return "\n".join(parts)
+
     def _ut_extract_error_context(self, outputs):
         """Extract error traceback from unit test sub-cell outputs."""
         for output in reversed(outputs):
@@ -963,123 +995,8 @@ class Plainbook:
                         + "\n".join(getlist(output.get('traceback', []))))
         return None
 
-    def generate_unit_test_code_cell(self, api_key, cell_index, test_index, role,
-                                     ai_provider="gemini", model=None, validation_feedback=None):
-        """Generate code for a unit test sub-cell."""
-        if role == 'target':
-            return self.generate_code_cell(api_key, cell_index,
-                                           ai_provider=ai_provider, model=model,
-                                           validation_feedback=validation_feedback)
-        assert role in ('setup', 'test'), f"Invalid role: {role}"
-
-        with self._lock:
-            assert 0 <= cell_index < len(self.nb.cells)
-            cell = self.nb.cells[cell_index]
-            tests = cell.metadata.get('unit_tests', [])
-            assert 0 <= test_index < len(tests)
-            unit_test = tests[test_index]
-
-            if self.ai_request_pending:
-                raise RuntimeError("An AI request is already pending.")
-
-            if role == 'test':
-                v = self._get_ut_validity(cell_index, test_index)
-                if not v['target_output_valid']:
-                    raise RuntimeError("Target must be executed before generating test code.")
-
-            # Common context
-            sub_cell = unit_test[role]
-            ai_instructions = self.nb.metadata.get('ai_instructions', '')
-            instructions = sub_cell['metadata'].get('explanation', '')
-            if ai_instructions:
-                instructions = instructions + "\n\nADDITIONAL INSTRUCTIONS:\n" + ai_instructions
-            files_context = self._get_files_context()
-            error_context = self._ut_extract_error_context(sub_cell.get('outputs', []))
-            preceding_code = self._get_preceding_code_json_for_ai(cell_index, include_all_variables=False)
-
-            # Previous code
-            existing_source = sub_cell.get('source', '').strip()
-            previous_code = (PREVIOUS_CODE_EXPLANATION_CHANGED.format(code_string=existing_source)
-                             if existing_source else None)
-
-            # Role-specific context
-            if role == 'setup':
-                variable_context = self._get_variables_for_ai(cell_index)
-                generate_fn = AI_PROVIDERS[ai_provider]["generate"]
-            else:  # test
-                # Append setup and target context to preceding code
-                extra_parts = []
-                setup_explanation = unit_test['setup']['metadata'].get('explanation', '')
-                setup_source = unit_test['setup'].get('source', '')
-                if setup_explanation or setup_source:
-                    extra_parts.append("\n# UNIT TEST SETUP CELL:")
-                    if setup_explanation:
-                        extra_parts.append(f"# Setup explanation: {setup_explanation}")
-                    if setup_source:
-                        extra_parts.append(f"# Setup code:\n{setup_source}")
-                target_explanation = cell.metadata.get('explanation', '')
-                target_source = cell.source
-                if target_explanation or target_source:
-                    extra_parts.append("\n# TARGET CELL BEING TESTED:")
-                    if target_explanation:
-                        extra_parts.append(f"# Target explanation: {target_explanation}")
-                    if target_source:
-                        extra_parts.append(f"# Target code:\n{target_source}")
-                if extra_parts:
-                    preceding_code = preceding_code + "\n" + "\n".join(extra_parts)
-                variable_context = self._format_variables_for_ai(
-                    unit_test.get('target', {}).get('variables', {}))
-                generate_fn = AI_PROVIDERS[ai_provider]["generate_test"]
-
-            # Call AI
-            try:
-                self.ai_request_pending = True
-                new_code = generate_fn(
-                    api_key,
-                    preceding_code=preceding_code,
-                    previous_code=previous_code,
-                    instructions=instructions,
-                    file_context=files_context,
-                    error_context=error_context,
-                    variable_context=variable_context,
-                    validation_context=validation_feedback,
-                    model=model,
-                    debug=self.debug,
-                    dump_ai_requests=self.dump_ai_requests)
-                if self.ai_request_pending:
-                    sub_cell['source'] = new_code
-                    sub_cell['metadata']['code_timestamp'] = datetime.datetime.now().isoformat()
-                    sub_cell['outputs'] = []
-                    v = self._get_ut_validity(cell_index, test_index)
-                    v[f'{role}_code_valid'] = True
-                    self._invalidate_unit_test(cell_index, test_index,
-                                               'setup_output' if role == 'setup' else 'test_output')
-                    self._write()
-                    return new_code, True
-                else:
-                    return None, False
-            finally:
-                self.ai_request_pending = False
-
+ 
     # Methods to support AI
-
-    def _get_cell_for_ai(self, index):
-        """Returns the content of a cell for AI processing.
-        Needs to be called with the lock held."""
-        cell = self.nb.cells[index]
-        if cell.cell_type == 'test':
-            return "\n"
-        elif cell.cell_type == 'code':
-            explanation = cell.metadata.get('explanation', "")
-            explanation = ["# " + line for line in explanation.splitlines(keepends=True)]
-            explanation_text = "".join(explanation) + "\n"
-            source_code = cell.source + "\n"
-            return explanation_text + source_code
-        elif cell.cell_type == 'markdown':
-            commented_lines = ["# " + line for line in cell.source.splitlines(keepends=True)]
-            return "".join(commented_lines) + "\n"
-        else:
-            return "\n"
 
 
     def _filter_outputs_for_ai(self, outputs):
@@ -1101,6 +1018,7 @@ class Plainbook:
                 continue
             filtered.append(output)
         return filtered
+
 
     def _get_cell_json_for_ai(self, index):
         """Returns the content of a cell for AI processing, in JSON format.
@@ -1141,34 +1059,49 @@ class Plainbook:
                     lines.append(f"  * {col['name']} ({col['dtype']})")
         return "\n".join(lines)
 
-    def _get_variables_for_ai(self, index):
+    def _get_target_accessed_variables(self, source):
+        """Return the set of variable names accessed (read) by the given source code,
+        excluding builtins and names that are only assigned."""
+        import ast
+        import builtins
+        try:
+            tree = ast.parse(source)
+        except SyntaxError:
+            return set()
+        loaded = set()
+        for node in ast.walk(tree):
+            if isinstance(node, ast.Name):
+                if isinstance(node.ctx, ast.Load):
+                    loaded.add(node.id)
+        builtin_names = set(dir(builtins))
+        return loaded - builtin_names
+
+
+    def _get_previous_code_cell_index(self, index):
+        """Returns the index of the last code cell before the given index, or -1 if none exists."""
+        assert 0 <= index < len(self.nb.cells)
+        for i in range(index - 1, -1, -1):
+            if self.nb.cells[i].cell_type == 'code':
+                return i
+        return -1
+
+
+    def _get_previous_code_cell(self, index):
+        """Returns the last code cell before the given index, or None if none exists."""
+        prev_index = self._get_previous_code_cell_index(index)
+        return self.nb.cells[prev_index] if prev_index >= 0 else None
+    
+
+    def _get_variables_for_ai(self, cell):
         """Returns a formatted text summary of variables in the kernel
         that are defined just _before_ the cell at index is executed."""
-
-        assert 0 <= index < len(self.nb.cells)
-        # Finds the last code cell before index.
-        prev_code_cell_idx = -1
-        for i in range(index - 1, -1, -1):
-            cell = self.nb.cells[i]
-            if cell.cell_type == 'code':
-                prev_code_cell_idx = i
-                break
-        if prev_code_cell_idx == -1:
-            return ""
-        variables = self.nb.cells[prev_code_cell_idx].metadata.get('variables', {})
+        variables = cell.metadata.get('variables', {})
         return self._format_variables_for_ai(variables)
 
 
     def debug_request(self, nb):
         with self._lock:
             self.nb = nbformat.reads(nb, as_version=4)
-
-
-    def _get_preceding_code_for_ai(self, index):
-        """Returns the concatenated source code of all previous code cells for context."""
-        previous_code = [self._get_cell_for_ai(i) for i in range(index)
-                         if self.nb.cells[i].cell_type != 'test']
-        return "\n".join(previous_code)
 
 
     def _get_preceding_code_json_for_ai(self, index, include_all_variables=True):
@@ -1190,17 +1123,24 @@ class Plainbook:
         return nb_json
 
 
-    def _get_cell_code_for_ai(self, index):
+    def _get_cell_w_change_noted(self, cell):
         """Returns the source code of the cell at index for context."""
-        cell = self.nb.cells[index]
         if cell.cell_type != 'code' or cell.source is None or cell.source.strip() == "":
             return None
-        code_string = self._get_cell_for_ai(index)
+        code_string = self._get_cell_json_for_ai(cell)
         if cell.metadata['explanation_timestamp'] < cell.metadata['code_timestamp']:
             return PREVIOUS_CODE_NEEDS_REVISION.format(code_string=code_string)
         else:
             return PREVIOUS_CODE_EXPLANATION_CHANGED.format(code_string=code_string)
 
+
+    def _is_previous_code_and_output_valid(self, index):
+        last_code_cell_idx = self._get_previous_code_cell_index(index)
+        if last_code_cell_idx < 0:
+            return True # No previous code.
+        # If we share output with AI, then we need valid output, but in any case we need valid variables.  
+        return self.last_valid_output_cell >= last_code_cell_idx
+            
 
     def generate_code_cell(self, api_key, index, ai_provider="gemini", model=None, validation_feedback=None):
         """Generates code for the cell at index using the specified AI provider."""
@@ -1208,15 +1148,7 @@ class Plainbook:
             assert 0 <= index < len(self.nb.cells)
             cell = self.nb.cells[index]
             assert cell.cell_type == 'code'
-            # We can generate code only when:
-            # - Output is up to date for the previous code cell.
-            # - The code itself is up to date at least for the previous code cell.
-            last_code_cell_idx = -1
-            for i in range(index - 1, -1, -1):
-                if self.nb.cells[i].cell_type == 'code':
-                    last_code_cell_idx = i
-                    break
-            if last_code_cell_idx > 0 and self.last_valid_output_cell < last_code_cell_idx:
+            if not self._is_previous_code_and_output_valid(index):
                 raise RuntimeError("Cannot generate code: previous output must be valid.")
             # Gets code context.
             instructions = cell.metadata.get('explanation')
@@ -1224,10 +1156,11 @@ class Plainbook:
             if ai_instructions:
                 instructions = instructions + "\n\nADDITIONAL INSTRUCTIONS:\n" + ai_instructions
             files_context = self._get_files_context()
+            previous_code_cell = self._get_previous_code_cell(index)
             error_context = self._get_error_context(index)
-            variable_context = self._get_variables_for_ai(index)
+            variable_context = self._get_variables_for_ai(previous_code_cell) if previous_code_cell else ""
             preceding_code = self._get_preceding_code_json_for_ai(index, include_all_variables=False)
-            previous_code = self._get_cell_code_for_ai(index)
+            previous_code = self._get_cell_w_change_noted(cell)
             # Mark that an AI request is pending
             if self.ai_request_pending:
                 raise RuntimeError("An AI request is already pending.")
@@ -1277,12 +1210,7 @@ class Plainbook:
             assert cell.cell_type == 'test'
             # We need the previous code cells to have valid output so the AI
             # has variable context available.
-            last_code_cell_idx = -1
-            for i in range(index - 1, -1, -1):
-                if self.nb.cells[i].cell_type == 'code':
-                    last_code_cell_idx = i
-                    break
-            if last_code_cell_idx > 0 and self.last_valid_output_cell < last_code_cell_idx:
+            if not self._is_previous_code_and_output_valid(index):
                 raise RuntimeError("Cannot generate test code: previous output must be valid.")
             # Build context for the AI.
             instructions = cell.metadata.get('explanation')
@@ -1291,9 +1219,10 @@ class Plainbook:
                 instructions = instructions + "\n\nADDITIONAL INSTRUCTIONS:\n" + ai_instructions
             files_context = self._get_files_context()
             error_context = self._get_error_context(index)
-            variable_context = self._get_variables_for_ai(index)
+            previous_code_cell = self._get_previous_code_cell(index)
+            variable_context = self._get_variables_for_ai(previous_code_cell) if previous_code_cell else ""
             preceding_code = self._get_preceding_code_json_for_ai(index)
-            previous_code = self._get_cell_code_for_ai(index)
+            previous_code = self._get_cell_w_change_noted(cell)
             # Mark that an AI request is pending.
             if self.ai_request_pending:
                 raise RuntimeError("An AI request is already pending.")
@@ -1323,6 +1252,7 @@ class Plainbook:
                     return None, False
             finally:
                 self.ai_request_pending = False
+
 
     def execute_test_cell(self, index):
         """Executes a test cell using multistate_execute."""
@@ -1388,6 +1318,120 @@ class Plainbook:
             self._write()
             return cell.outputs
 
+
+    def generate_unit_test_cell(self, api_key, cell_index, test_name, role,
+                                ai_provider="gemini", model=None, validation_feedback=None):
+        """Generate code for a unit test sub-cell."""
+        if role == 'target':
+            return self.generate_code_cell(api_key, cell_index,
+                                           ai_provider=ai_provider, model=model,
+                                           validation_feedback=validation_feedback)
+        assert role in ('setup', 'test'), f"Invalid role: {role}"
+
+        with self._lock:
+            assert 0 <= cell_index < len(self.nb.cells)
+            target_cell = self.nb.cells[cell_index]
+            tests = target_cell.metadata.get('unit_tests', {})
+            assert test_name in tests
+            unit_test = tests[test_name]
+            # Gets the validity status for the unit test.
+            test_validity = self._get_ut_validity(cell_index, test_name)
+
+            if self.ai_request_pending:
+                raise RuntimeError("An AI request is already pending.")
+
+            # First, check that we can generate code for this role based 
+            # on validity of previous code and outputs.
+            # For setup, we need the prior cell code to be valid, but also we need the 
+            # code of the target cell itself to be valid, so we can know which variables it reads.
+            if not self._is_previous_code_and_output_valid(cell_index):
+                raise RuntimeError("Cannot generate unit test code: status prior to target cell must be ready for generation.")
+            if self.last_valid_code_cell < cell_index:
+                raise RuntimeError("Cannot generate unit test code: target code cell code is not valid.")
+            if role == 'test':
+                # For a test cell, we also need the target output to be valid. 
+                if not test_validity['target_output_valid']:
+                    raise RuntimeError(f"Missing prerequisite for unit test code generation: role: {role}, validity: {test_validity}.")
+
+            # Common context
+            sub_cell = unit_test[role]
+            ai_instructions = self.nb.metadata.get('ai_instructions', '')
+            instructions = sub_cell['metadata'].get('explanation', '')
+            if ai_instructions:
+                instructions = instructions + "\n\nADDITIONAL INSTRUCTIONS:\n" + ai_instructions
+            files_context = self._get_files_context()
+            error_context = self._ut_extract_error_context(sub_cell.get('outputs', []))
+            preceding_code = self._get_preceding_code_json_for_ai(cell_index, include_all_variables=False)
+
+            # Previous code for the sub-cell being generated
+            existing_source = sub_cell.get('source', '').strip()
+            previous_code = (PREVIOUS_CODE_EXPLANATION_CHANGED.format(code_string=existing_source)
+                             if existing_source else None)
+
+            # Role-specific context
+            if role == 'setup':
+                previous_code_cell = self._get_previous_code_cell(cell_index)
+                variable_context = self._get_variables_for_ai(previous_code_cell) if previous_code_cell else ""
+                # Compute variables the target cell accesses that come from previous cells
+                prev_variables = previous_code_cell.metadata.get('variables', {}) if previous_code_cell else {}
+                prev_var_names = set(prev_variables.keys()) - set(self.default_variables.keys())
+                target_accessed = self._get_target_accessed_variables(target_cell.source or '')
+                relevant_vars = prev_var_names & target_accessed
+                if relevant_vars:
+                    relevant_info = {k: v for k, v in prev_variables.items() if k in relevant_vars}
+                    variables_for_target_context = self._format_variables_for_ai(relevant_info)
+                else:
+                    variables_for_target_context = None
+                setup_cell_context = None  # We're generating setup; previous_code already covers it
+                target_cell_context = self._format_ut_subcell_for_ai(target_cell, 'target')
+                test_cell_context = None
+            else:
+                # Role is 'test'.
+                target_variables = unit_test.get('target', {}).get('variables', {})
+                variable_context = self._format_variables_for_ai(target_variables)
+                variables_for_target_context = None  # Only used for setup
+                setup_cell_context = self._format_ut_subcell_for_ai(unit_test['setup'], 'setup')
+                target_cell_context = self._format_ut_subcell_for_ai(target_cell, 'target')
+                test_cell_context = None  # We're generating test; previous_code already covers it
+
+            generate_fn = AI_PROVIDERS[ai_provider]["generate_unit_test"]
+
+            # Call AI
+            try:
+                self.ai_request_pending = True
+                new_code = generate_fn(
+                    api_key,
+                    preceding_code=preceding_code,
+                    previous_code=previous_code,
+                    instructions=instructions,
+                    file_context=files_context,
+                    error_context=error_context,
+                    variable_context=variable_context,
+                    validation_context=validation_feedback,
+                    setup_cell_context=setup_cell_context,
+                    target_cell_context=target_cell_context,
+                    test_cell_context=test_cell_context,
+                    variables_for_target_context=variables_for_target_context,
+                    role=role,
+                    model=model,
+                    debug=self.debug,
+                    dump_ai_requests=self.dump_ai_requests)
+                if self.ai_request_pending:
+                    sub_cell['source'] = new_code
+                    sub_cell['metadata']['code_timestamp'] = datetime.datetime.now().isoformat()
+                    sub_cell['outputs'] = []
+                    test_validity = self._get_ut_validity(cell_index, test_name)
+                    test_validity[f'{role}_code_valid'] = True
+                    self._invalidate_unit_test(cell_index, test_name,
+                                               'setup_output' if role == 'setup' else 'test_output')
+                    self._write()
+                    return new_code, True
+                else:
+                    return None, False
+            finally:
+                self.ai_request_pending = False
+
+
     def cancel_ai_request(self):
         """Cancels any ongoing AI request by interrupting the kernel."""
         self.ai_request_pending = False
@@ -1408,7 +1452,8 @@ class Plainbook:
             if ai_instructions:
                 instructions = instructions + "\n\nADDITIONAL INSTRUCTIONS:\n" + ai_instructions
             previous_code = self._get_preceding_code_json_for_ai(index, include_all_variables=(cell.cell_type == 'test'))
-            variable_context = self._get_variables_for_ai(index)
+            previous_code_cell = self._get_previous_code_cell(index)
+            variable_context = self._get_variables_for_ai(previous_code_cell) if previous_code_cell else ""
             try:
                 validate_fn = AI_PROVIDERS[ai_provider]["validate"]
                 validation_result = validate_fn(api_key, previous_code, code_to_validate,

@@ -45,6 +45,21 @@ Return ONLY the code, no markdown formatting or explanations.
 Use assert statements for testing.
 """
 
+UNIT_TEST_SYSTEM_INSTRUCTIONS = """
+You are an assistant that writes Python code for unit tests within a Jupyter-like notebook.
+A unit test consists of three phases run in sequence:
+1. SETUP: Prepares test data (e.g., creates small sample datasets, mock inputs).
+2. TARGET: The notebook cell being tested (you do NOT write this).
+3. TEST: Checks that the target cell produced correct results, using assert statements.
+
+You will be asked to generate code for either the SETUP or the TEST phase.
+You are given the preceding notebook cells (in JSON format), their outputs, and variable descriptions.
+You may also be given the setup cell, target cell, and/or existing test cell for context.
+
+Return ONLY the code, no markdown formatting or explanations.
+For the TEST phase, use assert statements to verify correctness.
+"""
+
 NAME_GENERATION_INSTRUCTIONS = """You need to summarize what a notebook cell does using two or three words.
 You will be given the cell's explanation, which describes what the cell does.
 Please return at least 2 words, and at most 3. Return only these words."""
@@ -226,6 +241,67 @@ VALIDATION FEEDBACK:
 The previous code for this cell does not seem to be correct. Here are comments on it given by an AI model:
 {validation_context}
 
+"""
+    return prompt
+
+
+def build_unit_test_prompt(
+    preceding=None,
+    previous=None,
+    instructions=None,
+    file_context=None,
+    error_context=None,
+    variable_context=None,
+    validation_context=None,
+    setup_cell_context=None,
+    target_cell_context=None,
+    test_cell_context=None,
+    variables_for_target_context=None,
+    role=None):
+    """Build prompt for unit test code generation (setup or test role)."""
+    prompt = build_context_prompt(
+        preceding=preceding,
+        previous=previous,
+        file_context=file_context,
+        error_context=error_context,
+        variable_context=variable_context,
+        validation_context=validation_context)
+    if setup_cell_context:
+        prompt += f"""
+UNIT TEST SETUP CELL:
+{setup_cell_context}
+
+"""
+    if target_cell_context:
+        prompt += f"""
+TARGET CELL BEING TESTED:
+{target_cell_context}
+
+"""
+    if test_cell_context:
+        prompt += f"""
+EXISTING TEST CELL:
+{test_cell_context}
+
+"""
+    if variables_for_target_context:
+        prompt += f"""
+VARIABLES USED BY TARGET CELL:
+In generating the test setup, the goal is to set the value of these variables, possibly simplifying them if they are long or complex, so that a human can make sense of their values and can check the results of the execution of the test cell.  The variables are these:
+{variables_for_target_context}
+
+"""
+    role_label = "Setup" if role == "setup" else "Test"
+    if role == "setup":
+        role_elucidation = "You are asked to generate code for the setup cell, which is in charge of setting up the precise conditions in which the target cell is executed."
+    else:
+        role_elucidation = "You are asked to generate code for the test cell, which needs to check whether the unit test succeeded."
+    prompt += f"""
+INSTRUCTIONS for Unit Test {role_label} Cell:
+{role_elucidation}
+{instructions}
+
+Code:
 """
     return prompt
 

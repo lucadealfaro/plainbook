@@ -1,16 +1,16 @@
 import { ref, nextTick } from './vue.esm-browser.js';
 
 export default {
-    props: ['tests', 'activeIndex'],
+    props: ['tests', 'activeName'],
     emits: ['select', 'add', 'rename', 'exit'],
     setup(props, { emit }) {
-        const editingIndex = ref(null);
+        const editingKey = ref(null);
         const editingName = ref('');
         const editInput = ref(null);
 
-        const startRename = (index) => {
-            editingIndex.value = index;
-            editingName.value = props.tests[index].name;
+        const startRename = (name) => {
+            editingKey.value = name;
+            editingName.value = name;
             nextTick(() => {
                 if (editInput.value) {
                     editInput.value.focus();
@@ -20,20 +20,20 @@ export default {
         };
 
         const finishRename = () => {
-            if (editingIndex.value !== null) {
+            if (editingKey.value !== null) {
                 const newName = editingName.value.trim();
-                if (newName && newName !== props.tests[editingIndex.value].name) {
-                    emit('rename', editingIndex.value, newName);
+                if (newName && newName !== editingKey.value && !(newName in props.tests)) {
+                    emit('rename', editingKey.value, newName);
                 }
-                editingIndex.value = null;
+                editingKey.value = null;
             }
         };
 
         const cancelRename = () => {
-            editingIndex.value = null;
+            editingKey.value = null;
         };
 
-        return { editingIndex, editingName, editInput, startRename, finishRename, cancelRename };
+        return { editingKey, editingName, editInput, startRename, finishRename, cancelRename };
     },
     template: /* html */ `
         <div class="unit-test-tab-bar" style="display: flex; align-items: center; gap: 0.25rem; overflow-x: auto; padding: 0.5rem; background-color: #f5f5f5; border: 1px solid #dbdbdb; border-radius: 4px; flex-shrink: 0;">
@@ -42,12 +42,12 @@ export default {
                 <span>Back</span>
             </button>
             <div style="width: 1px; height: 1.5rem; background: #ccc; margin: 0 0.25rem;"></div>
-            <template v-for="(test, index) in tests" :key="index">
+            <template v-for="(testData, name) in tests" :key="name">
                 <button class="button is-small"
-                        :class="index === activeIndex ? 'is-warning' : ''"
-                        @click="$emit('select', index)"
-                        @dblclick.stop="startRename(index)">
-                    <span v-if="editingIndex === index" @click.stop>
+                        :class="name === activeName ? 'is-warning' : ''"
+                        @click="$emit('select', name)"
+                        @dblclick.stop="startRename(name)">
+                    <span v-if="editingKey === name" @click.stop>
                         <input ref="editInput"
                                class="input is-small"
                                style="width: 8rem; height: 1.5rem;"
@@ -56,7 +56,7 @@ export default {
                                @keydown.enter.prevent="finishRename"
                                @keydown.escape.prevent="cancelRename">
                     </span>
-                    <span v-else>{{ test.name }}</span>
+                    <span v-else>{{ name }}</span>
                 </button>
             </template>
             <button class="button is-small" title="Add a new test" @click="$emit('add')">

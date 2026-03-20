@@ -3,10 +3,12 @@ import anthropic
 from .ai_common import (
     SYSTEM_INSTRUCTIONS,
     TEST_SYSTEM_INSTRUCTIONS,
+    UNIT_TEST_SYSTEM_INSTRUCTIONS,
     CHECKING_INSTRUCTIONS,
     NAME_GENERATION_INSTRUCTIONS,
     add_tokens,
     build_context_prompt,
+    build_unit_test_prompt,
     build_name_prompt,
     dump_ai_request,
     log_ai_request_size,
@@ -136,6 +138,63 @@ Code:
         model=model,
         max_tokens=4096,
         system=TEST_SYSTEM_INSTRUCTIONS,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    add_tokens(message.usage.input_tokens, message.usage.output_tokens)
+    response_text = message.content[0].text
+    if debug:
+        print("Response:", response_text)
+    code = strip_markdown_code_fences(response_text)
+    return code
+
+
+def claude_generate_unit_test_code(
+    api_key,
+    preceding_code=None,
+    previous_code=None,
+    instructions=None,
+    file_context=None,
+    error_context=None,
+    variable_context=None,
+    validation_context=None,
+    setup_cell_context=None,
+    target_cell_context=None,
+    test_cell_context=None,
+    variables_for_target_context=None,
+    role=None,
+    model=None,
+    debug=False,
+    dump_ai_requests=False):
+    client = anthropic.Anthropic(api_key=api_key)
+    model = model or CLAUDE_MODEL
+
+    prompt = build_unit_test_prompt(
+        preceding=preceding_code,
+        previous=previous_code,
+        instructions=instructions,
+        file_context=file_context,
+        error_context=error_context,
+        variable_context=variable_context,
+        validation_context=validation_context,
+        setup_cell_context=setup_cell_context,
+        target_cell_context=target_cell_context,
+        test_cell_context=test_cell_context,
+        variables_for_target_context=variables_for_target_context,
+        role=role)
+
+    if debug:
+        log_ai_request_size("claude generate_unit_test", UNIT_TEST_SYSTEM_INSTRUCTIONS, prompt,
+                            preceding=preceding_code, instructions=instructions,
+                            previous=previous_code, file_context=file_context,
+                            error_context=error_context, variable_context=variable_context,
+                            validation_context=validation_context)
+    if dump_ai_requests:
+        dump_ai_request("claude generate_unit_test", UNIT_TEST_SYSTEM_INSTRUCTIONS, prompt)
+
+    message = client.messages.create(
+        model=model,
+        max_tokens=4096,
+        system=UNIT_TEST_SYSTEM_INSTRUCTIONS,
         messages=[{"role": "user", "content": prompt}],
     )
     add_tokens(message.usage.input_tokens, message.usage.output_tokens)

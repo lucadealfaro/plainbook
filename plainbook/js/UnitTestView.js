@@ -18,7 +18,7 @@ export default {
             'save-explanation', 'save-code', 'gencode', 'clearcode', 'validate',
             'interrupt'],
     setup(props, { emit }) {
-        const activeTestIndex = ref(0);
+        const activeTestName = ref(null);
         const activeSubCell = ref('setup');
 
         const targetCell = computed(() => {
@@ -27,13 +27,13 @@ export default {
         });
 
         const unitTests = computed(() => {
-            if (!targetCell.value) return [];
-            return targetCell.value.metadata?.unit_tests || [];
+            if (!targetCell.value) return {};
+            return targetCell.value.metadata?.unit_tests || {};
         });
 
         const activeTest = computed(() => {
-            if (activeTestIndex.value < 0 || activeTestIndex.value >= unitTests.value.length) return null;
-            return unitTests.value[activeTestIndex.value];
+            if (!activeTestName.value) return null;
+            return unitTests.value[activeTestName.value] || null;
         });
 
         const hasTargetError = computed(() => {
@@ -46,8 +46,8 @@ export default {
         const targetOutputVisible = ref(true);
 
         const activeTestValidity = computed(() => {
-            if (!props.unitTestValidity || activeTestIndex.value >= props.unitTestValidity.length) return null;
-            return props.unitTestValidity[activeTestIndex.value];
+            if (!props.unitTestValidity || !activeTestName.value) return null;
+            return props.unitTestValidity[activeTestName.value] || null;
         });
 
         const setupCodeValid = computed(() => activeTestValidity.value?.setup?.code_valid ?? false);
@@ -59,17 +59,18 @@ export default {
             return activeTest.value?.target?.outputs || targetCell.value?.outputs || [];
         });
 
-        // Keep activeTestIndex in range
+        // Keep activeTestName valid
         watch(unitTests, (tests) => {
-            if (tests.length === 0) {
-                activeTestIndex.value = 0;
-            } else if (activeTestIndex.value >= tests.length) {
-                activeTestIndex.value = tests.length - 1;
+            const names = Object.keys(tests);
+            if (names.length === 0) {
+                activeTestName.value = null;
+            } else if (!activeTestName.value || !(activeTestName.value in tests)) {
+                activeTestName.value = names[0];
             }
-        });
+        }, { immediate: true });
 
         return {
-            activeTestIndex, activeSubCell, targetCell, unitTests, activeTest,
+            activeTestName, activeSubCell, targetCell, unitTests, activeTest,
             hasTargetError, targetCodeValid, targetOutputValid, targetOutputVisible,
             activeTestValidity, setupCodeValid, setupOutputValid, testCodeValid, testOutputValid,
             targetTestOutputs
@@ -79,10 +80,10 @@ export default {
         <div v-if="targetCell" style="display: flex; flex-direction: column; flex-grow: 1; min-height: 0;">
             <unit-test-tab-bar
                 :tests="unitTests"
-                :active-index="activeTestIndex"
-                @select="activeTestIndex = $event"
+                :active-name="activeTestName"
+                @select="activeTestName = $event"
                 @add="$emit('add-unit-test', targetCellIndex)"
-                @rename="(idx, name) => $emit('rename-unit-test', targetCellIndex, idx, name)"
+                @rename="(oldName, newName) => $emit('rename-unit-test', targetCellIndex, oldName, newName)"
                 @exit="$emit('exit')"
             />
 
@@ -90,13 +91,13 @@ export default {
             <div v-if="activeTest" class="px-4 py-2" style="display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
                 <button class="button is-small is-warning"
                         :disabled="running || isLocked"
-                        @click="$emit('run-unit-test', targetCellIndex, activeTestIndex)">
+                        @click="$emit('run-unit-test', targetCellIndex, activeTestName)">
                     <span class="icon"><i class="bx bx-play"></i></span>
                     <span>Run test</span>
                 </button>
                 <button class="button is-small is-danger is-outlined"
                         :disabled="running || isLocked"
-                        @click="$emit('delete-unit-test', targetCellIndex, activeTestIndex)">
+                        @click="$emit('delete-unit-test', targetCellIndex, activeTestName)">
                     <span class="icon"><i class="bx bx-trash"></i></span>
                     <span>Delete test</span>
                 </button>
@@ -115,13 +116,13 @@ export default {
                     :running="running"
                     :code-valid="setupCodeValid"
                     :output-valid="setupOutputValid"
-                    @save-explanation="(content) => $emit('save-unit-test-explanation', targetCellIndex, activeTestIndex, 'setup', content)"
-                    @save-code="(content) => $emit('save-unit-test-code', targetCellIndex, activeTestIndex, 'setup', content)"
-                    @save-and-run="(content) => { $emit('save-unit-test-explanation', targetCellIndex, activeTestIndex, 'setup', content); $emit('run-unit-test', targetCellIndex, activeTestIndex); }"
-                    @gencode="$emit('generate-unit-test-code', targetCellIndex, activeTestIndex, 'setup')"
-                    @clearcode="$emit('clear-unit-test-code', targetCellIndex, activeTestIndex, 'setup')"
+                    @save-explanation="(content) => $emit('save-unit-test-explanation', targetCellIndex, activeTestName, 'setup', content)"
+                    @save-code="(content) => $emit('save-unit-test-code', targetCellIndex, activeTestName, 'setup', content)"
+                    @save-and-run="(content) => { $emit('save-unit-test-explanation', targetCellIndex, activeTestName, 'setup', content); $emit('run-unit-test', targetCellIndex, activeTestName); }"
+                    @gencode="$emit('generate-unit-test-code', targetCellIndex, activeTestName, 'setup')"
+                    @clearcode="$emit('clear-unit-test-code', targetCellIndex, activeTestName, 'setup')"
                     @validate=""
-                    @run="$emit('run-unit-test', targetCellIndex, activeTestIndex)"
+                    @run="$emit('run-unit-test', targetCellIndex, activeTestName)"
                     @interrupt="$emit('interrupt')"
                 />
 
@@ -152,9 +153,9 @@ export default {
                             @gencode="$emit('gencode')"
                             @clearcode="$emit('clearcode')"
                             @validate="$emit('validate')"
-                            @run="$emit('run-unit-test', targetCellIndex, activeTestIndex)"
+                            @run="$emit('run-unit-test', targetCellIndex, activeTestName)"
                             @interrupt="$emit('interrupt')"
-                            @saveandrun="(content) => { $emit('save-explanation', content); $emit('run-unit-test', targetCellIndex, activeTestIndex); }"
+                            @saveandrun="(content) => { $emit('save-explanation', content); $emit('run-unit-test', targetCellIndex, activeTestName); }"
                             @delete=""
                             @moveUp=""
                             @moveDown="" />
@@ -193,13 +194,13 @@ export default {
                     :running="running"
                     :code-valid="testCodeValid"
                     :output-valid="testOutputValid"
-                    @save-explanation="(content) => $emit('save-unit-test-explanation', targetCellIndex, activeTestIndex, 'test', content)"
-                    @save-code="(content) => $emit('save-unit-test-code', targetCellIndex, activeTestIndex, 'test', content)"
-                    @save-and-run="(content) => { $emit('save-unit-test-explanation', targetCellIndex, activeTestIndex, 'test', content); $emit('run-unit-test', targetCellIndex, activeTestIndex); }"
-                    @gencode="$emit('generate-unit-test-code', targetCellIndex, activeTestIndex, 'test')"
-                    @clearcode="$emit('clear-unit-test-code', targetCellIndex, activeTestIndex, 'test')"
+                    @save-explanation="(content) => $emit('save-unit-test-explanation', targetCellIndex, activeTestName, 'test', content)"
+                    @save-code="(content) => $emit('save-unit-test-code', targetCellIndex, activeTestName, 'test', content)"
+                    @save-and-run="(content) => { $emit('save-unit-test-explanation', targetCellIndex, activeTestName, 'test', content); $emit('run-unit-test', targetCellIndex, activeTestName); }"
+                    @gencode="$emit('generate-unit-test-code', targetCellIndex, activeTestName, 'test')"
+                    @clearcode="$emit('clear-unit-test-code', targetCellIndex, activeTestName, 'test')"
                     @validate=""
-                    @run="$emit('run-unit-test', targetCellIndex, activeTestIndex)"
+                    @run="$emit('run-unit-test', targetCellIndex, activeTestName)"
                     @interrupt="$emit('interrupt')"
                 />
             </div>
