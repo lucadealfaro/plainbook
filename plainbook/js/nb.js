@@ -71,6 +71,7 @@ createApp({
         const isCodespace = ref(false);
         const hasGeminiKey = ref(false);
         const hasClaudeKey = ref(false);
+        const claudeViaBedrock = ref(false);
 
         const availableAiProviders = computed(() => {
             const apiKeys = {
@@ -167,6 +168,7 @@ createApp({
                 isCodespace.value = r.is_codespace || false;
                 hasGeminiKey.value = r.has_gemini_key || false;
                 hasClaudeKey.value = r.has_claude_key || false;
+                claudeViaBedrock.value = r.claude_via_bedrock || false;
             } catch (err) {
                 error.value = err.message;
                 throw new Error("Error in loading notebook", { cause: err });
@@ -810,6 +812,9 @@ createApp({
                 if (r.has_claude_key !== undefined) {
                     hasClaudeKey.value = r.has_claude_key;
                 }
+                if (r.claude_via_bedrock !== undefined) {
+                    claudeViaBedrock.value = r.claude_via_bedrock;
+                }
             } catch (err) {
                 throw new Error('Error saving API keys', { cause: err });
             }
@@ -869,7 +874,7 @@ createApp({
             saveSettings, showSettings, showInfo, showTestHelp,
             genError, uiError, closeUiError, debug, sendDebugRequest,
             explanationEditKey, deleteCell, moveCell,
-            clearOutputs, activeAiProvider, availableAiProviders, setActiveAiProvider, isCodespace, hasGeminiKey, hasClaudeKey,
+            clearOutputs, activeAiProvider, availableAiProviders, setActiveAiProvider, isCodespace, hasGeminiKey, hasClaudeKey, claudeViaBedrock,
             restarting, ui_restart,
             ui_runTestCell, ui_runAllTests, ui_saveExplanationAndRunTest, ui_forceRegenerateTestCode };
     },

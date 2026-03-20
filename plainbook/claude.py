@@ -1,3 +1,5 @@
+import os
+
 import anthropic
 
 from .ai_common import (
@@ -15,14 +17,26 @@ from .ai_common import (
 )
 
 # CLAUDE_MODEL = "claude-sonnet-4-5-20250929"
-CLAUDE_MODEL = "claude-haiku-4-5-20251001"
+CLAUDE_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001")
+
+USE_BEDROCK = os.environ.get("CLAUDE_CODE_USE_BEDROCK") == "1"
+
+
+def _get_client(api_key=None):
+    """Create an Anthropic client, using Bedrock if configured."""
+    if USE_BEDROCK:
+        return anthropic.AnthropicBedrock(aws_region=os.environ["AWS_REGION"])
+    elif api_key:
+        return anthropic.Anthropic(api_key=api_key)
+    else:
+        return None
 
 def get_claude_models(api_key):
     """Fetches the latest model IDs for each Claude family (haiku, sonnet, opus)
     from the Anthropic API. Returns a dict like {"haiku": "claude-haiku-...", ...}.
     Models are returned most-recent-first by the API, so the first match per
     family is the latest."""
-    client = anthropic.Anthropic(api_key=api_key)
+    client = _get_client(api_key)
     families = {"haiku": None, "sonnet": None, "opus": None}
     after_id = None
     while True:
@@ -54,7 +68,7 @@ def claude_generate_code(
     model=None,
     debug=False,
     dump_ai_requests=False):
-    client = anthropic.Anthropic(api_key=api_key)
+    client = _get_client(api_key)
     model = model or CLAUDE_MODEL
 
     prompt = build_context_prompt(
@@ -106,7 +120,7 @@ def claude_generate_test_code(
     model=None,
     debug=False,
     dump_ai_requests=False):
-    client = anthropic.Anthropic(api_key=api_key)
+    client = _get_client(api_key)
     model = model or CLAUDE_MODEL
 
     prompt = build_context_prompt(
@@ -147,7 +161,7 @@ Code:
 
 
 def claude_validate_code(api_key, previous_code, code_to_validate, instructions, variable_context=None, model=None, debug=False, dump_ai_requests=False):
-    client = anthropic.Anthropic(api_key=api_key)
+    client = _get_client(api_key)
     model = model or CLAUDE_MODEL
 
     prompt = build_context_prompt(
@@ -186,7 +200,7 @@ Validation Result:
 
 
 def claude_generate_cell_name(api_key, explanation, model=None, debug=False, dump_ai_requests=False):
-    client = anthropic.Anthropic(api_key=api_key)
+    client = _get_client(api_key)
     model = model or CLAUDE_MODEL
     prompt = build_name_prompt(explanation)
     if debug:

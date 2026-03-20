@@ -1,7 +1,7 @@
 import { ref, watch } from './vue.esm-browser.js';
 
 export default {
-    props: ['isActive', 'isCodespace', 'hasGeminiKey', 'hasClaudeKey'],
+    props: ['isActive', 'isCodespace', 'hasGeminiKey', 'hasClaudeKey', 'claudeViaBedrock'],
     emits: ['close', 'save'],
     setup(props, { emit }) {
         const localGeminiKey = ref('');
@@ -88,7 +88,12 @@ export default {
                 </div>
                 <div class="field">
                     <label class="label">Claude API Key</label>
-                    <div class="control" v-if="claudeRemoved">
+                    <div class="control" v-if="claudeViaBedrock">
+                        <div class="input" style="color: #48c774; background-color: #f5f5f5; font-style: italic;">
+                            Claude is available via AWS Bedrock
+                        </div>
+                    </div>
+                    <div class="control" v-else-if="claudeRemoved">
                         <div class="input" style="color: #b5b5b5; background-color: #f5f5f5; font-style: italic;">
                             Key will be removed on save
                         </div>
@@ -107,7 +112,7 @@ export default {
                                v-model="localClaudeKey"
                                :placeholder="hasClaudeKey ? 'Enter new key (leave blank to keep current)' : 'Enter your Claude API key (optional)'">
                     </div>
-                    <p class="help">
+                    <p class="help" v-if="!claudeViaBedrock">
                         <a href="https://console.anthropic.com/settings/keys" target="_blank" class="button is-small is-link is-light" style="margin-top: 0.5rem;">
                             {{ hasClaudeKey ? 'Manage Claude API Key' : 'Get Claude API Key' }}
                         </a>
