@@ -113,6 +113,39 @@ export default {
             });
         };
 
+        const enterEditModeAtPoint = (e) => {
+            if (localIsLocked.value || isEditing.value) return;
+            // Find the character offset at the click point
+            let cursorOffset = 0;
+            const pre = e.currentTarget.querySelector('pre');
+            if (pre) {
+                let container, offset;
+                if (document.caretRangeFromPoint) {
+                    const range = document.caretRangeFromPoint(e.clientX, e.clientY);
+                    if (range) { container = range.startContainer; offset = range.startOffset; }
+                } else if (document.caretPositionFromPoint) {
+                    const pos = document.caretPositionFromPoint(e.clientX, e.clientY);
+                    if (pos) { container = pos.offsetNode; offset = pos.offset; }
+                }
+                if (container) {
+                    const walker = document.createTreeWalker(pre, NodeFilter.SHOW_TEXT);
+                    let node;
+                    while ((node = walker.nextNode())) {
+                        if (node === container) { cursorOffset += offset; break; }
+                        cursorOffset += node.textContent.length;
+                    }
+                }
+            }
+            isEditing.value = true;
+            nextTick(() => {
+                if (textareaEl.value) {
+                    textareaEl.value.focus();
+                    textareaEl.value.selectionStart = cursorOffset;
+                    textareaEl.value.selectionEnd = cursorOffset;
+                }
+            });
+        };
+
         const saveCode = () => {
             if (!isEditing.value) return;
             isEditing.value = false;
@@ -147,8 +180,8 @@ export default {
         };
 
         return { isCollapsed, toggleCollapse, isEditing, cancelEdit, localSource,
-            localIsLocked, highlightedCode, enterEditMode, saveCode, textareaEl,
-            autoResize, handleTabKey, onBlur };
+            localIsLocked, highlightedCode, enterEditMode, enterEditModeAtPoint,
+            saveCode, textareaEl, autoResize, handleTabKey, onBlur };
     },
     template: /* html */ `
         <div class="code-cell-wrapper">
@@ -176,7 +209,7 @@ export default {
             </div>
             <div v-if="!isCollapsed" style="padding-left: 2.25rem;">
                 <div class="code-editor-container p-2 is-size-7"
-                     @dblclick="!isEditing && enterEditMode()">
+                     @dblclick="enterEditModeAtPoint($event)">
                     <pre class="language-python"><code class="language-python" v-html="highlightedCode + '\\n'"></code></pre>
                     <textarea v-if="isEditing"
                         ref="textareaEl"
