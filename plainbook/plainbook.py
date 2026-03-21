@@ -844,6 +844,20 @@ class Plainbook:
 
     # Unit test execution and generation
 
+    def clear_unit_test_outputs(self, cell_index, test_name):
+        """Clear outputs for all sub-cells of a unit test."""
+        with self._lock:
+            assert 0 <= cell_index < len(self.nb.cells)
+            cell = self.nb.cells[cell_index]
+            tests = cell.metadata.get('unit_tests', {})
+            assert test_name in tests
+            unit_test = tests[test_name]
+            unit_test['setup']['outputs'] = []
+            if 'target' in unit_test:
+                unit_test['target']['outputs'] = []
+            unit_test['test']['outputs'] = []
+            self._write()
+
     def execute_unit_test_cell(self, cell_index, test_name, role):
         """Execute a unit test sub-cell (setup, target, or test)."""
         with self._lock:
@@ -1493,11 +1507,17 @@ class Plainbook:
 
 
     def clear_outputs(self):
-        """Clears all cell outputs and resets the last valid output index."""
+        """Clears all cell outputs (including unit test sub-cells) and resets the last valid output index."""
         with self._lock:
             for cell in self.nb.cells:
                 if cell.cell_type in ('code', 'test'):
                     cell.outputs = []
+                    # Also clear unit test sub-cell outputs
+                    for unit_test in cell.metadata.get('unit_tests', {}).values():
+                        unit_test['setup']['outputs'] = []
+                        if 'target' in unit_test:
+                            unit_test['target']['outputs'] = []
+                        unit_test['test']['outputs'] = []
             self.last_valid_output_cell = -1
             self._write()
 

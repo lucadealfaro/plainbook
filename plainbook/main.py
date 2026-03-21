@@ -778,6 +778,18 @@ def run_unit_test_cell():
     except Exception as e:
         return dict(status='error', message=str(e))
 
+@post('/clear_unit_test_outputs')
+@require_token
+def clear_unit_test_outputs():
+    data = request.json
+    cell_index = data.get('cell_index')
+    test_name = data.get('test_name')
+    try:
+        notebook.clear_unit_test_outputs(cell_index, test_name)
+        return dict(status='success')
+    except Exception as e:
+        return dict(status='error', message=str(e))
+
 @post('/generate_unit_test_cell_code')
 @stateful
 @require_token

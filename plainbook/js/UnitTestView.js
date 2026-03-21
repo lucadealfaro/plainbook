@@ -13,7 +13,7 @@ export default {
             'isLocked', 'lastValidCodeCellIndex', 'lastValidOutputCellIndex', 'unitTestValidity'],
     emits: ['exit',
             'save-unit-tests', 'save-unit-test-explanation', 'save-unit-test-code',
-            'clear-unit-test-code', 'run-unit-test', 'generate-unit-test-code',
+            'clear-unit-test-code', 'clear-unit-test-outputs', 'run-unit-test', 'generate-unit-test-code',
             'add-unit-test', 'delete-unit-test', 'rename-unit-test',
             'save-explanation', 'save-code', 'gencode', 'clearcode', 'validate',
             'interrupt'],
@@ -82,6 +82,14 @@ export default {
             activeTestName.value = newName;
         };
 
+        const clearOutputs = () => {
+            if (!activeTest.value || !activeTestName.value) return;
+            activeTest.value.setup.outputs = [];
+            if (activeTest.value.target) activeTest.value.target.outputs = [];
+            activeTest.value.test.outputs = [];
+            emit('clear-unit-test-outputs', props.targetCellIndex, activeTestName.value);
+        };
+
         const handleDelete = (testName) => {
             const names = Object.keys(unitTests.value);
             const idx = names.indexOf(testName);
@@ -103,7 +111,7 @@ export default {
             activeTestName, activeSubCell, targetCell, unitTests, activeTest,
             hasTargetError, targetCodeValid, targetOutputValid, targetOutputVisible,
             activeTestValidity, setupCodeValid, setupOutputValid, testCodeValid, testOutputValid,
-            targetTestOutputs, handleAdd, handleDelete
+            targetTestOutputs, handleAdd, handleDelete, clearOutputs
         };
     },
     template: /* html */ `
@@ -119,12 +127,20 @@ export default {
 
             <!-- Action buttons bar (between tab bar and scrollable area) -->
             <div v-if="activeTest" class="px-4 py-2" style="display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
-                <button class="button is-small is-warning"
-                        :disabled="running || isLocked"
-                        @click="$emit('run-unit-test', targetCellIndex, activeTestName)">
-                    <span class="icon"><i class="bx bx-play"></i></span>
-                    <span>Run test</span>
-                </button>
+                <div style="display: flex; gap: 0.5rem;">
+                    <button class="button is-small is-light"
+                            :disabled="running"
+                            @click="clearOutputs">
+                        <span class="icon"><i class="bx bx-broom"></i></span>
+                        <span>Clear outputs</span>
+                    </button>
+                    <button class="button is-small is-warning"
+                            :disabled="running || isLocked"
+                            @click="$emit('run-unit-test', targetCellIndex, activeTestName)">
+                        <span class="icon"><i class="bx bx-play"></i></span>
+                        <span>Run test</span>
+                    </button>
+                </div>
                 <button class="button is-small is-danger is-outlined"
                         :disabled="running || isLocked"
                         @click="handleDelete(activeTestName)">

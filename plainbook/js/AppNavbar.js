@@ -114,6 +114,21 @@ export default {
                             <span v-else-if="runningActivity && runningActivity.type === 'running'">
                                 Running cell {{ runningActivity.cellIndex + 1 }}<template v-if="runningActivity.cellName">: {{ runningActivity.cellName }}</template>
                             </span>
+                            <span v-else-if="runningActivity && runningActivity.type === 'unit-test-gen-setup'">
+                                Generating setup code<template v-if="runningActivity.testName"> ({{ runningActivity.testName }})</template>
+                            </span>
+                            <span v-else-if="runningActivity && runningActivity.type === 'unit-test-gen-test'">
+                                Generating test code<template v-if="runningActivity.testName"> ({{ runningActivity.testName }})</template>
+                            </span>
+                            <span v-else-if="runningActivity && runningActivity.type === 'unit-test-setup'">
+                                Running setup cell<template v-if="runningActivity.testName"> ({{ runningActivity.testName }})</template>
+                            </span>
+                            <span v-else-if="runningActivity && runningActivity.type === 'unit-test-target'">
+                                Running target cell<template v-if="runningActivity.testName"> ({{ runningActivity.testName }})</template>
+                            </span>
+                            <span v-else-if="runningActivity && runningActivity.type === 'unit-test-test'">
+                                Running test cell<template v-if="runningActivity.testName"> ({{ runningActivity.testName }})</template>
+                            </span>
                             <span v-else>Running...</span>
                         </button>
 

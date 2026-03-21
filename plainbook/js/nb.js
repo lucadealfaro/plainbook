@@ -194,6 +194,12 @@ createApp({
                     for (const cell of notebook.value.cells) {
                         if (cell.cell_type === 'code' || cell.cell_type === 'test') {
                             cell.outputs = [];
+                            // Also clear unit test sub-cell outputs
+                            for (const test of Object.values(cell.metadata?.unit_tests || {})) {
+                                test.setup.outputs = [];
+                                if (test.target) test.target.outputs = [];
+                                test.test.outputs = [];
+                            }
                         }
                     }
                 }
@@ -933,8 +939,19 @@ createApp({
             }
         };
 
+        const clearUnitTestOutputs = async (cellIndex, testName) => {
+            try {
+                await apiCall('/clear_unit_test_outputs', 'POST', {
+                    cell_index: cellIndex,
+                    test_name: testName
+                });
+            } catch (err) {
+                throw new Error('Failed to clear unit test outputs', { cause: err });
+            }
+        };
+
         const executeUnitTestCell = async (cellIndex, testName, role) => {
-            runningActivity.value = { type: `unit-test-${role}`, cellIndex };
+            runningActivity.value = { type: `unit-test-${role}`, cellIndex, testName };
             const r = await apiCall('/run_unit_test_cell', 'POST', {
                 cell_index: cellIndex,
                 test_name: testName,
@@ -960,7 +977,7 @@ createApp({
         };
 
         const generateUnitTestCodeInner = async (cellIndex, testName, role) => {
-            runningActivity.value = { type: `unit-test-gen-${role}`, cellIndex };
+            runningActivity.value = { type: `unit-test-gen-${role}`, cellIndex, testName };
             const r = await apiCall('/generate_unit_test_cell_code', 'POST', {
                 cell_index: cellIndex,
                 test_name: testName,
@@ -1165,7 +1182,7 @@ createApp({
             ui_runTestCell, ui_runAllTests, ui_saveExplanationAndRunTest, ui_forceRegenerateTestCode,
             unitTestTargetIndex, enterUnitTestMode, exitUnitTestMode,
             addUnitTest, deleteUnitTest, renameUnitTest,
-            saveUnitTestExplanation, saveUnitTestCode, clearUnitTestCode,
+            saveUnitTestExplanation, saveUnitTestCode, clearUnitTestCode, clearUnitTestOutputs,
             ui_runUnitTest, generateUnitTestCode, unitTestValidity };
     },
 
