@@ -719,6 +719,10 @@ class Plainbook:
                 # The output is now stale.
                 self.last_valid_output_cell = min(self.last_valid_output_cell, index - 1)
                 self.last_valid_test_cell = min(self.last_valid_test_cell, index - 1)
+                # Invalidate unit tests: target code changed, setup may reference
+                # variables that no longer exist
+                if cell.metadata.get('unit_tests'):
+                    self._invalidate_all_unit_tests(index, 'setup_code')
             self._write()
 
 
@@ -738,6 +742,10 @@ class Plainbook:
                 self.last_valid_code_cell = min(self.last_valid_code_cell, index - 1)
                 self.last_valid_output_cell = min(self.last_valid_output_cell, index - 1)
                 self.last_valid_test_cell = min(self.last_valid_test_cell, index - 1)
+                # Invalidate unit tests: target code cleared, setup may reference
+                # variables that no longer exist
+                if cell.metadata.get('unit_tests'):
+                    self._invalidate_all_unit_tests(index, 'setup_code')
             self._write()
 
     def set_cell_explanation(self, index, explanation):
@@ -755,9 +763,10 @@ class Plainbook:
                 self.last_valid_code_cell = min(self.last_valid_code_cell, index - 1)
                 self.last_valid_output_cell = min(self.last_valid_output_cell, index - 1)
                 self.last_valid_test_cell = min(self.last_valid_test_cell, index - 1)
-                # Invalidate unit tests: target explanation changed
+                # Invalidate unit tests: target explanation changed, code will be
+                # regenerated so setup and test cells are all stale
                 if cell.metadata.get('unit_tests'):
-                    self._invalidate_all_unit_tests(index, 'target_output')
+                    self._invalidate_all_unit_tests(index, 'setup_code')
             self._write()
 
 

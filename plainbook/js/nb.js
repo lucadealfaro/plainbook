@@ -227,6 +227,10 @@ createApp({
                         }
                     }
                     console.log('Explanation saved:', cellIndex);
+                    // If in unit test mode, refresh unit test validity
+                    if (unitTestTargetIndex.value !== null && cellIndex === unitTestTargetIndex.value) {
+                        await fetchUnitTestState(cellIndex);
+                    }
                     return response;
                 } catch (err) {
                     throw new Error('Failed to save explanation', { cause: err });
@@ -263,6 +267,10 @@ createApp({
                         source: content
                     });
                     console.log('Code saved:', cellIndex);
+                    // If in unit test mode, refresh unit test validity
+                    if (unitTestTargetIndex.value !== null && cellIndex === unitTestTargetIndex.value) {
+                        await fetchUnitTestState(cellIndex);
+                    }
                 } catch (err) {
                     throw new Error('Failed to save code', { cause: err });
                 }
@@ -274,12 +282,16 @@ createApp({
         const clearCellCode = async (cellIndex) => {
             asRead.value = false;
             try {
-                const r = await apiCall('/clear_code', 'POST', { cell_index: cellIndex });
+                await apiCall('/clear_code', 'POST', { cell_index: cellIndex });
                 if (notebook.value && notebook.value.cells[cellIndex]) {
                     notebook.value.cells[cellIndex].source = '';
                     notebook.value.cells[cellIndex].outputs = [];
                 }
                 console.log('Code cleared:', cellIndex);
+                // If in unit test mode, refresh unit test validity
+                if (unitTestTargetIndex.value !== null && cellIndex === unitTestTargetIndex.value) {
+                    await fetchUnitTestState(cellIndex);
+                }
             } catch (err) {
                 throw new Error('Failed to clear code', { cause: err });
             }
@@ -601,6 +613,10 @@ createApp({
                 await generateCodeOneCell(cellIndex, true, validationFeedback);
                 running.value = false;
                 runningActivity.value = { type: null, cellIndex: null };
+                // If in unit test mode, refresh unit test validity
+                if (unitTestTargetIndex.value !== null && cellIndex === unitTestTargetIndex.value) {
+                    await fetchUnitTestState(cellIndex);
+                }
             }
         };
 
