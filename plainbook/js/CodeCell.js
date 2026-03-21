@@ -109,8 +109,7 @@ export default {
             if (localIsLocked.value) return;
             isEditing.value = true;
             nextTick(() => {
-                autoResize();
-                if (textareaEl.value) textareaEl.value.scrollTop = 0;
+                if (textareaEl.value) textareaEl.value.focus();
             });
         };
 
@@ -176,31 +175,25 @@ export default {
                 </button>
             </div>
             <div v-if="!isCollapsed" style="padding-left: 2.25rem;">
-                <div v-if="!isEditing" class="p-2 overflow-x-auto is-size-7" @dblclick="enterEditMode">
-                    <pre class="language-python"><code class="language-python" v-html="highlightedCode"></code></pre>
-                </div>
-
-                <div v-else class="p-2">
-                    <textarea 
+                <div class="code-editor-container p-2 is-size-7"
+                     @dblclick="!isEditing && enterEditMode()">
+                    <pre class="language-python"><code class="language-python" v-html="highlightedCode + '\\n'"></code></pre>
+                    <textarea v-if="isEditing"
                         ref="textareaEl"
-                        placeholder="Write the code for this action..."
-                        v-model="localSource" 
-                        class="textarea is-family-monospace is-size-7 mb-2" 
-                        rows="1"
-                        style="overflow: hidden; resize: none; height: 0;"
-                        @input="autoResize"
+                        v-model="localSource"
+                        spellcheck="false"
                         @keydown.tab.prevent="handleTabKey"
                         @blur="onBlur"
                         @keydown.enter.shift.prevent="saveCode">
                     </textarea>
-                    <div style="display: flex; justify-content: flex-end; gap: 0.5rem;">
-                        <button class="button is-small" @mousedown.prevent @click.stop="cancelEdit">
-                            Cancel
-                        </button>
-                        <button class="button is-small is-primary" :disabled="localIsLocked" @mousedown.prevent @click.stop="saveCode">
-                            Save
-                        </button>
-                    </div>
+                </div>
+                <div v-if="isEditing" style="display: flex; justify-content: flex-end; gap: 0.5rem; padding: 0 0.5rem 0.5rem;">
+                    <button class="button is-small" @mousedown.prevent @click.stop="cancelEdit">
+                        Cancel
+                    </button>
+                    <button class="button is-small is-primary" :disabled="localIsLocked" @mousedown.prevent @click.stop="saveCode">
+                        Save
+                    </button>
                 </div>
             </div>
         </div>

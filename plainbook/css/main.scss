@@ -27,6 +27,43 @@ pre[class*="language-"] {
   padding: 0 !important;
 }
 
+// ── Code editor overlay (CodeCell.js) ──
+.code-editor-container {
+  display: grid;
+  overflow-x: auto;
+
+  > pre, > textarea {
+    grid-area: 1 / 1;
+    font-family: Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace;
+    font-size: inherit;
+    line-height: 1.5;
+    tab-size: 4;
+    -moz-tab-size: 4;
+    white-space: pre;
+    overflow: hidden;
+    margin: 0;
+    padding: 0;
+    border: none;
+  }
+
+  > textarea {
+    background: transparent;
+    color: transparent;
+    caret-color: var(--bulma-text);
+    outline: none;
+    resize: none;
+    z-index: 1;
+
+    &::selection {
+      background: hsla(215, 70%, 60%, 0.3);
+    }
+
+    &::placeholder {
+      color: var(--bulma-text-weak);
+    }
+  }
+}
+
 // .output-zone {
 //   border-top: 1px solid var(--bulma-border);
 // }
