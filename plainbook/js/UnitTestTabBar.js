@@ -36,12 +36,12 @@ export default {
         return { editingKey, editingName, editInput, startRename, finishRename, cancelRename };
     },
     template: /* html */ `
-        <div class="unit-test-tab-bar" style="display: flex; align-items: center; gap: 0.25rem; overflow-x: auto; padding: 0.5rem; background-color: #f5f5f5; border: 1px solid #dbdbdb; border-radius: 4px; flex-shrink: 0;">
+        <div class="unit-test-tab-bar panel-container" style="display: flex; align-items: center; gap: 0.25rem; overflow-x: auto; padding: 0.5rem; flex-shrink: 0;">
             <button class="button is-small" title="Exit unit test mode" @click="$emit('exit')">
                 <span class="icon"><i class="bx bx-chevrons-left"></i></span>
                 <span>Back</span>
             </button>
-            <div style="width: 1px; height: 1.5rem; background: #ccc; margin: 0 0.25rem;"></div>
+            <div class="panel-divider" style="height: 1.5rem; margin: 0 0.25rem;"></div>
             <template v-for="(testData, name) in tests" :key="name">
                 <button class="button is-small"
                         :class="name === activeName ? 'is-warning' : ''"

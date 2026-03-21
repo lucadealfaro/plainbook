@@ -44,14 +44,15 @@ export default {
         return { mode, hint, hasError, hasCode, explanation, outputVisible, startEditKey, triggerEdit };
     },
     template: /* html */ `
-        <div class="unit-test-sub-cell box p-0 mb-5 is-clipped shadow-sm"
+        <div class="unit-test-sub-cell notebook-cell box p-0 mb-5 is-clipped shadow-sm"
              @click="$emit('activate')"
-             :style="{ border: isActive ? '2px solid #1d4ed8' : '1px solid transparent', cursor: 'pointer' }">
-            <div class="p-2 has-text-weight-semibold is-size-7 has-text-grey has-background-warning-light"
+             :class="{ 'is-active-cell': isActive }"
+             style="cursor: pointer">
+            <div class="p-2 has-text-weight-semibold is-size-7 text-muted bg-warning-adaptive"
                  @dblclick="triggerEdit">
                 {{ role === 'setup' ? 'Setup' : 'Test' }}
             </div>
-            <div class="p-0 border-bottom has-background-warning-light" @dblclick="triggerEdit">
+            <div class="p-0 border-bottom bg-warning-adaptive" @dblclick="triggerEdit">
                 <explanation-editor
                     v-model:source="cell.metadata.explanation"
                     :hasCode="hasCode"
@@ -97,7 +98,7 @@ export default {
                 @save="$emit('save-code', $event)"
                 @activate="" />
 
-            <div v-if="outputVisible && cell.outputs?.length" class="p-2 border-top has-background-white">
+            <div v-if="outputVisible && cell.outputs?.length" class="p-2 border-top bg-scheme-main">
                 <output-renderer v-for="(out, oIdx) in cell.outputs" :key="oIdx" :output="out" />
             </div>
         </div>

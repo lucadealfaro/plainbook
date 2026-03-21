@@ -130,8 +130,9 @@ export default {
                 <cell-label :name="targetCell.metadata.name" />
                 <div class="notebook-cell box p-0 mb-5 is-clipped shadow-sm"
                      @click="activeSubCell = 'target'"
-                     :style="{ border: activeSubCell === 'target' ? '2px solid #1d4ed8' : '1px solid transparent', cursor: 'pointer' }">
-                    <div class="p-2 has-text-weight-semibold is-size-7 has-text-grey">
+                     :class="{ 'is-active-cell': activeSubCell === 'target' }"
+                     style="cursor: pointer">
+                    <div class="p-2 has-text-weight-semibold is-size-7 text-muted">
                         Target Cell
                     </div>
                     <div class="p-0 border-bottom">
@@ -179,7 +180,7 @@ export default {
                         @save="(content) => $emit('save-code', content)"
                         @activate="" />
 
-                    <div v-if="targetOutputVisible && targetTestOutputs.length" class="p-2 border-top has-background-white">
+                    <div v-if="targetOutputVisible && targetTestOutputs.length" class="p-2 border-top bg-scheme-main">
                         <output-renderer v-for="(out, oIdx) in targetTestOutputs" :key="oIdx" :output="out" />
                     </div>
                 </div>
