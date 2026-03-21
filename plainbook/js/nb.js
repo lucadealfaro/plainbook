@@ -982,16 +982,29 @@ createApp({
 
         const executeUnitTest = async (cellIndex, testName) => {
             // 1. Ensure main notebook cells up to cellIndex-1 are executed
-            if (cellIndex > 0 && last_executed_cell_index.value < cellIndex - 1) {
+            // Always call runCells — it's idempotent (returns cached results
+            // for already-executed cells) and handles cases where the kernel
+            // was restarted or the notebook was reloaded.
+            if (cellIndex > 0) {
                 await runCells(cellIndex - 1);
+            }
+            if (!running.value) return;
+
+            // 2. Ensure target cell has valid code (setup code generation
+            //    needs to know what the target reads)
+            if (last_valid_code_cell_index.value < cellIndex) {
+                await generateCode(cellIndex);
             }
             if (!running.value) return;
 
             const cell = notebook.value.cells[cellIndex];
             const test = cell.metadata.unit_tests[testName];
+            const validity = unitTestValidity.value?.[testName];
 
-            // 2. Generate setup code if needed, then execute setup
-            if (!(test.setup.source || '').trim() && (test.setup.metadata?.explanation || '').trim()) {
+            // 3. Generate setup code if needed (empty or invalid), then execute setup
+            const setupHasExplanation = (test.setup.metadata?.explanation || '').trim();
+            const setupCodeInvalid = !validity?.setup?.code_valid;
+            if (setupHasExplanation && (!(test.setup.source || '').trim() || setupCodeInvalid)) {
                 await generateUnitTestCodeInner(cellIndex, testName, 'setup');
             }
             if (!running.value) return;
@@ -999,16 +1012,14 @@ createApp({
             await executeUnitTestCell(cellIndex, testName, 'setup');
             if (!running.value) return;
 
-            // 3. Ensure target has code, then execute target
-            if (last_valid_code_cell_index.value < cellIndex) {
-                await generateCode(cellIndex);
-            }
-            if (!running.value) return;
+            // 4. Execute target
             await executeUnitTestCell(cellIndex, testName, 'target');
             if (!running.value) return;
 
-            // 4. Generate test code if needed, then execute test
-            if (!(test.test.source || '').trim() && (test.test.metadata?.explanation || '').trim()) {
+            // 5. Generate test code if needed (empty or invalid), then execute test
+            const testHasExplanation = (test.test.metadata?.explanation || '').trim();
+            const testCodeInvalid = !validity?.test?.code_valid;
+            if (testHasExplanation && (!(test.test.source || '').trim() || testCodeInvalid)) {
                 await generateUnitTestCodeInner(cellIndex, testName, 'test');
             }
             if (!running.value) return;
@@ -1016,7 +1027,7 @@ createApp({
                 await executeUnitTestCell(cellIndex, testName, 'test');
             }
 
-            // 5. Refresh validity flags
+            // 6. Refresh validity flags
             await fetchUnitTestState(cellIndex);
         };
 

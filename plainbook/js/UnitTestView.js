@@ -59,7 +59,10 @@ export default {
             return activeTest.value?.target?.outputs || targetCell.value?.outputs || [];
         });
 
-        // Keep activeTestName valid
+        // Keep activeTestName valid (fallback for renames, external changes, etc.)
+        // deep: true is required because unitTests is a computed returning the same
+        // reactive object reference — without deep, in-place mutations (delete/add key)
+        // don't trigger the watcher.
         watch(unitTests, (tests) => {
             const names = Object.keys(tests);
             if (names.length === 0) {
@@ -67,13 +70,40 @@ export default {
             } else if (!activeTestName.value || !(activeTestName.value in tests)) {
                 activeTestName.value = names[0];
             }
-        }, { immediate: true });
+        }, { immediate: true, deep: true });
+
+        const handleAdd = () => {
+            // Predict the new test name (same logic as addUnitTest in nb.js)
+            const tests = unitTests.value;
+            let testNum = Object.keys(tests).length + 1;
+            while (`Test ${testNum}` in tests) testNum++;
+            const newName = `Test ${testNum}`;
+            emit('add-unit-test', props.targetCellIndex);
+            activeTestName.value = newName;
+        };
+
+        const handleDelete = (testName) => {
+            const names = Object.keys(unitTests.value);
+            const idx = names.indexOf(testName);
+            // Pick predecessor, then successor, then exit
+            if (names.length <= 1) {
+                emit('delete-unit-test', props.targetCellIndex, testName);
+                emit('exit');
+                return;
+            }
+            if (idx > 0) {
+                activeTestName.value = names[idx - 1];
+            } else {
+                activeTestName.value = names[idx + 1];
+            }
+            emit('delete-unit-test', props.targetCellIndex, testName);
+        };
 
         return {
             activeTestName, activeSubCell, targetCell, unitTests, activeTest,
             hasTargetError, targetCodeValid, targetOutputValid, targetOutputVisible,
             activeTestValidity, setupCodeValid, setupOutputValid, testCodeValid, testOutputValid,
-            targetTestOutputs
+            targetTestOutputs, handleAdd, handleDelete
         };
     },
     template: /* html */ `
@@ -82,7 +112,7 @@ export default {
                 :tests="unitTests"
                 :active-name="activeTestName"
                 @select="activeTestName = $event"
-                @add="$emit('add-unit-test', targetCellIndex)"
+                @add="handleAdd"
                 @rename="(oldName, newName) => $emit('rename-unit-test', targetCellIndex, oldName, newName)"
                 @exit="$emit('exit')"
             />
@@ -97,7 +127,7 @@ export default {
                 </button>
                 <button class="button is-small is-danger is-outlined"
                         :disabled="running || isLocked"
-                        @click="$emit('delete-unit-test', targetCellIndex, activeTestName)">
+                        @click="handleDelete(activeTestName)">
                     <span class="icon"><i class="bx bx-trash"></i></span>
                     <span>Delete test</span>
                 </button>
