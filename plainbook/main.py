@@ -69,6 +69,12 @@ for env_var, setting_key in [('CLAUDE_API_KEY', 'claude_api_key'), ('GEMINI_API_
     if not settings.get(setting_key) and os.environ.get(env_var):
         settings[setting_key] = os.environ[env_var]
 
+# Bedrock support: when enabled, Claude is available without an API key
+CLAUDE_VIA_BEDROCK = os.environ.get("CLAUDE_CODE_USE_BEDROCK") == "1"
+if CLAUDE_VIA_BEDROCK:
+    # Use a sentinel so key-presence checks pass for Claude providers
+    settings['claude_api_key'] = '__bedrock__'
+
 AI_PROVIDER_REGISTRY = [
     {"id": "gemini:2.5-flash", "name": "Gemini 2.5 Flash", "major": "gemini", "key_setting": "gemini_api_key", "model": "gemini-2.5-flash"},
     {"id": "gemini:2.5-pro",   "name": "Gemini 2.5 Pro",   "major": "gemini", "key_setting": "gemini_api_key", "model": "gemini-2.5-pro"},
@@ -79,10 +85,23 @@ AI_PROVIDER_REGISTRY = [
     {"id": "claude:opus",      "name": "Claude Opus",       "major": "claude", "key_setting": "claude_api_key", "model": "claude-opus-4-20250514"},
 ]
 
+# When using Bedrock with ANTHROPIC_MODEL, add a dedicated provider entry for it
+if CLAUDE_VIA_BEDROCK and os.environ.get("ANTHROPIC_MODEL"):
+    _bedrock_model = os.environ["ANTHROPIC_MODEL"]
+    AI_PROVIDER_REGISTRY.insert(0, {
+        "id": "claude:bedrock",
+        "name": f"Claude Bedrock ({_bedrock_model})",
+        "major": "claude",
+        "key_setting": "claude_api_key",
+        "model": _bedrock_model,
+    })
+
 def _update_claude_models():
     """Fetch latest Claude model IDs from the API and update the registry.
     On success, saves the model IDs to settings. On failure, falls back
     to previously saved model IDs."""
+    if CLAUDE_VIA_BEDROCK:
+        return  # Bedrock doesn't support models.list; use env-configured model
     api_key = settings.get('claude_api_key')
     if not api_key:
         return
@@ -253,6 +272,7 @@ def get_notebook():
         nb=notebook.get_json(),
         has_gemini_key=bool(settings.get('gemini_api_key')),
         has_claude_key=bool(settings.get('claude_api_key')),
+        claude_via_bedrock=CLAUDE_VIA_BEDROCK,
         debug=args.debug,
         active_ai_provider=settings.get('active_ai_provider'),
         ai_providers=AI_PROVIDER_REGISTRY,
@@ -270,13 +290,17 @@ def set_key():
         gemini_api_key = ''
     elif gemini_api_key == '':
         gemini_api_key = _saved_settings.get('gemini_api_key', '')
-    if claude_api_key is None:
+    if CLAUDE_VIA_BEDROCK:
+        # Bedrock manages Claude access; ignore any client-side key changes
+        claude_api_key = '__bedrock__'
+    elif claude_api_key is None:
         claude_api_key = ''
     elif claude_api_key == '':
         claude_api_key = _saved_settings.get('claude_api_key', '')
     # Save only user-provided keys to the file (never env-var keys)
     _saved_settings['gemini_api_key'] = gemini_api_key
-    _saved_settings['claude_api_key'] = claude_api_key
+    if not CLAUDE_VIA_BEDROCK:
+        _saved_settings['claude_api_key'] = claude_api_key
     settings['gemini_api_key'] = gemini_api_key
     settings['claude_api_key'] = claude_api_key
     try:
@@ -296,6 +320,7 @@ def set_key():
         active_ai_provider=active,
         has_gemini_key=bool(settings.get('gemini_api_key')),
         has_claude_key=bool(settings.get('claude_api_key')),
+        claude_via_bedrock=CLAUDE_VIA_BEDROCK,
     )
 
 @post('/set_active_ai')

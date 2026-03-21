@@ -27,6 +27,43 @@ pre[class*="language-"] {
   padding: 0 !important;
 }
 
+// ── Code editor overlay (CodeCell.js) ──
+.code-editor-container {
+  display: grid;
+  overflow-x: auto;
+
+  > pre, > textarea {
+    grid-area: 1 / 1;
+    font-family: Consolas, Monaco, 'Andale Mono', 'Ubuntu Mono', monospace;
+    font-size: inherit;
+    line-height: 1.5;
+    tab-size: 4;
+    -moz-tab-size: 4;
+    white-space: pre;
+    overflow: hidden;
+    margin: 0;
+    padding: 0;
+    border: none;
+  }
+
+  > textarea {
+    background: transparent;
+    color: transparent;
+    caret-color: var(--bulma-text);
+    outline: none;
+    resize: none;
+    z-index: 1;
+
+    &::selection {
+      background: hsla(215, 70%, 60%, 0.3);
+    }
+
+    &::placeholder {
+      color: var(--bulma-text-weak);
+    }
+  }
+}
+
 // .output-zone {
 //   border-top: 1px solid var(--bulma-border);
 // }
@@ -138,9 +175,72 @@ pre[class*="language-"] {
   @extend .table, .is-narrow, .is-striped, .is-size-7;
 }
 
+// ── Dark-mode-safe text color utilities ──
+.text-muted    { color: hsl(0, 0%, 48%); }
+.text-subtle   { color: hsl(0, 0%, 60%); }
+.text-secondary { color: hsl(0, 0%, 40%); }
+.text-dim      { color: hsl(0, 0%, 33%); }
+
+// ── Panel / Tab styles (PanelBar.js) ──
+.panel-container { background-color: var(--bulma-scheme-main-bis); border: 1px solid var(--bulma-border); border-radius: 4px; }
+.panel-tab { border: none; border-radius: 0; border-bottom: 2px solid transparent; text-decoration: none; }
+.panel-tab.is-active { font-weight: 700; border-bottom-color: var(--bulma-primary); color: var(--bulma-primary); }
+.panel-tab:not(.is-active) { color: var(--bulma-text-weak); }
+.panel-divider { width: 1px; background: var(--bulma-border); align-self: stretch; margin: 0.4rem 0; }
+.panel-badge { display: inline-block; background: var(--bulma-text-weak); color: var(--bulma-scheme-main); border-radius: 999px; padding: 0.12rem 0.45rem; margin-left: 0.4rem; font-size: 0.8rem; font-weight: 600; }
+.panel-section { border-top: 1px solid var(--bulma-border); }
+
+// ── Settings modal (SettingsModal.js) ──
+.settings-key-status { color: var(--bulma-text-weak); background-color: var(--bulma-scheme-main-bis); font-style: italic; }
+.settings-key-masked { cursor: pointer; color: var(--bulma-text-weak); background-color: var(--bulma-scheme-main-bis); }
+.settings-bedrock-status { color: var(--bulma-success); background-color: var(--bulma-scheme-main-bis); font-style: italic; }
+
+// ── Input file browser (InputFile.js) ──
+.file-browser { background: var(--bulma-scheme-main); }
+.file-browser-header { padding: 0.4rem 0.5rem; background: var(--bulma-scheme-main-ter); font-size: 0.85rem; color: var(--bulma-text-weak); }
+.file-browser-filter { padding: 8px; background: var(--bulma-scheme-main-ter); display: flex; gap: 8px; }
+.file-browser-filter input { border: 1px solid var(--bulma-border); }
+.file-browser-nav { padding: 0.25rem; background: var(--bulma-scheme-main-ter); display: flex; gap: 6px; align-items: center; }
+.file-browser-nav .button { border: 1px solid var(--bulma-border); }
+.file-item { padding: 0.1rem 0.5rem; border-bottom: 1px solid var(--bulma-scheme-main-bis); display: flex; align-items: center; gap: 4px; }
+.file-name-link { cursor: pointer; color: var(--bulma-link); font-weight: 500; }
+.dir-icon { color: var(--bulma-link); }
+.selected-files-panel { width: 300px; background: var(--bulma-scheme-main-bis); display: flex; flex-direction: column; }
+.selected-files-header { padding: 0.5rem; font-weight: bold; background: var(--bulma-scheme-main-ter); }
+.selected-file-card { background: var(--bulma-scheme-main); padding: 6px; border-radius: 4px; border: 1px solid var(--bulma-border-weak); display: flex; align-items: flex-start; gap: 8px; margin-bottom: 6px; font-size: 0.95rem; }
+.selected-file-name { font-weight: 600; color: var(--bulma-text-strong); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.selected-file-path { color: var(--bulma-link); font-size: 0.8rem; margin-top: 2px; white-space: normal; word-break: break-all; }
+
+// ── Instructions panel (InstructionsPanel.js) ──
+.instructions-container { background: var(--bulma-scheme-main); }
+.instructions-help { font-size: 0.85rem; color: var(--bulma-text-weak); }
+.instructions-textarea { border: 1px solid var(--bulma-border); border-radius: 4px; font-family: inherit; font-size: 0.9rem; }
+
+// ── Notebook cell (NotebookCell.js) ──
+.notebook-cell.is-active-cell { border: 2px solid var(--bulma-primary); }
+.notebook-cell:not(.is-active-cell) { border: 1px solid transparent; }
+
+// ── AppNavbar dropdown header ──
+.ai-provider-header { cursor: default; font-size: 0.8em; text-transform: uppercase; color: var(--bulma-text-weak); }
+
+// ── Output renderer ──
+.output-text { color: var(--bulma-text); }
+
+// ── Explanation body fix ──
+.explanation-body { color: var(--bulma-text); }
+
+// ── Dark-mode-safe background replacements for Bulma fixed-color helpers ──
+.bg-scheme-main { background-color: var(--bulma-scheme-main); }
+.bg-scheme-bis  { background-color: var(--bulma-scheme-main-bis); }
+.bg-scheme-ter  { background-color: var(--bulma-scheme-main-ter); }
+.bg-warning-adaptive { background-color: var(--bulma-warning-light); }
+
+// Explanation toolbar: override has-background-grey-lighter
+.explanation-toolbar { background-color: var(--bulma-scheme-main-ter); }
+
 .cell-label {
   font-size: 0.85rem;
-  color: #777;
+  color: var(--bulma-text-weak);
   padding-left: 0.5rem;
   margin-bottom: -0.2rem;
   margin-top: -0.75rem;

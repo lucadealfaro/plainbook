@@ -49,19 +49,20 @@ export default {
         return { localInstructions, isLoading, isSaving, isDirty, save, cancel };
     },
     template: /* html */ `
-        <div style="display: flex; flex-direction: column; height: 400px; background: white; padding: 1rem;">
+        <div style="display: flex; flex-direction: column; height: 400px; padding: 1rem;" class="instructions-container">
             <div style="margin-bottom: 0.5rem;">
-                <p style="font-size: 0.85rem; color: #666; margin-top: 0rem;">
+                <p class="instructions-help" style="margin-top: 0rem;">
                     These instructions are included in every AI prompt for this notebook (code generation, test generation, and validation).
                 </p>
             </div>
-            <div v-if="isLoading" style="flex: 1; display: flex; align-items: center; justify-content: center; color: #888;">
+            <div v-if="isLoading" class="text-muted" style="flex: 1; display: flex; align-items: center; justify-content: center;">
                 Loading...
             </div>
             <textarea v-else
                 v-model="localInstructions"
                 placeholder="e.g., Use pandas for data manipulation, use these specific libraries for data access, etc."
-                style="flex: 1; resize: none; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px; font-family: inherit; font-size: 0.9rem;"
+                class="instructions-textarea"
+                style="flex: 1; resize: none; padding: 0.5rem;"
             ></textarea>
             <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.5rem;">
                 <button class="button is-light" :disabled="!isDirty" @click="cancel">Cancel</button>

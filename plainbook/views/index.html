@@ -191,6 +191,7 @@
         :is-codespace="isCodespace"
         :has-gemini-key="hasGeminiKey"
         :has-claude-key="hasClaudeKey"
+        :claude-via-bedrock="claudeViaBedrock"
         @close="showSettings = false"
         @save="(keys) => {showSettings = false; saveSettings(keys); }"
     />

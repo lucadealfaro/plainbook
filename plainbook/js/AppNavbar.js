@@ -197,7 +197,7 @@ export default {
                                     <div class="dropdown-content">
                                         <template v-for="(entry, idx) in groupedProviders" :key="idx">
                                             <hr v-if="entry.type === 'header' && idx > 0" class="dropdown-divider">
-                                            <p v-if="entry.type === 'header'" class="dropdown-item has-text-weight-bold" style="cursor: default; font-size: 0.8em; text-transform: uppercase; color: #999;">
+                                            <p v-if="entry.type === 'header'" class="dropdown-item has-text-weight-bold ai-provider-header">
                                                 {{ entry.label }}
                                             </p>
                                             <a v-if="entry.type === 'item'"

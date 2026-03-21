@@ -162,8 +162,8 @@ const ExplanationRenderer = {
             </div>
         </div>
         <div v-if="!isEditing && isActive"
-                class="explanation-toolbar has-background-grey-lighter pl-3 pr-3"
-                style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem">
+                class="explanation-toolbar pl-3 pr-3"
+                style="flex-wrap: wrap;">
             <div class="toolbar-left">
                 <template v-if="showRun">
                     <button v-if="running" class="button run-button is-small mr-1 is-primary"

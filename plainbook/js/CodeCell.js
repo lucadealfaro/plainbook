@@ -109,8 +109,40 @@ export default {
             if (localIsLocked.value) return;
             isEditing.value = true;
             nextTick(() => {
-                autoResize();
-                if (textareaEl.value) textareaEl.value.scrollTop = 0;
+                if (textareaEl.value) textareaEl.value.focus();
+            });
+        };
+
+        const enterEditModeAtPoint = (e) => {
+            if (localIsLocked.value || isEditing.value) return;
+            // Find the character offset at the click point
+            let cursorOffset = 0;
+            const pre = e.currentTarget.querySelector('pre');
+            if (pre) {
+                let container, offset;
+                if (document.caretRangeFromPoint) {
+                    const range = document.caretRangeFromPoint(e.clientX, e.clientY);
+                    if (range) { container = range.startContainer; offset = range.startOffset; }
+                } else if (document.caretPositionFromPoint) {
+                    const pos = document.caretPositionFromPoint(e.clientX, e.clientY);
+                    if (pos) { container = pos.offsetNode; offset = pos.offset; }
+                }
+                if (container) {
+                    const walker = document.createTreeWalker(pre, NodeFilter.SHOW_TEXT);
+                    let node;
+                    while ((node = walker.nextNode())) {
+                        if (node === container) { cursorOffset += offset; break; }
+                        cursorOffset += node.textContent.length;
+                    }
+                }
+            }
+            isEditing.value = true;
+            nextTick(() => {
+                if (textareaEl.value) {
+                    textareaEl.value.focus();
+                    textareaEl.value.selectionStart = cursorOffset;
+                    textareaEl.value.selectionEnd = cursorOffset;
+                }
             });
         };
 
@@ -148,13 +180,13 @@ export default {
         };
 
         return { isCollapsed, toggleCollapse, isEditing, cancelEdit, localSource,
-            localIsLocked, highlightedCode, enterEditMode, saveCode, textareaEl,
-            autoResize, handleTabKey, onBlur };
+            localIsLocked, highlightedCode, enterEditMode, enterEditModeAtPoint,
+            saveCode, textareaEl, autoResize, handleTabKey, onBlur };
     },
     template: /* html */ `
         <div class="code-cell-wrapper">
             <div style="display: flex; gap: 0.25rem; align-items: center;">
-                <button class="button is-small is-white px-2 mt-1"
+                <button class="button is-small is-ghost px-2 mt-1" style="text-decoration: none;"
                         @click="toggleCollapse">
                     {{ isCollapsed ? '▶ &nbsp;Show code' : '▼ &nbsp;Hide code' }}
                 </button>
@@ -176,31 +208,25 @@ export default {
                 </button>
             </div>
             <div v-if="!isCollapsed" style="padding-left: 2.25rem;">
-                <div v-if="!isEditing" class="p-2 overflow-x-auto is-size-7" @dblclick="enterEditMode">
-                    <pre class="language-python"><code class="language-python" v-html="highlightedCode"></code></pre>
-                </div>
-
-                <div v-else class="p-2">
-                    <textarea 
+                <div class="code-editor-container p-2 is-size-7"
+                     @dblclick="enterEditModeAtPoint($event)">
+                    <pre class="language-python"><code class="language-python" v-html="highlightedCode + '\\n'"></code></pre>
+                    <textarea v-if="isEditing"
                         ref="textareaEl"
-                        placeholder="Write the code for this action..."
-                        v-model="localSource" 
-                        class="textarea is-family-monospace is-size-7 mb-2" 
-                        rows="1"
-                        style="overflow: hidden; resize: none; height: 0;"
-                        @input="autoResize"
+                        v-model="localSource"
+                        spellcheck="false"
                         @keydown.tab.prevent="handleTabKey"
                         @blur="onBlur"
                         @keydown.enter.shift.prevent="saveCode">
                     </textarea>
-                    <div style="display: flex; justify-content: flex-end; gap: 0.5rem;">
-                        <button class="button is-small" @mousedown.prevent @click.stop="cancelEdit">
-                            Cancel
-                        </button>
-                        <button class="button is-small is-primary" :disabled="localIsLocked" @mousedown.prevent @click.stop="saveCode">
-                            Save
-                        </button>
-                    </div>
+                </div>
+                <div v-if="isEditing" style="display: flex; justify-content: flex-end; gap: 0.5rem; padding: 0 0.5rem 0.5rem;">
+                    <button class="button is-small" @mousedown.prevent @click.stop="cancelEdit">
+                        Cancel
+                    </button>
+                    <button class="button is-small is-primary" :disabled="localIsLocked" @mousedown.prevent @click.stop="saveCode">
+                        Save
+                    </button>
                 </div>
             </div>
         </div>
