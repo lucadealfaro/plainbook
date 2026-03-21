@@ -47,7 +47,7 @@ export default {
                 @moveDown="$emit('move-down')" />
 
             <div v-else-if="cell.cell_type === 'code'">
-                <div class="has-background-light p-0 border-bottom">
+                <div class="bg-scheme-bis p-0 border-bottom">
                 <explanation-editor
                         v-model:source="cell.metadata.explanation"
                         :hasCode="(cell.source || '').trim().length > 0"
@@ -92,13 +92,13 @@ export default {
                     @save="$emit('save-code', $event)"
                     @activate="$emit('activate')" />
                 
-                <div v-if="outputVisible && cell.outputs?.length" class="p-2 border-top has-background-white">
+                <div v-if="outputVisible && cell.outputs?.length" class="p-2 border-top bg-scheme-main">
                     <output-renderer v-for="(out, oIdx) in cell.outputs" :key="oIdx" :output="out" />
                 </div>
             </div>
 
             <div v-else-if="cell.cell_type === 'test'">
-                <div class="has-background-warning-light p-0 border-bottom">
+                <div class="bg-warning-adaptive p-0 border-bottom">
                 <explanation-editor
                         v-model:source="cell.metadata.explanation"
                         :hasCode="(cell.source || '').trim().length > 0"
@@ -145,7 +145,7 @@ export default {
                     @save="$emit('save-code', $event)"
                     @activate="$emit('activate')" />
 
-                <div v-if="outputVisible && cell.outputs?.length" class="p-2 border-top has-background-white">
+                <div v-if="outputVisible && cell.outputs?.length" class="p-2 border-top bg-scheme-main">
                     <output-renderer v-for="(out, oIdx) in cell.outputs" :key="oIdx" :output="out" />
                 </div>
             </div>

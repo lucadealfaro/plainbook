@@ -104,7 +104,7 @@ const MarkdownCell = {
 
             <!-- bottom toolbar -->
             <div v-if="!isEditing && isActive && !localIsLocked"
-                 class="explanation-toolbar has-background-grey-lighter pl-3 pr-3"
+                 class="explanation-toolbar pl-3 pr-3"
                  style="display: flex; align-items: center; justify-content: flex-end; gap: 0.5rem;">
                 <div class="toolbar-right" style="display: flex; gap: 0.25rem;">
                     <button class="button is-small is-info" title="Edit markdown" @click.stop="enterEditMode">Edit</button>

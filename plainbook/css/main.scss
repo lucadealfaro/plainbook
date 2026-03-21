@@ -192,6 +192,15 @@ pre[class*="language-"] {
 // ── Explanation body fix ──
 .explanation-body { color: var(--bulma-text); }
 
+// ── Dark-mode-safe background replacements for Bulma fixed-color helpers ──
+.bg-scheme-main { background-color: var(--bulma-scheme-main); }
+.bg-scheme-bis  { background-color: var(--bulma-scheme-main-bis); }
+.bg-scheme-ter  { background-color: var(--bulma-scheme-main-ter); }
+.bg-warning-adaptive { background-color: var(--bulma-warning-light); }
+
+// Explanation toolbar: override has-background-grey-lighter
+.explanation-toolbar { background-color: var(--bulma-scheme-main-ter); }
+
 .cell-label {
   font-size: 0.85rem;
   color: var(--bulma-text-weak);

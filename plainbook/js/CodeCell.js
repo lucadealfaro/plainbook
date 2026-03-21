@@ -154,7 +154,7 @@ export default {
     template: /* html */ `
         <div class="code-cell-wrapper">
             <div style="display: flex; gap: 0.25rem; align-items: center;">
-                <button class="button is-small is-white px-2 mt-1"
+                <button class="button is-small is-ghost px-2 mt-1" style="text-decoration: none;"
                         @click="toggleCollapse">
                     {{ isCollapsed ? '▶ &nbsp;Show code' : '▼ &nbsp;Hide code' }}
                 </button>
