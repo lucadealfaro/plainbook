@@ -150,7 +150,7 @@ const ExplanationRenderer = {
         </div>
         <div v-if="!isEditing && isActive"
                 class="explanation-toolbar has-background-grey-lighter pl-3 pr-3"
-                style="display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.5rem">
+                style="flex-wrap: wrap;"
             <div class="toolbar-left">
                 <button v-if="running" class="button run-button is-small mr-1 is-primary"
                         title="Interrupt execution" @click.stop="$emit('interrupt')">

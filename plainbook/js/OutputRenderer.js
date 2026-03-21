@@ -9,7 +9,7 @@ export default {
             const text = this.join(lines);
             const ansiMap = {
                 '1': 'font-weight: bold;',
-                '30': 'color: #000;',
+                '30': 'color: var(--bulma-text);',
                 '31': 'color: #e3342f;', // Red
                 '32': 'color: #38c172;', // Green
                 '33': 'color: #f6993f;', // Yellow
@@ -17,8 +17,8 @@ export default {
                 '35': 'color: #9561e2;', // Magenta
                 '36': 'color: #4dc0b5;', // Cyan
                 '37': 'color: white;',
-                '39': 'color: black;', // Reset foreground
-                '0': 'color: black; font-weight: normal;' // Reset all
+                '39': '', // Reset foreground
+                '0': 'font-weight: normal;' // Reset all
             };
             // This regex finds the ANSI escape codes: \u001b[...m
             return text.replace(/\u001b\[([\d;]+)m/g, (match, code) => {
@@ -35,7 +35,7 @@ export default {
         <div class="output-zone mb-2">
             <div class="output-container mt-1">
                 <pre v-if="output.output_type === 'stream'" 
-                     :class="output.name === 'stderr' ? 'has-text-danger has-background-danger-light p-2' : 'has-text-dark'"
+                     :class="output.name === 'stderr' ? 'has-text-danger has-background-danger-light p-2' : 'output-text'"
                      class="output-stream is-family-monospace is-size-7 whitespace-pre-wrap"
                      v-html="ansiToHtml(output.text)"></pre>
 
@@ -59,7 +59,7 @@ export default {
                              style="max-width: 100%; height: auto; display: block;">
                     </figure>
                     <pre v-else-if="output.data['text/plain']" 
-                         class="output-text has-text-grey is-size-7 is-family-monospace">{{ join(output.data['text/plain']) }}</pre>
+                         class="output-text is-size-7 is-family-monospace">{{ join(output.data['text/plain']) }}</pre>
                 </div>
             </div>
         </div>

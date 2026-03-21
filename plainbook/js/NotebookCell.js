@@ -32,10 +32,8 @@ export default {
     template: /* html */ `
         <div class="notebook-cell box p-0 mb-2 is-clipped shadow-sm"
              @click="$emit('activate')"
-             :style="{
-                border: isActive ? '2px solid #1d4ed8' : '1px solid transparent',
-                cursor: 'pointer'
-             }">
+             :class="{ 'is-active-cell': isActive }"
+             style="cursor: pointer">
             
             <markdown-cell 
                 v-if="cell.cell_type === 'markdown'" 
