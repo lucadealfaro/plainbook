@@ -769,11 +769,11 @@ def run_unit_test_cell():
         cell = notebook.nb.cells[cell_index]
         test = cell.metadata.get('unit_tests', {})[test_name]
         if role == 'setup':
-            outs = test['setup'].get('outputs', [])
+            outs = test['cells']['setup'].get('outputs', [])
         elif role == 'target':
-            outs = test.get('target', {}).get('outputs', [])
+            outs = test['cells'].get('target', {}).get('outputs', [])
         else:
-            outs = test['test'].get('outputs', [])
+            outs = test['cells']['test'].get('outputs', [])
         return dict(status='ok', details='CellExecutionError', outputs=outs, role=role)
     except Exception as e:
         return dict(status='error', message=str(e))

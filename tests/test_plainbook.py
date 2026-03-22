@@ -426,3 +426,316 @@ class TestSnapshotKernelSpecific:
 
         assert len(notebook._cell_states) == 0
         assert notebook.last_executed_cell == -1
+
+
+# === Unit test validity propagation ===
+
+
+def _all_valid():
+    """Return a validity dict with all flags True."""
+    return {
+        'setup_code_valid': True,
+        'setup_output_valid': True,
+        'target_output_valid': True,
+        'test_code_valid': True,
+        'test_output_valid': True,
+    }
+
+
+def _attach_unit_test(notebook, cell_index, test_name='test1'):
+    """Attach a unit test with all-valid flags to a cell."""
+    cell = notebook.nb.cells[cell_index]
+    if 'unit_tests' not in cell.metadata:
+        cell.metadata['unit_tests'] = {}
+    cell.metadata['unit_tests'][test_name] = {
+        'validity': _all_valid(),
+        'cells': {
+            'setup': {'cell_type': 'code', 'source': '', 'metadata': {}},
+            'test': {'cell_type': 'code', 'source': '', 'metadata': {}},
+        },
+    }
+
+
+def _is_all_valid(notebook, cell_index, test_name='test1'):
+    """Check if all validity flags are True for a unit test."""
+    v = notebook.nb.cells[cell_index].metadata['unit_tests'][test_name]['validity']
+    return all(v.values())
+
+
+def _is_invalid_from(notebook, cell_index, from_point, test_name='test1'):
+    """Check that flags from from_point onward are False, earlier ones are True."""
+    cascade = ['setup_code', 'setup_output', 'target_output', 'test_code', 'test_output']
+    v = notebook.nb.cells[cell_index].metadata['unit_tests'][test_name]['validity']
+    start = cascade.index(from_point)
+    for i, point in enumerate(cascade):
+        if i < start:
+            if not v[point + '_valid']:
+                return False
+        else:
+            if v[point + '_valid']:
+                return False
+    return True
+
+
+class TestUnitTestInvalidationPropagation:
+    """Tests that upstream changes properly invalidate downstream unit tests."""
+
+    def test_set_explanation_upstream_invalidates_downstream_ut(self, notebook):
+        """Changing cell A's explanation invalidates unit tests on cell C."""
+        _add_code_cell(notebook, 'x = 1')  # cell 0 (A)
+        _add_code_cell(notebook, 'y = x + 1')  # cell 1 (B)
+        _add_code_cell(notebook, 'z = y + 1')  # cell 2 (C)
+        _attach_unit_test(notebook, 2)
+        assert _is_all_valid(notebook, 2)
+
+        notebook.set_cell_explanation(0, 'Set x to 10')
+
+        assert _is_invalid_from(notebook, 2, 'setup_code')
+
+    def test_set_explanation_own_cell_invalidates_own_ut(self, notebook):
+        """Changing cell C's own explanation invalidates its unit tests."""
+        _add_code_cell(notebook, 'x = 1')  # cell 0
+        _add_code_cell(notebook, 'y = x + 1')  # cell 1
+        _attach_unit_test(notebook, 1)
+        assert _is_all_valid(notebook, 1)
+
+        notebook.set_cell_explanation(1, 'Changed explanation')
+
+        assert _is_invalid_from(notebook, 1, 'setup_code')
+
+    def test_set_explanation_does_not_invalidate_upstream_ut(self, notebook):
+        """Changing cell B's explanation does NOT invalidate unit tests on cell A."""
+        _add_code_cell(notebook, 'x = 1')  # cell 0 (A)
+        _add_code_cell(notebook, 'y = x + 1')  # cell 1 (B)
+        _attach_unit_test(notebook, 0)
+        assert _is_all_valid(notebook, 0)
+
+        notebook.set_cell_explanation(1, 'Changed explanation')
+
+        assert _is_all_valid(notebook, 0)
+
+    def test_set_source_invalidates_via_invalidate_from(self, notebook):
+        """Editing cell B's code invalidates unit tests on cell C from setup_code."""
+        _add_code_cell(notebook, 'x = 1')  # cell 0
+        _add_code_cell(notebook, 'y = x + 1')  # cell 1
+        _add_code_cell(notebook, 'z = y + 1')  # cell 2
+        notebook.execute_cell(0)
+        notebook.execute_cell(1)
+        notebook.execute_cell(2)
+        _attach_unit_test(notebook, 2)
+        assert _is_all_valid(notebook, 2)
+
+        notebook.set_cell_source(1, 'y = x + 10')
+
+        # _invalidate_from(1) should invalidate from setup_code
+        assert _is_invalid_from(notebook, 2, 'setup_code')
+
+    def test_invalidate_from_uses_setup_code_not_setup_output(self, notebook):
+        """_invalidate_from invalidates from setup_code, not setup_output."""
+        _add_code_cell(notebook, 'x = 1')  # cell 0
+        _add_code_cell(notebook, 'y = x + 1')  # cell 1
+        notebook.execute_cell(0)
+        notebook.execute_cell(1)
+        _attach_unit_test(notebook, 1)
+        assert _is_all_valid(notebook, 1)
+
+        notebook.set_cell_source(0, 'x = 10')
+
+        assert _is_invalid_from(notebook, 1, 'setup_code')
+
+    def test_set_explanation_invalidates_multiple_downstream(self, notebook):
+        """Changing cell A's explanation invalidates unit tests on both B and C."""
+        _add_code_cell(notebook, 'x = 1')  # cell 0
+        _add_code_cell(notebook, 'y = x + 1')  # cell 1
+        _add_code_cell(notebook, 'z = y + 1')  # cell 2
+        _attach_unit_test(notebook, 1)
+        _attach_unit_test(notebook, 2)
+        assert _is_all_valid(notebook, 1)
+        assert _is_all_valid(notebook, 2)
+
+        notebook.set_cell_explanation(0, 'Changed explanation')
+
+        assert _is_invalid_from(notebook, 1, 'setup_code')
+        assert _is_invalid_from(notebook, 2, 'setup_code')
+
+    def test_generate_code_invalidates_downstream_ut_without_execution(self, notebook):
+        """generate_code_cell invalidates downstream unit tests even if cell was never executed.
+
+        We can't call generate_code_cell directly (needs AI), so we verify the
+        invalidation logic by calling the internal path: set code + invalidate downstream.
+        Instead, we test the set_cell_source path which also goes through _invalidate_from
+        when the cell was executed."""
+        _add_code_cell(notebook, 'x = 1')  # cell 0
+        _add_code_cell(notebook, 'y = x + 1')  # cell 1
+        _add_code_cell(notebook, 'z = y + 1')  # cell 2
+        # Execute all cells
+        notebook.execute_cell(0)
+        notebook.execute_cell(1)
+        notebook.execute_cell(2)
+        _attach_unit_test(notebook, 2)
+        assert _is_all_valid(notebook, 2)
+
+        # Edit cell 0 source triggers _invalidate_from(0) which should
+        # invalidate cell 2's unit tests from setup_code
+        notebook.set_cell_source(0, 'x = 10')
+
+        assert _is_invalid_from(notebook, 2, 'setup_code')
+
+    def test_double_invalidation_is_idempotent(self, notebook):
+        """Invalidating already-invalid tests is a no-op (idempotent)."""
+        _add_code_cell(notebook, 'x = 1')  # cell 0
+        _add_code_cell(notebook, 'y = x + 1')  # cell 1
+        _attach_unit_test(notebook, 1)
+
+        notebook.set_cell_explanation(0, 'First change')
+        assert _is_invalid_from(notebook, 1, 'setup_code')
+
+        # Second invalidation should not crash or change anything
+        notebook.set_cell_explanation(0, 'Second change')
+        assert _is_invalid_from(notebook, 1, 'setup_code')
+
+    def test_set_explanation_test_cell_does_not_invalidate_code_cell_ut(self, notebook):
+        """Changing a test cell's explanation does not invalidate code cell unit tests."""
+        _add_code_cell(notebook, 'x = 1')  # cell 0
+        _attach_unit_test(notebook, 0)
+        _add_test_cell(notebook, 'assert True')  # cell 1
+        assert _is_all_valid(notebook, 0)
+
+        notebook.set_cell_explanation(1, 'Changed test explanation')
+
+        # Unit tests on cell 0 should be unaffected
+        assert _is_all_valid(notebook, 0)
+
+
+class TestUnitTestSubCellExplanation:
+    """Tests that changing a unit test sub-cell explanation invalidates
+    validity flags and kernel states."""
+
+    def test_setup_explanation_change_invalidates_all_from_setup_code(self, notebook):
+        """Changing setup cell explanation invalidates all validity flags from setup_code."""
+        idx = _add_code_cell(notebook, 'x = 1')
+        _attach_unit_test(notebook, idx)
+        assert _is_all_valid(notebook, idx)
+
+        notebook.save_unit_test_explanation(idx, 'test1', 'setup', 'New setup explanation')
+
+        assert _is_invalid_from(notebook, idx, 'setup_code')
+
+    def test_setup_explanation_change_deletes_kernel_states(self, notebook):
+        """Changing setup explanation deletes kernel states for setup, target, and test."""
+        idx = _add_code_cell(notebook, 'x = 1')
+        _attach_unit_test(notebook, idx)
+        # Simulate kernel states being stored
+        cell_id = notebook.nb.cells[idx].id
+        notebook._unit_test_states[f"{cell_id}:test1:setup"] = "state_setup"
+        notebook._unit_test_states[f"{cell_id}:test1:target"] = "state_target"
+        notebook._unit_test_states[f"{cell_id}:test1:test"] = "state_test"
+
+        notebook.save_unit_test_explanation(idx, 'test1', 'setup', 'New setup explanation')
+
+        # All three kernel states should be deleted
+        assert f"{cell_id}:test1:setup" not in notebook._unit_test_states
+        assert f"{cell_id}:test1:target" not in notebook._unit_test_states
+        assert f"{cell_id}:test1:test" not in notebook._unit_test_states
+
+    def test_test_explanation_change_invalidates_from_test_code(self, notebook):
+        """Changing test cell explanation invalidates from test_code only."""
+        idx = _add_code_cell(notebook, 'x = 1')
+        _attach_unit_test(notebook, idx)
+        assert _is_all_valid(notebook, idx)
+
+        notebook.save_unit_test_explanation(idx, 'test1', 'test', 'New test explanation')
+
+        assert _is_invalid_from(notebook, idx, 'test_code')
+
+    def test_test_explanation_change_preserves_setup_and_target_states(self, notebook):
+        """Changing test explanation preserves setup and target kernel states."""
+        idx = _add_code_cell(notebook, 'x = 1')
+        _attach_unit_test(notebook, idx)
+        cell_id = notebook.nb.cells[idx].id
+        notebook._unit_test_states[f"{cell_id}:test1:setup"] = "state_setup"
+        notebook._unit_test_states[f"{cell_id}:test1:target"] = "state_target"
+        notebook._unit_test_states[f"{cell_id}:test1:test"] = "state_test"
+
+        notebook.save_unit_test_explanation(idx, 'test1', 'test', 'New test explanation')
+
+        # Setup and target states should be preserved
+        assert f"{cell_id}:test1:setup" in notebook._unit_test_states
+        assert f"{cell_id}:test1:target" in notebook._unit_test_states
+        # Test state should be deleted
+        assert f"{cell_id}:test1:test" not in notebook._unit_test_states
+
+
+class TestUnitTestCodeRegenAndClear:
+    """Tests that regenerating or clearing unit test sub-cell code
+    properly invalidates validity flags and kernel states."""
+
+    def _setup_with_kernel_states(self, notebook):
+        """Helper: create a code cell with a unit test and fake kernel states."""
+        idx = _add_code_cell(notebook, 'x = 1')
+        _attach_unit_test(notebook, idx)
+        cell_id = notebook.nb.cells[idx].id
+        notebook._unit_test_states[f"{cell_id}:test1:setup"] = "state_setup"
+        notebook._unit_test_states[f"{cell_id}:test1:target"] = "state_target"
+        notebook._unit_test_states[f"{cell_id}:test1:test"] = "state_test"
+        return idx, cell_id
+
+    # --- save_unit_test_code (user edits code directly) ---
+
+    def test_save_setup_code_invalidates_from_setup_output(self, notebook):
+        """Saving setup code invalidates from setup_output (code itself stays valid)."""
+        idx, _ = self._setup_with_kernel_states(notebook)
+        notebook.save_unit_test_code(idx, 'test1', 'setup', 'new_var = 1')
+        assert _is_invalid_from(notebook, idx, 'setup_output')
+
+    def test_save_setup_code_deletes_all_kernel_states(self, notebook):
+        """Saving setup code deletes kernel states for setup, target, and test."""
+        idx, cell_id = self._setup_with_kernel_states(notebook)
+        notebook.save_unit_test_code(idx, 'test1', 'setup', 'new_var = 1')
+        assert f"{cell_id}:test1:setup" not in notebook._unit_test_states
+        assert f"{cell_id}:test1:target" not in notebook._unit_test_states
+        assert f"{cell_id}:test1:test" not in notebook._unit_test_states
+
+    def test_save_test_code_invalidates_from_test_output(self, notebook):
+        """Saving test code invalidates from test_output only."""
+        idx, _ = self._setup_with_kernel_states(notebook)
+        notebook.save_unit_test_code(idx, 'test1', 'test', 'assert True')
+        assert _is_invalid_from(notebook, idx, 'test_output')
+
+    def test_save_test_code_preserves_setup_and_target_states(self, notebook):
+        """Saving test code only deletes test kernel state, not setup or target."""
+        idx, cell_id = self._setup_with_kernel_states(notebook)
+        notebook.save_unit_test_code(idx, 'test1', 'test', 'assert True')
+        assert f"{cell_id}:test1:setup" in notebook._unit_test_states
+        assert f"{cell_id}:test1:target" in notebook._unit_test_states
+        assert f"{cell_id}:test1:test" not in notebook._unit_test_states
+
+    # --- clear_unit_test_code ---
+
+    def test_clear_setup_code_invalidates_from_setup_code(self, notebook):
+        """Clearing setup code invalidates from setup_code."""
+        idx, _ = self._setup_with_kernel_states(notebook)
+        notebook.clear_unit_test_code(idx, 'test1', 'setup')
+        assert _is_invalid_from(notebook, idx, 'setup_code')
+
+    def test_clear_setup_code_deletes_all_kernel_states(self, notebook):
+        """Clearing setup code deletes all kernel states."""
+        idx, cell_id = self._setup_with_kernel_states(notebook)
+        notebook.clear_unit_test_code(idx, 'test1', 'setup')
+        assert f"{cell_id}:test1:setup" not in notebook._unit_test_states
+        assert f"{cell_id}:test1:target" not in notebook._unit_test_states
+        assert f"{cell_id}:test1:test" not in notebook._unit_test_states
+
+    def test_clear_test_code_invalidates_from_test_code(self, notebook):
+        """Clearing test code invalidates from test_code."""
+        idx, _ = self._setup_with_kernel_states(notebook)
+        notebook.clear_unit_test_code(idx, 'test1', 'test')
+        assert _is_invalid_from(notebook, idx, 'test_code')
+
+    def test_clear_test_code_preserves_setup_and_target_states(self, notebook):
+        """Clearing test code only deletes test kernel state."""
+        idx, cell_id = self._setup_with_kernel_states(notebook)
+        notebook.clear_unit_test_code(idx, 'test1', 'test')
+        assert f"{cell_id}:test1:setup" in notebook._unit_test_states
+        assert f"{cell_id}:test1:target" in notebook._unit_test_states
+        assert f"{cell_id}:test1:test" not in notebook._unit_test_states

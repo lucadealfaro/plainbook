@@ -196,9 +196,9 @@ createApp({
                             cell.outputs = [];
                             // Also clear unit test sub-cell outputs
                             for (const test of Object.values(cell.metadata?.unit_tests || {})) {
-                                test.setup.outputs = [];
-                                if (test.target) test.target.outputs = [];
-                                test.test.outputs = [];
+                                test.cells.setup.outputs = [];
+                                if (test.cells.target) test.cells.target.outputs = [];
+                                test.cells.test.outputs = [];
                             }
                         }
                     }
@@ -833,7 +833,7 @@ createApp({
             const cell = notebook.value.cells[cellIndex];
             if (!cell.metadata.unit_tests || Object.keys(cell.metadata.unit_tests).length === 0) {
                 cell.metadata.unit_tests = {
-                    "Test 1": { setup: newSubCell(), test: newSubCell() }
+                    "Test 1": { cells: { setup: newSubCell(), test: newSubCell() }, validity: { setup_code_valid: false, setup_output_valid: false, target_output_valid: false, test_code_valid: false, test_output_valid: false } }
                 };
                 saveUnitTests(cellIndex);
             }
@@ -865,8 +865,8 @@ createApp({
             let testNum = Object.keys(cell.metadata.unit_tests).length + 1;
             while (`Test ${testNum}` in cell.metadata.unit_tests) testNum++;
             cell.metadata.unit_tests[`Test ${testNum}`] = {
-                setup: newSubCell(),
-                test: newSubCell()
+                cells: { setup: newSubCell(), test: newSubCell() },
+                validity: { setup_code_valid: false, setup_output_valid: false, target_output_valid: false, test_code_valid: false, test_output_valid: false }
             };
             await saveUnitTests(cellIndex);
         };
@@ -930,7 +930,7 @@ createApp({
                 // Update local state
                 const cell = notebook.value.cells[cellIndex];
                 const test = cell.metadata.unit_tests[testName];
-                const subCell = test[role];
+                const subCell = test.cells[role];
                 subCell.source = '';
                 subCell.outputs = [];
                 await fetchUnitTestState(cellIndex);
@@ -961,12 +961,12 @@ createApp({
             const cell = notebook.value.cells[cellIndex];
             const test = cell.metadata.unit_tests[testName];
             if (role === 'setup') {
-                test.setup.outputs = r.outputs || [];
+                test.cells.setup.outputs = r.outputs || [];
             } else if (role === 'target') {
-                if (!test.target) test.target = {};
-                test.target.outputs = r.outputs || [];
+                if (!test.cells.target) test.cells.target = {};
+                test.cells.target.outputs = r.outputs || [];
             } else {
-                test.test.outputs = r.outputs || [];
+                test.cells.test.outputs = r.outputs || [];
             }
             if (r.details === 'CellExecutionError') {
                 const err = new Error(`Unit test ${role} execution error`);
@@ -989,7 +989,7 @@ createApp({
                 if (role === 'target') {
                     cell.source = r.code;
                 } else {
-                    test[role].source = r.code;
+                    test.cells[role].source = r.code;
                 }
             } else if (r.status === 'error') {
                 throw new Error(r.message || 'Failed to generate unit test code');
@@ -1019,9 +1019,9 @@ createApp({
             const validity = unitTestValidity.value?.[testName];
 
             // 3. Generate setup code if needed (empty or invalid), then execute setup
-            const setupHasExplanation = (test.setup.metadata?.explanation || '').trim();
+            const setupHasExplanation = (test.cells.setup.metadata?.explanation || '').trim();
             const setupCodeInvalid = !validity?.setup?.code_valid;
-            if (setupHasExplanation && (!(test.setup.source || '').trim() || setupCodeInvalid)) {
+            if (setupHasExplanation && (!(test.cells.setup.source || '').trim() || setupCodeInvalid)) {
                 await generateUnitTestCodeInner(cellIndex, testName, 'setup');
             }
             if (!running.value) return;
@@ -1034,13 +1034,13 @@ createApp({
             if (!running.value) return;
 
             // 5. Generate test code if needed (empty or invalid), then execute test
-            const testHasExplanation = (test.test.metadata?.explanation || '').trim();
+            const testHasExplanation = (test.cells.test.metadata?.explanation || '').trim();
             const testCodeInvalid = !validity?.test?.code_valid;
-            if (testHasExplanation && (!(test.test.source || '').trim() || testCodeInvalid)) {
+            if (testHasExplanation && (!(test.cells.test.source || '').trim() || testCodeInvalid)) {
                 await generateUnitTestCodeInner(cellIndex, testName, 'test');
             }
             if (!running.value) return;
-            if ((test.test.source || '').trim()) {
+            if ((test.cells.test.source || '').trim()) {
                 await executeUnitTestCell(cellIndex, testName, 'test');
             }
 

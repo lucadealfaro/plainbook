@@ -147,7 +147,7 @@ class Plainbook:
         self._current_exec_id = None
         self._cell_states = {}
         self._unit_test_states = {}     # "{cell_id}:{test_name}:{role}" -> kernel state name
-        self._unit_test_validity = {}   # (cell_id, test_name) -> {5 boolean flags}
+        # Unit test validity is stored inline in cell.metadata.unit_tests[name]['validity']
         self._sk_process = subprocess.Popen(
             [sys.executable, "-m", "snapshot_kernel.main",
              "--bind", f"127.0.0.1:{self._sk_port}",
@@ -229,16 +229,17 @@ class Plainbook:
 
     def _get_ut_validity(self, cell_index, test_name):
         """Get or create validity dict for a unit test."""
-        key = (self.nb.cells[cell_index].id, test_name)
-        if key not in self._unit_test_validity:
-            self._unit_test_validity[key] = {
+        tests = self.nb.cells[cell_index].metadata.get('unit_tests', {})
+        ut = tests[test_name]
+        if 'validity' not in ut:
+            ut['validity'] = {
                 'setup_code_valid': False,
                 'setup_output_valid': False,
                 'target_output_valid': False,
                 'test_code_valid': False,
                 'test_output_valid': False,
             }
-        return self._unit_test_validity[key]
+        return ut['validity']
 
     def _invalidate_unit_test(self, cell_index, test_name, from_point):
         """Cascade invalidation from from_point onward for a unit test."""
@@ -397,7 +398,6 @@ class Plainbook:
         self.last_executed_cell = -1
         self._cell_states.clear()
         self._unit_test_states.clear()
-        self._unit_test_validity.clear()
         if self.debug:
             print("Snapshot kernel reset complete.")
 
@@ -419,7 +419,7 @@ class Plainbook:
                 # Keep dict entry — name will be reused on re-execution
             # Invalidate unit tests for cells at or after the invalidation point
             if cell.metadata.get('unit_tests'):
-                self._invalidate_all_unit_tests(i, 'setup_output')
+                self._invalidate_all_unit_tests(i, 'setup_code')
         self.last_executed_cell = min(self.last_executed_cell, index - 1)
 
     def interrupt_kernel(self):
@@ -485,6 +485,26 @@ class Plainbook:
         self.last_valid_code_cell = self.nb.metadata.get('last_valid_code_cell', -1)
         self.last_valid_output_cell = self.nb.metadata.get('last_valid_output', -1)
         self.last_valid_test_cell = self.nb.metadata.get('last_valid_test_cell', -1)
+
+        # Migrate old unit test format (no 'cells' wrapper) to new format
+        for cell in self.nb.cells:
+            for test_name, ut in cell.metadata.get('unit_tests', {}).items():
+                if 'cells' not in ut:
+                    cells = {}
+                    validity = ut.pop('validity', None)
+                    for key in list(ut.keys()):
+                        cells[key] = ut.pop(key)
+                    ut['cells'] = cells
+                    if validity is None:
+                        ut['validity'] = {
+                            'setup_code_valid': False,
+                            'setup_output_valid': False,
+                            'target_output_valid': False,
+                            'test_code_valid': False,
+                            'test_output_valid': False,
+                        }
+                    else:
+                        ut['validity'] = validity
 
     def _filter_input_files(self):
         """Filters the input files from notebook metadata."""
@@ -767,6 +787,11 @@ class Plainbook:
                 # regenerated so setup and test cells are all stale
                 if cell.metadata.get('unit_tests'):
                     self._invalidate_all_unit_tests(index, 'setup_code')
+                # Invalidate unit tests on all downstream cells: they depend
+                # on upstream state that is now stale
+                for j in range(index + 1, len(self.nb.cells)):
+                    if self.nb.cells[j].metadata.get('unit_tests'):
+                        self._invalidate_all_unit_tests(j, 'setup_code')
             self._write()
 
 
@@ -778,9 +803,6 @@ class Plainbook:
             assert 0 <= cell_index < len(self.nb.cells)
             cell = self.nb.cells[cell_index]
             cell_id = cell.id
-            # Clear validity entries for this cell
-            for k in [k for k in self._unit_test_validity if k[0] == cell_id]:
-                del self._unit_test_validity[k]
             # Clear and delete kernel state entries for this cell
             for sk in [sk for sk in self._unit_test_states if sk.startswith(f"{cell_id}:")]:
                 try:
@@ -799,8 +821,8 @@ class Plainbook:
             tests = cell.metadata.get('unit_tests', {})
             assert test_name in tests
             assert role in ('setup', 'test')
-            tests[test_name][role]['metadata']['explanation'] = explanation
-            tests[test_name][role]['metadata']['explanation_timestamp'] = datetime.datetime.now().isoformat()
+            tests[test_name]['cells'][role]['metadata']['explanation'] = explanation
+            tests[test_name]['cells'][role]['metadata']['explanation_timestamp'] = datetime.datetime.now().isoformat()
             # Invalidate from the appropriate point
             if role == 'setup':
                 self._invalidate_unit_test(cell_index, test_name, 'setup_code')
@@ -816,8 +838,8 @@ class Plainbook:
             tests = cell.metadata.get('unit_tests', {})
             assert test_name in tests
             assert role in ('setup', 'test')
-            tests[test_name][role]['source'] = source
-            tests[test_name][role]['metadata']['code_timestamp'] = datetime.datetime.now().isoformat()
+            tests[test_name]['cells'][role]['source'] = source
+            tests[test_name]['cells'][role]['metadata']['code_timestamp'] = datetime.datetime.now().isoformat()
             # Invalidate from the appropriate point
             if role == 'setup':
                 self._invalidate_unit_test(cell_index, test_name, 'setup_output')
@@ -833,8 +855,8 @@ class Plainbook:
             tests = cell.metadata.get('unit_tests', {})
             assert test_name in tests
             assert role in ('setup', 'test')
-            tests[test_name][role]['source'] = ''
-            tests[test_name][role]['outputs'] = []
+            tests[test_name]['cells'][role]['source'] = ''
+            tests[test_name]['cells'][role]['outputs'] = []
             # Invalidate from the appropriate point
             if role == 'setup':
                 self._invalidate_unit_test(cell_index, test_name, 'setup_code')
@@ -852,10 +874,10 @@ class Plainbook:
             tests = cell.metadata.get('unit_tests', {})
             assert test_name in tests
             unit_test = tests[test_name]
-            unit_test['setup']['outputs'] = []
-            if 'target' in unit_test:
-                unit_test['target']['outputs'] = []
-            unit_test['test']['outputs'] = []
+            unit_test['cells']['setup']['outputs'] = []
+            if 'target' in unit_test['cells']:
+                unit_test['cells']['target']['outputs'] = []
+            unit_test['cells']['test']['outputs'] = []
             self._write()
 
     def execute_unit_test_cell(self, cell_index, test_name, role):
@@ -884,20 +906,20 @@ class Plainbook:
 
             # Determine source code
             if role == 'setup':
-                source = unit_test['setup'].get('source', '')
+                source = unit_test['cells']['setup'].get('source', '')
                 # Handle empty setup: skip execution, just record the input state
                 if not source.strip():
                     setup_key = self._ut_state_key(cell_index, test_name, 'setup')
                     self._unit_test_states[setup_key] = input_state
                     v = self._get_ut_validity(cell_index, test_name)
                     v['setup_output_valid'] = True
-                    unit_test['setup']['outputs'] = []
+                    unit_test['cells']['setup']['outputs'] = []
                     self._write()
                     return []
             elif role == 'target':
                 source = cell.source
             else:
-                source = unit_test['test'].get('source', '')
+                source = unit_test['cells']['test'].get('source', '')
 
             # Allocate/reuse state name guaranteeing uniqueness across all unit test sub-cells and main cells.
             state_key = self._ut_state_key(cell_index, test_name, role)
@@ -929,13 +951,13 @@ class Plainbook:
 
             # Store outputs in appropriate location
             if role == 'setup':
-                unit_test['setup']['outputs'] = outputs
+                unit_test['cells']['setup']['outputs'] = outputs
             elif role == 'target':
-                if 'target' not in unit_test:
-                    unit_test['target'] = {}
-                unit_test['target']['outputs'] = outputs
+                if 'target' not in unit_test['cells']:
+                    unit_test['cells']['target'] = {}
+                unit_test['cells']['target']['outputs'] = outputs
             else:
-                unit_test['test']['outputs'] = outputs
+                unit_test['cells']['test']['outputs'] = outputs
 
             if result.get("error"):
                 err = result["error"]
@@ -946,14 +968,14 @@ class Plainbook:
                     "traceback": err.get("traceback", []),
                 })
                 if role == 'setup':
-                    if not any(o.get("output_type") == "error" for o in unit_test['setup']['outputs']):
-                        unit_test['setup']['outputs'].append(error_output)
+                    if not any(o.get("output_type") == "error" for o in unit_test['cells']['setup']['outputs']):
+                        unit_test['cells']['setup']['outputs'].append(error_output)
                 elif role == 'target':
-                    if not any(o.get("output_type") == "error" for o in unit_test['target']['outputs']):
-                        unit_test['target']['outputs'].append(error_output)
+                    if not any(o.get("output_type") == "error" for o in unit_test['cells']['target']['outputs']):
+                        unit_test['cells']['target']['outputs'].append(error_output)
                 else:
-                    if not any(o.get("output_type") == "error" for o in unit_test['test']['outputs']):
-                        unit_test['test']['outputs'].append(error_output)
+                    if not any(o.get("output_type") == "error" for o in unit_test['cells']['test']['outputs']):
+                        unit_test['cells']['test']['outputs'].append(error_output)
                 self._write()
                 raise CellExecutionError(
                     traceback="\n".join(err.get("traceback", [])),
@@ -964,9 +986,9 @@ class Plainbook:
             # Get variables and store them
             variables = self._get_variables(state_name=new_state_name)
             if role == 'target':
-                unit_test['target']['variables'] = variables
+                unit_test['cells']['target']['variables'] = variables
             elif role == 'setup':
-                unit_test['setup']['metadata']['variables'] = variables
+                unit_test['cells']['setup']['metadata']['variables'] = variables
             else:
                 # For test, add success message
                 outputs.append(nbformat.from_dict({
@@ -975,7 +997,7 @@ class Plainbook:
                     "text": "The test passed.\n",
                 }))
                 if role == 'test':
-                    unit_test['test']['outputs'] = outputs
+                    unit_test['cells']['test']['outputs'] = outputs
 
             # Set validity flag
             v = self._get_ut_validity(cell_index, test_name)
@@ -1214,6 +1236,10 @@ class Plainbook:
                     # Invalidate unit tests: target code changed
                     if cell.metadata.get('unit_tests'):
                         self._invalidate_all_unit_tests(index, 'target_output')
+                    # Invalidate downstream unit tests: upstream code changed
+                    for j in range(index + 1, len(self.nb.cells)):
+                        if self.nb.cells[j].metadata.get('unit_tests'):
+                            self._invalidate_all_unit_tests(j, 'setup_code')
                     self._write()
                     # Sets last valid code cell to this cell.
                     self.last_valid_code_cell = index
@@ -1377,7 +1403,7 @@ class Plainbook:
                     raise RuntimeError(f"Missing prerequisite for unit test code generation: role: {role}, validity: {test_validity}.")
 
             # Common context
-            sub_cell = unit_test[role]
+            sub_cell = unit_test['cells'][role]
             ai_instructions = self.nb.metadata.get('ai_instructions', '')
             instructions = sub_cell['metadata'].get('explanation', '')
             if ai_instructions:
@@ -1410,10 +1436,10 @@ class Plainbook:
                 test_cell_context = None
             else:
                 # Role is 'test'.
-                target_variables = unit_test.get('target', {}).get('variables', {})
+                target_variables = unit_test['cells'].get('target', {}).get('variables', {})
                 variable_context = self._format_variables_for_ai(target_variables)
                 variables_for_target_context = None  # Only used for setup
-                setup_cell_context = self._format_ut_subcell_for_ai(unit_test['setup'], 'setup')
+                setup_cell_context = self._format_ut_subcell_for_ai(unit_test['cells']['setup'], 'setup')
                 target_cell_context = self._format_ut_subcell_for_ai(target_cell, 'target')
                 test_cell_context = None  # We're generating test; previous_code already covers it
 
@@ -1514,10 +1540,10 @@ class Plainbook:
                     cell.outputs = []
                     # Also clear unit test sub-cell outputs
                     for unit_test in cell.metadata.get('unit_tests', {}).values():
-                        unit_test['setup']['outputs'] = []
-                        if 'target' in unit_test:
-                            unit_test['target']['outputs'] = []
-                        unit_test['test']['outputs'] = []
+                        unit_test['cells']['setup']['outputs'] = []
+                        if 'target' in unit_test['cells']:
+                            unit_test['cells']['target']['outputs'] = []
+                        unit_test['cells']['test']['outputs'] = []
             self.last_valid_output_cell = -1
             self._write()
 

@@ -56,7 +56,7 @@ export default {
         const testOutputValid = computed(() => activeTestValidity.value?.test?.output_valid ?? false);
 
         const targetTestOutputs = computed(() => {
-            return activeTest.value?.target?.outputs || targetCell.value?.outputs || [];
+            return activeTest.value?.cells?.target?.outputs || targetCell.value?.outputs || [];
         });
 
         // Keep activeTestName valid (fallback for renames, external changes, etc.)
@@ -84,9 +84,9 @@ export default {
 
         const clearOutputs = () => {
             if (!activeTest.value || !activeTestName.value) return;
-            activeTest.value.setup.outputs = [];
-            if (activeTest.value.target) activeTest.value.target.outputs = [];
-            activeTest.value.test.outputs = [];
+            activeTest.value.cells.setup.outputs = [];
+            if (activeTest.value.cells.target) activeTest.value.cells.target.outputs = [];
+            activeTest.value.cells.test.outputs = [];
             emit('clear-unit-test-outputs', props.targetCellIndex, activeTestName.value);
         };
 
@@ -154,7 +154,7 @@ export default {
 
                 <!-- Setup sub-cell -->
                 <unit-test-sub-cell
-                    :cell="activeTest.setup"
+                    :cell="activeTest.cells.setup"
                     role="setup"
                     :is-active="activeSubCell === 'setup'"
                     @activate="activeSubCell = 'setup'"
@@ -233,7 +233,7 @@ export default {
 
                 <!-- Test sub-cell -->
                 <unit-test-sub-cell
-                    :cell="activeTest.test"
+                    :cell="activeTest.cells.test"
                     role="test"
                     :is-active="activeSubCell === 'test'"
                     @activate="activeSubCell = 'test'"
