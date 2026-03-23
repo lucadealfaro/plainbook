@@ -907,15 +907,8 @@ class Plainbook:
             # Determine source code
             if role == 'setup':
                 source = unit_test['cells']['setup'].get('source', '')
-                # Handle empty setup: skip execution, just record the input state
-                if not source.strip():
-                    setup_key = self._ut_state_key(cell_index, test_name, 'setup')
-                    self._unit_test_states[setup_key] = input_state
-                    v = self._get_ut_validity(cell_index, test_name)
-                    v['setup_output_valid'] = True
-                    unit_test['cells']['setup']['outputs'] = []
-                    self._write()
-                    return []
+                # Empty setup code is fine — the kernel will execute a no-op
+                # and create a distinct new state (fork of the input state).
             elif role == 'target':
                 source = cell.source
             else:
@@ -1065,10 +1058,9 @@ class Plainbook:
         return filtered
 
 
-    def _get_cell_json_for_ai(self, index):
+    def _get_cell_json_for_ai(self, cell):
         """Returns the content of a cell for AI processing, in JSON format.
         Needs to be called with the lock held."""
-        cell = self.nb.cells[index]
         new_cell = copy.deepcopy(cell)
         if cell.cell_type == 'code':
             explanation = cell.metadata.get('explanation', "")
@@ -1146,19 +1138,68 @@ class Plainbook:
 
     def debug_request(self, nb):
         with self._lock:
-            self.nb = nbformat.reads(nb, as_version=4)
+            self._debug_print_states()
+
+
+    def _debug_print_states(self):
+        """Print all cells and their associated kernel states."""
+        # Get set of states that actually exist in the kernel
+        try:
+            kernel_states = set(self._sk_request("GET", "/states").get("states", []))
+        except Exception:
+            kernel_states = set()
+        def state_info(state_name):
+            if state_name is None:
+                return "None"
+            exists = state_name in kernel_states
+            return f"{state_name} ({'exists' if exists else 'MISSING'})"
+        print("=" * 60)
+        print("DEBUG: Notebook cell states")
+        print(f"  last_executed_cell: {self.last_executed_cell}")
+        print(f"  last_valid_code_cell: {self.last_valid_code_cell}")
+        print(f"  last_valid_output_cell: {self.last_valid_output_cell}")
+        print(f"  last_valid_test_cell: {self.last_valid_test_cell}")
+        print("-" * 60)
+        for i, cell in enumerate(self.nb.cells):
+            name = cell.metadata.get('name', '') or f'(unnamed {cell.cell_type})'
+            cell_state = self._cell_states.get(cell.id)
+            print(f"  Cell {i}: {name} [{cell.cell_type}]")
+            print(f"    Kernel state after: {state_info(cell_state)}")
+            unit_tests = cell.metadata.get('unit_tests', {})
+            if unit_tests:
+                # State before unit tests = state of the previous code cell
+                prev_code_cell = self._get_previous_code_cell(i)
+                if prev_code_cell is not None:
+                    prev_state = self._cell_states.get(prev_code_cell.id)
+                else:
+                    prev_state = None
+                for test_name, ut in unit_tests.items():
+                    setup_key = f"{cell.id}:{test_name}:setup"
+                    target_key = f"{cell.id}:{test_name}:target"
+                    test_key = f"{cell.id}:{test_name}:test"
+                    setup_state = self._unit_test_states.get(setup_key)
+                    target_state = self._unit_test_states.get(target_key)
+                    test_state = self._unit_test_states.get(test_key)
+                    validity = ut.get('validity', {})
+                    print(f"    Unit test: {test_name}")
+                    print(f"      State before test:  {state_info(prev_state)}")
+                    print(f"      After setup:        {state_info(setup_state)}")
+                    print(f"      After target:       {state_info(target_state)}")
+                    print(f"      After test:         {state_info(test_state)}")
+                    print(f"      Validity: {validity}")
+        print("=" * 60)
 
 
     def _get_preceding_code_json_for_ai(self, index, include_all_variables=True):
         """Returns the JSON representation of all previous code cells for context.
         If include_all_variables is False, strip variables metadata and outputs
         from all cells, to reduce prompt size."""
-        cells = [self._get_cell_json_for_ai(i) for i in range(index)
+        cells = [self._get_cell_json_for_ai(self.nb.cells[i]) for i in range(index)
                  if self.nb.cells[i].cell_type != 'test']
         if not include_all_variables:
             # Strips variables and outputs from previous cels. 
             # Find the last code cell and strip variables/outputs from all others.
-            for i, cell in enumerate(cells):
+            for _, cell in enumerate(cells):
                 if 'variables' in cell.metadata:
                     cell.metadata.pop('variables', None)
                 cell.outputs = []
@@ -1179,6 +1220,13 @@ class Plainbook:
             return PREVIOUS_CODE_EXPLANATION_CHANGED.format(code_string=code_string)
 
 
+    def _get_instructions(self, explanation):
+        """Returns the explanation with any notebook-wide AI instructions appended."""
+        ai_instructions = self.nb.metadata.get('ai_instructions', '')
+        if ai_instructions:
+            return explanation + "\n\nADDITIONAL INSTRUCTIONS:\n" + ai_instructions
+        return explanation
+
     def _is_previous_code_and_output_valid(self, index):
         last_code_cell_idx = self._get_previous_code_cell_index(index)
         if last_code_cell_idx < 0:
@@ -1188,30 +1236,29 @@ class Plainbook:
             
 
     def generate_code_cell(self, api_key, index, ai_provider="gemini", model=None, validation_feedback=None):
-        """Generates code for the cell at index using the specified AI provider."""
+        """Generates code for a code or test cell at index using the specified AI provider."""
         with self._lock:
             assert 0 <= index < len(self.nb.cells)
             cell = self.nb.cells[index]
-            assert cell.cell_type == 'code'
+            assert cell.cell_type in ('code', 'test')
             if not self._is_previous_code_and_output_valid(index):
                 raise RuntimeError("Cannot generate code: previous output must be valid.")
             # Gets code context.
-            instructions = cell.metadata.get('explanation')
-            ai_instructions = self.nb.metadata.get('ai_instructions', '')
-            if ai_instructions:
-                instructions = instructions + "\n\nADDITIONAL INSTRUCTIONS:\n" + ai_instructions
+            is_test = (cell.cell_type == 'test')
+            instructions = self._get_instructions(cell.metadata.get('explanation'))
             files_context = self._get_files_context()
             previous_code_cell = self._get_previous_code_cell(index)
             error_context = self._get_error_context(index)
             variable_context = self._get_variables_for_ai(previous_code_cell) if previous_code_cell else ""
-            preceding_code = self._get_preceding_code_json_for_ai(index, include_all_variables=False)
+            preceding_code = self._get_preceding_code_json_for_ai(index, include_all_variables=is_test)
             previous_code = self._get_cell_w_change_noted(cell)
             # Mark that an AI request is pending
             if self.ai_request_pending:
                 raise RuntimeError("An AI request is already pending.")
             try:
                 self.ai_request_pending = True
-                generate_fn = AI_PROVIDERS[ai_provider]["generate"]
+                ai_fn_key = "generate_test" if is_test else "generate"
+                generate_fn = AI_PROVIDERS[ai_provider][ai_fn_key]
                 new_code = generate_fn(
                     api_key,
                     preceding_code=preceding_code,
@@ -1227,77 +1274,26 @@ class Plainbook:
                 if self.ai_request_pending:
                     cell.source = new_code
                     cell.metadata['code_timestamp'] = datetime.datetime.now().isoformat()
-                    # Reset outputs and execution count
                     cell.outputs = []
-                    if index <= self.last_executed_cell:
-                        self._invalidate_execution(index)
-                    # No output is valid after this.
-                    self.last_valid_output_cell = min(self.last_valid_output_cell, index - 1)
-                    # Invalidate unit tests: target code changed
-                    if cell.metadata.get('unit_tests'):
-                        self._invalidate_all_unit_tests(index, 'target_output')
-                    # Invalidate downstream unit tests: upstream code changed
-                    for j in range(index + 1, len(self.nb.cells)):
-                        if self.nb.cells[j].metadata.get('unit_tests'):
-                            self._invalidate_all_unit_tests(j, 'setup_code')
+                    if is_test:
+                        self.last_valid_test_cell = index
+                    else:
+                        if index <= self.last_executed_cell:
+                            self._invalidate_execution(index)
+                        # No output is valid after this.
+                        self.last_valid_output_cell = min(self.last_valid_output_cell, index - 1)
+                        # Invalidate unit tests: target code changed
+                        if cell.metadata.get('unit_tests'):
+                            self._invalidate_all_unit_tests(index, 'target_output')
+                        # Invalidate downstream unit tests: upstream code changed
+                        for j in range(index + 1, len(self.nb.cells)):
+                            if self.nb.cells[j].metadata.get('unit_tests'):
+                                self._invalidate_all_unit_tests(j, 'setup_code')
+                        self.last_valid_code_cell = index
                     self._write()
-                    # Sets last valid code cell to this cell.
-                    self.last_valid_code_cell = index
                     return new_code, True
                 else:
                     # The request was cancelled, return the current code.
-                    return None, False
-            finally:
-                self.ai_request_pending = False
-
-
-    def generate_test_code(self, api_key, index, ai_provider="gemini", model=None, validation_feedback=None):
-        """Generates test code for a test cell using the specified AI provider."""
-        with self._lock:
-            assert 0 <= index < len(self.nb.cells)
-            cell = self.nb.cells[index]
-            assert cell.cell_type == 'test'
-            # We need the previous code cells to have valid output so the AI
-            # has variable context available.
-            if not self._is_previous_code_and_output_valid(index):
-                raise RuntimeError("Cannot generate test code: previous output must be valid.")
-            # Build context for the AI.
-            instructions = cell.metadata.get('explanation')
-            ai_instructions = self.nb.metadata.get('ai_instructions', '')
-            if ai_instructions:
-                instructions = instructions + "\n\nADDITIONAL INSTRUCTIONS:\n" + ai_instructions
-            files_context = self._get_files_context()
-            error_context = self._get_error_context(index)
-            previous_code_cell = self._get_previous_code_cell(index)
-            variable_context = self._get_variables_for_ai(previous_code_cell) if previous_code_cell else ""
-            preceding_code = self._get_preceding_code_json_for_ai(index)
-            previous_code = self._get_cell_w_change_noted(cell)
-            # Mark that an AI request is pending.
-            if self.ai_request_pending:
-                raise RuntimeError("An AI request is already pending.")
-            try:
-                self.ai_request_pending = True
-                generate_fn = AI_PROVIDERS[ai_provider]["generate_test"]
-                new_code = generate_fn(
-                    api_key,
-                    preceding_code=preceding_code,
-                    previous_code=previous_code,
-                    instructions=instructions,
-                    file_context=files_context,
-                    error_context=error_context,
-                    variable_context=variable_context,
-                    validation_context=validation_feedback,
-                    model=model,
-                    debug=self.debug,
-                    dump_ai_requests=self.dump_ai_requests)
-                if self.ai_request_pending:
-                    cell.source = new_code
-                    cell.metadata['code_timestamp'] = datetime.datetime.now().isoformat()
-                    cell.outputs = []
-                    self.last_valid_test_cell = index
-                    self._write()
-                    return new_code, True
-                else:
                     return None, False
             finally:
                 self.ai_request_pending = False
@@ -1404,10 +1400,7 @@ class Plainbook:
 
             # Common context
             sub_cell = unit_test['cells'][role]
-            ai_instructions = self.nb.metadata.get('ai_instructions', '')
-            instructions = sub_cell['metadata'].get('explanation', '')
-            if ai_instructions:
-                instructions = instructions + "\n\nADDITIONAL INSTRUCTIONS:\n" + ai_instructions
+            instructions = self._get_instructions(sub_cell['metadata'].get('explanation', ''))
             files_context = self._get_files_context()
             error_context = self._ut_extract_error_context(sub_cell.get('outputs', []))
             preceding_code = self._get_preceding_code_json_for_ai(cell_index, include_all_variables=False)
@@ -1496,10 +1489,7 @@ class Plainbook:
             cell = self.nb.cells[index]
             assert cell.cell_type in ('code', 'test')
             code_to_validate = cell.source
-            instructions = cell.metadata.get('explanation')
-            ai_instructions = self.nb.metadata.get('ai_instructions', '')
-            if ai_instructions:
-                instructions = instructions + "\n\nADDITIONAL INSTRUCTIONS:\n" + ai_instructions
+            instructions = self._get_instructions(cell.metadata.get('explanation'))
             previous_code = self._get_preceding_code_json_for_ai(index, include_all_variables=(cell.cell_type == 'test'))
             previous_code_cell = self._get_previous_code_cell(index)
             variable_context = self._get_variables_for_ai(previous_code_cell) if previous_code_cell else ""
@@ -1539,10 +1529,7 @@ class Plainbook:
             unit_test = tests[test_name]
             sub_cell = unit_test['cells'][role]
             code_to_validate = sub_cell.get('source', '')
-            instructions = sub_cell.get('metadata', {}).get('explanation', '')
-            ai_instructions = self.nb.metadata.get('ai_instructions', '')
-            if ai_instructions:
-                instructions = instructions + "\n\nADDITIONAL INSTRUCTIONS:\n" + ai_instructions
+            instructions = self._get_instructions(sub_cell.get('metadata', {}).get('explanation', ''))
             # Build context similar to generate_unit_test_cell
             preceding_code = self._get_preceding_code_json_for_ai(
                 cell_index, include_all_variables=False)

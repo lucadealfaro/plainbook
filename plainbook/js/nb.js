@@ -621,6 +621,9 @@ createApp({
                 await runCells(cellIndex);
                 running.value = false;
                 runningActivity.value = { type: null, cellIndex: null };
+                const total = notebook.value?.cells?.length ?? 0;
+                const next = Math.min(cellIndex + 1, total - 1);
+                if (next !== cellIndex) setActiveCell(next, true);
             }
         };
 
@@ -822,6 +825,9 @@ createApp({
                 await runOneTest(cellIndex);
                 running.value = false;
                 runningActivity.value = { type: null, cellIndex: null };
+                const total = notebook.value?.cells?.length ?? 0;
+                const next = Math.min(cellIndex + 1, total - 1);
+                if (next !== cellIndex) setActiveCell(next, true);
             }
         };
 
@@ -941,32 +947,40 @@ createApp({
             await fetchUnitTestState(cellIndex);
         };
 
-        const saveUnitTestExplanation = async (cellIndex, testName, role, content) => {
-            try {
-                await apiCall('/save_unit_test_explanation', 'POST', {
-                    cell_index: cellIndex,
-                    test_name: testName,
-                    role: role,
-                    explanation: content
-                });
-                await fetchUnitTestState(cellIndex);
-            } catch (err) {
-                throw new Error('Failed to save unit test explanation', { cause: err });
-            }
+        const saveUnitTestExplanation = (cellIndex, testName, role, content) => {
+            const savePromise = (async () => {
+                try {
+                    await apiCall('/save_unit_test_explanation', 'POST', {
+                        cell_index: cellIndex,
+                        test_name: testName,
+                        role: role,
+                        explanation: content
+                    });
+                    await fetchUnitTestState(cellIndex);
+                } catch (err) {
+                    throw new Error('Failed to save unit test explanation', { cause: err });
+                }
+            })();
+            trackSave(savePromise);
+            return savePromise;
         };
 
-        const saveUnitTestCode = async (cellIndex, testName, role, content) => {
-            try {
-                await apiCall('/save_unit_test_code', 'POST', {
-                    cell_index: cellIndex,
-                    test_name: testName,
-                    role: role,
-                    source: content
-                });
-                await fetchUnitTestState(cellIndex);
-            } catch (err) {
-                throw new Error('Failed to save unit test code', { cause: err });
-            }
+        const saveUnitTestCode = (cellIndex, testName, role, content) => {
+            const savePromise = (async () => {
+                try {
+                    await apiCall('/save_unit_test_code', 'POST', {
+                        cell_index: cellIndex,
+                        test_name: testName,
+                        role: role,
+                        source: content
+                    });
+                    await fetchUnitTestState(cellIndex);
+                } catch (err) {
+                    throw new Error('Failed to save unit test code', { cause: err });
+                }
+            })();
+            trackSave(savePromise);
+            return savePromise;
         };
 
         const clearUnitTestCode = async (cellIndex, testName, role) => {

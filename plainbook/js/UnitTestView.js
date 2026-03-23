@@ -165,7 +165,7 @@ export default {
                     :output-valid="setupOutputValid"
                     @save-explanation="(content) => $emit('save-unit-test-explanation', targetCellIndex, activeTestName, 'setup', content)"
                     @save-code="(content) => $emit('save-unit-test-code', targetCellIndex, activeTestName, 'setup', content)"
-                    @save-and-run="(content) => { $emit('save-unit-test-explanation', targetCellIndex, activeTestName, 'setup', content); $emit('run-unit-test', targetCellIndex, activeTestName); }"
+                    @save-and-run="(content) => { $emit('save-unit-test-explanation', targetCellIndex, activeTestName, 'setup', content); $emit('run-unit-test', targetCellIndex, activeTestName); activeSubCell = 'target'; }"
                     @gencode="$emit('generate-unit-test-code', targetCellIndex, activeTestName, 'setup')"
                     @clearcode="$emit('clear-unit-test-code', targetCellIndex, activeTestName, 'setup')"
                     @validate="$emit('validate-unit-test-code', targetCellIndex, activeTestName, 'setup')"

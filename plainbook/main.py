@@ -523,7 +523,7 @@ def generate_test_code():
     if error:
         return dict(status='error', message=error)
     try:
-        new_code, success = notebook.generate_test_code(
+        new_code, success = notebook.generate_code_cell(
             api_key, cell_index, ai_provider=ai_provider,
             model=model, validation_feedback=validation_feedback)
     except Exception as e:
