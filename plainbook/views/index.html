@@ -95,11 +95,14 @@
         @clear-unit-test-outputs="clearUnitTestOutputs"
         @run-unit-test="ui_runUnitTest"
         @generate-unit-test-code="generateUnitTestCode"
+        @validate-unit-test-code="ui_validateUnitTestCode"
+        @dismiss-unit-test-validation="dismissUnitTestValidation"
         @save-explanation="(content) => sendExplanationToServer(content, unitTestTargetIndex)"
         @save-code="(content) => sendCodeToServer(content, unitTestTargetIndex)"
         @gencode="ui_forceRegenerateCellCode(unitTestTargetIndex)"
         @clearcode="clearCellCode(unitTestTargetIndex)"
         @validate="ui_validateCode(unitTestTargetIndex)"
+        @dismiss-validation="dismissValidation(unitTestTargetIndex)"
         @interrupt="ui_interruptKernel"
     />
 

@@ -739,3 +739,39 @@ class TestUnitTestCodeRegenAndClear:
         assert f"{cell_id}:test1:setup" in notebook._unit_test_states
         assert f"{cell_id}:test1:target" in notebook._unit_test_states
         assert f"{cell_id}:test1:test" not in notebook._unit_test_states
+
+
+class TestUnitTestValidationVisibility:
+    """Tests for set_unit_test_validation_visibility."""
+
+    def test_set_visibility_setup(self, notebook):
+        """Setting validation visibility on setup sub-cell stores correctly."""
+        idx = _add_code_cell(notebook, 'x = 1')
+        _attach_unit_test(notebook, idx)
+        cell = notebook.nb.cells[idx]
+        cell.metadata['unit_tests']['test1']['cells']['setup']['metadata']['validation'] = {
+            'is_valid': True, 'message': 'ok', 'is_hidden': False
+        }
+        notebook.set_unit_test_validation_visibility(idx, 'test1', 'setup', True)
+        v = cell.metadata['unit_tests']['test1']['cells']['setup']['metadata']['validation']
+        assert v['is_hidden'] is True
+
+    def test_set_visibility_test(self, notebook):
+        """Setting validation visibility on test sub-cell stores correctly."""
+        idx = _add_code_cell(notebook, 'x = 1')
+        _attach_unit_test(notebook, idx)
+        cell = notebook.nb.cells[idx]
+        cell.metadata['unit_tests']['test1']['cells']['test']['metadata']['validation'] = {
+            'is_valid': False, 'message': 'bad', 'is_hidden': False
+        }
+        notebook.set_unit_test_validation_visibility(idx, 'test1', 'test', True)
+        v = cell.metadata['unit_tests']['test1']['cells']['test']['metadata']['validation']
+        assert v['is_hidden'] is True
+
+    def test_set_visibility_creates_validation_dict_if_missing(self, notebook):
+        """If no validation dict exists, it is created with just is_hidden."""
+        idx = _add_code_cell(notebook, 'x = 1')
+        _attach_unit_test(notebook, idx)
+        notebook.set_unit_test_validation_visibility(idx, 'test1', 'setup', True)
+        v = notebook.nb.cells[idx].metadata['unit_tests']['test1']['cells']['setup']['metadata']['validation']
+        assert v['is_hidden'] is True

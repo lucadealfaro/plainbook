@@ -363,6 +363,55 @@ createApp({
             }
         };
 
+        const validateUnitTestCode = async (cellIndex, testName, role) => {
+            if (!activeAiProvider.value) {
+                throw new Error('No AI provider is active. Please set an API key in Settings.');
+            }
+            const cell = notebook.value.cells[cellIndex];
+            runningActivity.value = { type: `unit-test-validate-${role}`, cellIndex, testName };
+            try {
+                const r = await apiCall('/validate_unit_test_code', 'POST', {
+                    cell_index: cellIndex, test_name: testName, role: role
+                });
+                if (r.status === 'cancelled') {
+                    console.log('Unit test validation cancelled:', cellIndex, testName, role);
+                } else if (r.status === 'error') {
+                    throw new Error(r.message || 'Validation failed');
+                } else {
+                    const test = cell.metadata.unit_tests[testName];
+                    test.cells[role].metadata.validation = r.validation;
+                    console.log('Unit test validation received:', cellIndex, testName, role, r.validation);
+                }
+            } catch (err) {
+                throw new Error(err.message || 'Failed to validate unit test code', { cause: err });
+            }
+        };
+
+        const ui_validateUnitTestCode = async (cellIndex, testName, role) => {
+            if (!running.value) {
+                running.value = true;
+                try {
+                    await validateUnitTestCode(cellIndex, testName, role);
+                } finally {
+                    running.value = false;
+                    runningActivity.value = { type: null, cellIndex: null };
+                }
+            }
+        };
+
+        const dismissUnitTestValidation = async (cellIndex, testName, role) => {
+            try {
+                await apiCall('/set_unit_test_validation_visibility', 'POST', {
+                    cell_index: cellIndex, test_name: testName, role: role, is_hidden: true
+                });
+                const test = notebook.value.cells[cellIndex].metadata.unit_tests[testName];
+                test.cells[role].metadata.validation.is_hidden = true;
+                console.log('Unit test validation dismissed:', cellIndex, testName, role);
+            } catch (err) {
+                throw new Error('Failed to dismiss unit test validation', { cause: err });
+            }
+        };
+
         const setActiveCell = (idx, shouldScroll = false) => {
             activeIndex.value = idx;
             if (shouldScroll) {
@@ -1183,7 +1232,8 @@ createApp({
             unitTestTargetIndex, enterUnitTestMode, exitUnitTestMode,
             addUnitTest, deleteUnitTest, renameUnitTest,
             saveUnitTestExplanation, saveUnitTestCode, clearUnitTestCode, clearUnitTestOutputs,
-            ui_runUnitTest, generateUnitTestCode, unitTestValidity };
+            ui_runUnitTest, generateUnitTestCode, unitTestValidity,
+            ui_validateUnitTestCode, dismissUnitTestValidation };
     },
 
 template: `#app-template`,

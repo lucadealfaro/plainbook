@@ -14,8 +14,9 @@ export default {
     emits: ['exit',
             'save-unit-tests', 'save-unit-test-explanation', 'save-unit-test-code',
             'clear-unit-test-code', 'clear-unit-test-outputs', 'run-unit-test', 'generate-unit-test-code',
+            'validate-unit-test-code', 'dismiss-unit-test-validation',
             'add-unit-test', 'delete-unit-test', 'rename-unit-test',
-            'save-explanation', 'save-code', 'gencode', 'clearcode', 'validate',
+            'save-explanation', 'save-code', 'gencode', 'clearcode', 'validate', 'dismiss-validation',
             'interrupt'],
     setup(props, { emit }) {
         const activeTestName = ref(null);
@@ -167,7 +168,8 @@ export default {
                     @save-and-run="(content) => { $emit('save-unit-test-explanation', targetCellIndex, activeTestName, 'setup', content); $emit('run-unit-test', targetCellIndex, activeTestName); }"
                     @gencode="$emit('generate-unit-test-code', targetCellIndex, activeTestName, 'setup')"
                     @clearcode="$emit('clear-unit-test-code', targetCellIndex, activeTestName, 'setup')"
-                    @validate=""
+                    @validate="$emit('validate-unit-test-code', targetCellIndex, activeTestName, 'setup')"
+                    @dismiss-validation="$emit('dismiss-unit-test-validation', targetCellIndex, activeTestName, 'setup')"
                     @run="$emit('run-unit-test', targetCellIndex, activeTestName)"
                     @interrupt="$emit('interrupt')"
                 />
@@ -211,7 +213,7 @@ export default {
                     <validation-cell
                         v-if="targetCell.metadata?.validation && !targetCell.metadata?.validation.is_hidden"
                         :validation="targetCell.metadata.validation"
-                        @dismiss_validation="" />
+                        @dismiss_validation="$emit('dismiss-validation')" />
 
                     <code-cell
                         v-model:source="targetCell.source"
@@ -246,7 +248,8 @@ export default {
                     @save-and-run="(content) => { $emit('save-unit-test-explanation', targetCellIndex, activeTestName, 'test', content); $emit('run-unit-test', targetCellIndex, activeTestName); }"
                     @gencode="$emit('generate-unit-test-code', targetCellIndex, activeTestName, 'test')"
                     @clearcode="$emit('clear-unit-test-code', targetCellIndex, activeTestName, 'test')"
-                    @validate=""
+                    @validate="$emit('validate-unit-test-code', targetCellIndex, activeTestName, 'test')"
+                    @dismiss-validation="$emit('dismiss-unit-test-validation', targetCellIndex, activeTestName, 'test')"
                     @run="$emit('run-unit-test', targetCellIndex, activeTestName)"
                     @interrupt="$emit('interrupt')"
                 />

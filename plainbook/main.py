@@ -573,6 +573,31 @@ def validate_code_cell():
     return dict(status='success', validation=validation_result)
 
 
+@post('/validate_unit_test_code')
+@stateful
+@require_token
+def validate_unit_test_code():
+    data = request.json
+    cell_index = data.get('cell_index')
+    test_name = data.get('test_name')
+    role = data.get('role')
+    api_key, ai_provider, model, error = _get_ai_config()
+    if error:
+        return dict(status='error', message=error)
+    try:
+        validation_result = notebook.validate_unit_test_cell(
+            api_key, cell_index, test_name, role,
+            ai_provider=ai_provider, model=model)
+    except Exception as e:
+        friendly = _check_billing_error(e)
+        if friendly:
+            return dict(status='error', message=friendly)
+        raise
+    if validation_result is None:
+        return dict(status='cancelled')
+    return dict(status='success', validation=validation_result)
+
+
 @post('/set_validation_visibility')
 @stateful
 @require_token
@@ -582,8 +607,21 @@ def set_validation_visibility():
     is_hidden = data.get('is_hidden', False)
     notebook.set_validation_visibility(cell_index, is_hidden)
     return dict(status='success')
-    
-    
+
+
+@post('/set_unit_test_validation_visibility')
+@stateful
+@require_token
+def set_unit_test_validation_visibility():
+    data = request.json
+    cell_index = data.get('cell_index')
+    test_name = data.get('test_name')
+    role = data.get('role')
+    is_hidden = data.get('is_hidden', True)
+    notebook.set_unit_test_validation_visibility(cell_index, test_name, role, is_hidden)
+    return dict(status='success')
+
+
 @post('/cancel_ai_request')
 @stateful
 @require_token

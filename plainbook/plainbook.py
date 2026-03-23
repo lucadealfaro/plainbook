@@ -1520,6 +1520,67 @@ class Plainbook:
                 self.ai_request_pending = False
 
 
+    def validate_unit_test_cell(self, api_key, cell_index, test_name, role,
+                                ai_provider="gemini", model=None):
+        """Validates the code of a unit test sub-cell (setup or test).
+        For target role, delegates to validate_code_cell."""
+        if role == 'target':
+            return self.validate_code_cell(api_key, cell_index,
+                                           ai_provider=ai_provider, model=model)
+        assert role in ('setup', 'test'), f"Invalid role: {role}"
+        with self._lock:
+            if self.ai_request_pending:
+                raise RuntimeError("An AI request is already pending.")
+            self.ai_request_pending = True
+            assert 0 <= cell_index < len(self.nb.cells)
+            target_cell = self.nb.cells[cell_index]
+            tests = target_cell.metadata.get('unit_tests', {})
+            assert test_name in tests
+            unit_test = tests[test_name]
+            sub_cell = unit_test['cells'][role]
+            code_to_validate = sub_cell.get('source', '')
+            instructions = sub_cell.get('metadata', {}).get('explanation', '')
+            ai_instructions = self.nb.metadata.get('ai_instructions', '')
+            if ai_instructions:
+                instructions = instructions + "\n\nADDITIONAL INSTRUCTIONS:\n" + ai_instructions
+            # Build context similar to generate_unit_test_cell
+            preceding_code = self._get_preceding_code_json_for_ai(
+                cell_index, include_all_variables=False)
+            if role == 'setup':
+                previous_code_cell = self._get_previous_code_cell(cell_index)
+                variable_context = self._get_variables_for_ai(previous_code_cell) if previous_code_cell else ""
+            else:
+                target_variables = unit_test['cells'].get('target', {}).get('variables', {})
+                variable_context = self._format_variables_for_ai(target_variables)
+            try:
+                validate_fn = AI_PROVIDERS[ai_provider]["validate"]
+                validation_result = validate_fn(
+                    api_key, preceding_code, code_to_validate,
+                    instructions, variable_context=variable_context,
+                    model=model, debug=self.debug,
+                    dump_ai_requests=self.dump_ai_requests)
+                if self.ai_request_pending:
+                    validation_result['is_hidden'] = False
+                    sub_cell.setdefault('metadata', {})['validation'] = validation_result
+                    self._write()
+                    return validation_result
+                else:
+                    return None
+            finally:
+                self.ai_request_pending = False
+
+    def set_unit_test_validation_visibility(self, cell_index, test_name, role, is_hidden):
+        """Sets the visibility of the validation message for a unit test sub-cell."""
+        with self._lock:
+            assert 0 <= cell_index < len(self.nb.cells)
+            cell = self.nb.cells[cell_index]
+            tests = cell.metadata.get('unit_tests', {})
+            assert test_name in tests
+            assert role in ('setup', 'test')
+            sub_cell = tests[test_name]['cells'][role]
+            sub_cell.setdefault('metadata', {}).setdefault('validation', {})['is_hidden'] = is_hidden
+            self._write()
+
     def set_validation_visibility(self, cell_index, is_hidden):
         """Sets the visibility of the validation message for a given cell."""
         with self._lock:

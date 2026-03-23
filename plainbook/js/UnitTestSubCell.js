@@ -10,7 +10,7 @@ const TEST_HINT = "Write here what should be checked or displayed after the abov
 export default {
     components: { ExplanationEditor, CodeCell, ValidationCell, OutputRenderer },
     props: ['cell', 'role', 'isActive', 'isLocked', 'running', 'codeValid', 'outputValid'],
-    emits: ['save-explanation', 'save-code', 'save-and-run', 'gencode', 'clearcode', 'validate', 'run', 'interrupt', 'activate'],
+    emits: ['save-explanation', 'save-code', 'save-and-run', 'gencode', 'clearcode', 'validate', 'dismiss-validation', 'run', 'interrupt', 'activate'],
     setup(props) {
         const mode = computed(() => props.role === 'setup' ? 'unit_setup' : 'unit_test');
         const hint = computed(() => props.role === 'setup' ? SETUP_HINT : TEST_HINT);
@@ -83,7 +83,7 @@ export default {
             <validation-cell
                 v-if="cell.metadata?.validation && !cell.metadata?.validation.is_hidden"
                 :validation="cell.metadata.validation"
-                @dismiss_validation="" />
+                @dismiss_validation="$emit('dismiss-validation')" />
 
             <code-cell
                 v-model:source="cell.source"
