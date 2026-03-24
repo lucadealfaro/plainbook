@@ -948,6 +948,11 @@ createApp({
         };
 
         const saveUnitTestExplanation = (cellIndex, testName, role, content) => {
+            // Update local data immediately so executeUnitTest sees current explanation
+            const cell = notebook.value.cells[cellIndex];
+            const test = cell.metadata.unit_tests[testName];
+            test.cells[role].metadata.explanation = content;
+
             const savePromise = (async () => {
                 try {
                     await apiCall('/save_unit_test_explanation', 'POST', {
