@@ -76,6 +76,27 @@ You should return the words YES (if the code meets the instructions) or NO (if i
 followed by a brief explanation.
 """
 
+VALIDATION_FEEDBACK_PREAMBLE = """The previous code for this cell does not seem to be correct. 
+Here are comments on it given by an AI model:"""
+
+VARIABLES_FOR_TARGET_DESCRIPTION = """In generating the test setup, the goal is to set the value of these variables, 
+possibly simplifying them if they are long or complex, so that a human can make sense of their values 
+and can check the results of the execution of the test cell.  The variables are these:\n"""
+
+UNIT_TEST_SETUP_ROLE = """You are asked to generate code for the setup cell, 
+which is in charge of setting up the precise conditions in which the target cell is executed.
+If you generate values for any variables or datasets, please keep them as simple as possible while still being valid,
+so a human can easily understand them and check the results.  
+If you generate any data, display it, so users know the inputs of the computation.
+"""
+
+UNIT_TEST_TEST_ROLE = """You are asked to generate code for the test cell, 
+which needs to check whether the unit test succeeded.  Below is the assertion that you need to verify.
+Generate code to test the validity of the assertion.  
+Please check no more, and no less, than the validity of the assertion. 
+In particular, do not generate code that checks other aspects of the result just because you expect they should hold.
+"""
+
 def build_name_prompt(explanation):
     """Builds the prompt for cell name generation."""
     return f"""This is the cell explanation:
@@ -238,7 +259,7 @@ VARIABLE CONTEXT (Variables currently in memory):
     if validation_context:
         prompt += f"""
 VALIDATION FEEDBACK:
-The previous code for this cell does not seem to be correct. Here are comments on it given by an AI model:
+{VALIDATION_FEEDBACK_PREAMBLE}
 {validation_context}
 
 """
@@ -287,18 +308,16 @@ EXISTING TEST CELL:
     if variables_for_target_context:
         prompt += f"""
 VARIABLES USED BY TARGET CELL:
-In generating the test setup, the goal is to set the value of these variables, possibly simplifying them if they are long or complex, so that a human can make sense of their values and can check the results of the execution of the test cell.  The variables are these:
+{VARIABLES_FOR_TARGET_DESCRIPTION}
 {variables_for_target_context}
 
 """
     role_label = "Setup" if role == "setup" else "Test"
-    if role == "setup":
-        role_elucidation = "You are asked to generate code for the setup cell, which is in charge of setting up the precise conditions in which the target cell is executed."
-    else:
-        role_elucidation = "You are asked to generate code for the test cell, which needs to check whether the unit test succeeded."
+    role_elucidation = UNIT_TEST_SETUP_ROLE if role == "setup" else UNIT_TEST_TEST_ROLE
     prompt += f"""
 INSTRUCTIONS for Unit Test {role_label} Cell:
 {role_elucidation}
+
 {instructions}
 
 Code:
