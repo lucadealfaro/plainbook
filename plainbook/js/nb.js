@@ -154,6 +154,10 @@ createApp({
             
             const r = await response.json();
             if (r.state) updateState(r.state);
+            if (r.unit_test_state
+                && r.unit_test_state.cell_index === unitTestTargetIndex.value) {
+                unitTestValidity.value = r.unit_test_state.state;
+            }
             return r;
         };
 
@@ -233,10 +237,6 @@ createApp({
                         }
                     }
                     console.log('Explanation saved:', cellIndex);
-                    // If in unit test mode, refresh unit test validity
-                    if (unitTestTargetIndex.value !== null && cellIndex === unitTestTargetIndex.value) {
-                        await fetchUnitTestState(cellIndex);
-                    }
                     return response;
                 } catch (err) {
                     throw new Error('Failed to save explanation', { cause: err });
@@ -273,10 +273,6 @@ createApp({
                         source: content
                     });
                     console.log('Code saved:', cellIndex);
-                    // If in unit test mode, refresh unit test validity
-                    if (unitTestTargetIndex.value !== null && cellIndex === unitTestTargetIndex.value) {
-                        await fetchUnitTestState(cellIndex);
-                    }
                 } catch (err) {
                     throw new Error('Failed to save code', { cause: err });
                 }
@@ -294,10 +290,6 @@ createApp({
                     notebook.value.cells[cellIndex].outputs = [];
                 }
                 console.log('Code cleared:', cellIndex);
-                // If in unit test mode, refresh unit test validity
-                if (unitTestTargetIndex.value !== null && cellIndex === unitTestTargetIndex.value) {
-                    await fetchUnitTestState(cellIndex);
-                }
             } catch (err) {
                 throw new Error('Failed to clear code', { cause: err });
             }
@@ -671,10 +663,6 @@ createApp({
                 await generateCodeOneCell(cellIndex, true, validationFeedback);
                 running.value = false;
                 runningActivity.value = { type: null, cellIndex: null };
-                // If in unit test mode, refresh unit test validity
-                if (unitTestTargetIndex.value !== null && cellIndex === unitTestTargetIndex.value) {
-                    await fetchUnitTestState(cellIndex);
-                }
             }
         };
 
@@ -876,8 +864,9 @@ createApp({
         const fetchUnitTestState = async (cellIndex) => {
             try {
                 const r = await apiCall('/get_unit_test_state', 'POST', { cell_index: cellIndex });
-                if (r.status === 'success' && r.unit_test_state) {
-                    unitTestValidity.value = r.unit_test_state;
+                if (r.status === 'success' && r.unit_test_state
+                    && r.unit_test_state.cell_index === cellIndex) {
+                    unitTestValidity.value = r.unit_test_state.state;
                 }
             } catch (err) {
                 console.error('Failed to fetch unit test state:', err);
@@ -931,7 +920,6 @@ createApp({
             if (!cell.metadata.unit_tests) return;
             delete cell.metadata.unit_tests[testName];
             await saveUnitTests(cellIndex);
-            await fetchUnitTestState(cellIndex);
         };
 
         const renameUnitTest = async (cellIndex, oldName, newName) => {
@@ -944,7 +932,6 @@ createApp({
             }
             cell.metadata.unit_tests = newTests;
             await saveUnitTests(cellIndex);
-            await fetchUnitTestState(cellIndex);
         };
 
         const saveUnitTestExplanation = (cellIndex, testName, role, content) => {
@@ -961,7 +948,6 @@ createApp({
                         role: role,
                         explanation: content
                     });
-                    await fetchUnitTestState(cellIndex);
                 } catch (err) {
                     throw new Error('Failed to save unit test explanation', { cause: err });
                 }
@@ -979,7 +965,6 @@ createApp({
                         role: role,
                         source: content
                     });
-                    await fetchUnitTestState(cellIndex);
                 } catch (err) {
                     throw new Error('Failed to save unit test code', { cause: err });
                 }
@@ -1001,7 +986,6 @@ createApp({
                 const subCell = test.cells[role];
                 subCell.source = '';
                 subCell.outputs = [];
-                await fetchUnitTestState(cellIndex);
             } catch (err) {
                 throw new Error('Failed to clear unit test code', { cause: err });
             }
@@ -1112,8 +1096,6 @@ createApp({
                 await executeUnitTestCell(cellIndex, testName, 'test');
             }
 
-            // 6. Refresh validity flags
-            await fetchUnitTestState(cellIndex);
         };
 
         const ui_runUnitTest = async (cellIndex, testName) => {
@@ -1135,7 +1117,6 @@ createApp({
                 running.value = true;
                 try {
                     await generateUnitTestCodeInner(cellIndex, testName, role);
-                    await fetchUnitTestState(cellIndex);
                 } finally {
                     running.value = false;
                     runningActivity.value = { type: null, cellIndex: null };

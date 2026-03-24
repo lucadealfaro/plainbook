@@ -246,6 +246,24 @@ def stateful(func):
         return r
     return wrapper
 
+# Unit-test stateful decorator: piggybacks unit test validity onto responses.
+def unit_test_stateful(func):
+    @wraps(func)
+    def wrapper(*args, **kwargs):
+        r = func(*args, **kwargs)
+        data = request.json or {}
+        cell_index = data.get('cell_index')
+        if cell_index is not None:
+            try:
+                r['unit_test_state'] = {
+                    'cell_index': cell_index,
+                    'state': notebook.get_unit_test_state(cell_index),
+                }
+            except Exception:
+                pass
+        return r
+    return wrapper
+
 # Main routes
 @get('/')
 def index():
@@ -738,6 +756,7 @@ def get_ai_instructions():
 
 @post('/save_unit_tests')
 @stateful
+@unit_test_stateful
 @require_token
 def save_unit_tests():
     data = request.json
@@ -748,6 +767,7 @@ def save_unit_tests():
 
 @post('/save_unit_test_explanation')
 @stateful
+@unit_test_stateful
 @require_token
 def save_unit_test_explanation():
     data = request.json
@@ -760,6 +780,7 @@ def save_unit_test_explanation():
 
 @post('/save_unit_test_code')
 @stateful
+@unit_test_stateful
 @require_token
 def save_unit_test_code():
     data = request.json
@@ -772,6 +793,7 @@ def save_unit_test_code():
 
 @post('/clear_unit_test_code')
 @stateful
+@unit_test_stateful
 @require_token
 def clear_unit_test_code():
     data = request.json
@@ -788,12 +810,16 @@ def get_unit_test_state():
     cell_index = data.get('cell_index')
     try:
         state = notebook.get_unit_test_state(cell_index)
-        return dict(status='success', unit_test_state=state)
+        return dict(status='success', unit_test_state={
+            'cell_index': cell_index,
+            'state': state,
+        })
     except Exception as e:
         return dict(status='error', message=str(e))
 
 @post('/run_unit_test_cell')
 @stateful
+@unit_test_stateful
 @require_token
 def run_unit_test_cell():
     data = request.json
@@ -817,6 +843,7 @@ def run_unit_test_cell():
         return dict(status='error', message=str(e))
 
 @post('/clear_unit_test_outputs')
+@unit_test_stateful
 @require_token
 def clear_unit_test_outputs():
     data = request.json
@@ -830,6 +857,7 @@ def clear_unit_test_outputs():
 
 @post('/generate_unit_test_cell_code')
 @stateful
+@unit_test_stateful
 @require_token
 def generate_unit_test_code():
     data = request.json
@@ -860,14 +888,8 @@ def generate_unit_test_code():
 @require_token
 @stateful
 def debug_request():
-    try:
-        data = request.json
-        nb = data.get('notebook', None)
-        if nb is not None:
-            notebook.debug_request(nb)
-        return dict(status='success')
-    except Exception as e:
-        return dict(status='error', message=str(e))
+    notebook.debug_request()
+    return dict(status='success')
 
 
 ################################

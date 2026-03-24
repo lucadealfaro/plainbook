@@ -1136,13 +1136,14 @@ class Plainbook:
         return self._format_variables_for_ai(variables)
 
 
-    def debug_request(self, nb):
+    def debug_request(self):
         with self._lock:
             self._debug_print_states()
 
 
     def _debug_print_states(self):
         """Print all cells and their associated kernel states."""
+        import sys
         # Get set of states that actually exist in the kernel
         try:
             kernel_states = set(self._sk_request("GET", "/states").get("states", []))
@@ -1188,6 +1189,7 @@ class Plainbook:
                     print(f"      After test:         {state_info(test_state)}")
                     print(f"      Validity: {validity}")
         print("=" * 60)
+        sys.stdout.flush()
 
 
     def _get_preceding_code_json_for_ai(self, index, include_all_variables=True):
