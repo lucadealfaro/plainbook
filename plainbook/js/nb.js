@@ -1044,11 +1044,12 @@ createApp({
         };
 
         const executeUnitTest = async (cellIndex, testName) => {
-            // 1. Ensure main notebook cells up to cellIndex-1 are executed
-            // Always call runCells — it's idempotent (returns cached results
-            // for already-executed cells) and handles cases where the kernel
-            // was restarted or the notebook was reloaded.
-            if (cellIndex > 0) {
+            // 1. Ensure main notebook cells up to cellIndex-1 are executed.
+            // Only call runCells if we haven't executed far enough yet.
+            // Do NOT call runCells when the notebook is already executed past
+            // cellIndex, as that would reset the kernel and invalidate all
+            // downstream states unnecessarily.
+            if (cellIndex > 0 && last_executed_cell_index.value < cellIndex - 1) {
                 await runCells(cellIndex - 1);
             }
             if (!running.value) return;
