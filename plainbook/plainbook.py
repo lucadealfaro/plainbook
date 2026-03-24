@@ -396,8 +396,13 @@ class Plainbook:
         """Reset the snapshot kernel: clear all states, reset pointers."""
         self._sk_request("POST", "/reset")
         self.last_executed_cell = -1
+        self.last_valid_output_cell = -1
+        self.last_valid_test_cell = -1
         self._cell_states.clear()
         self._unit_test_states.clear()
+        for cell in self.nb.cells:
+            if cell.cell_type in ('code', 'test'):
+                cell.outputs = []
         if self.debug:
             print("Snapshot kernel reset complete.")
 

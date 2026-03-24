@@ -697,13 +697,7 @@ createApp({
             restarting.value = true;
             try {
                 await ui_resetKernel();
-                if (notebook.value) {
-                    for (const cell of notebook.value.cells) {
-                        if (cell.cell_type === 'code' || cell.cell_type === 'test') {
-                            cell.outputs = [];
-                        }
-                    }
-                }
+                await reloadNotebook();
             } finally {
                 restarting.value = false;
             }
