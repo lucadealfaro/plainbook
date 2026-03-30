@@ -20,6 +20,7 @@ dependencies = [
     "anthropic",
     "bottle",
     "cherrypy",
+    "google-auth-oauthlib",
     "google-genai",
     "snapshot-kernel>=0.1.4",
     "nbformat",

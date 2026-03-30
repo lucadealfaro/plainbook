@@ -164,15 +164,23 @@ def _update_gemini_models():
 _update_gemini_models()
 
 
+def _provider_has_auth(p):
+    """Check whether a provider has a usable API key or (for Gemini) OAuth."""
+    if settings.get(p['key_setting']):
+        return True
+    if p['major'] == 'gemini' and settings.get('gemini_oauth_enabled'):
+        return True
+    return False
+
 def _ensure_active_ai_provider():
     """Validate active_ai_provider setting; auto-select first available if invalid."""
     current = settings.get('active_ai_provider')
     for p in AI_PROVIDER_REGISTRY:
-        if p['id'] == current and settings.get(p['key_setting']):
+        if p['id'] == current and _provider_has_auth(p):
             return current
     # Current is invalid or missing — pick first provider with a key
     for p in AI_PROVIDER_REGISTRY:
-        if settings.get(p['key_setting']):
+        if _provider_has_auth(p):
             settings['active_ai_provider'] = p['id']
             return p['id']
     settings['active_ai_provider'] = None
@@ -351,13 +359,89 @@ def set_active_ai():
         return dict(status='error', message=f'Unknown provider: {provider_id}')
     for p in AI_PROVIDER_REGISTRY:
         if p['id'] == provider_id:
-            if not settings.get(p['key_setting']):
+            if not _provider_has_auth(p):
                 return dict(status='error', message=f'No API key set for {p["name"]}')
             break
     settings['active_ai_provider'] = provider_id
     with open(SETTINGS_FILE, 'w') as f:
         yaml.dump(settings, f)
     return dict(status='success', active_ai_provider=provider_id)
+
+
+## Gemini OAuth endpoints
+
+@get('/gemini_auth_status')
+@require_token
+def gemini_auth_status():
+    """Return current Gemini auth state for the settings modal."""
+    return dict(
+        has_key=bool(settings.get('gemini_api_key')),
+        has_oauth=bool(settings.get('gemini_oauth_enabled')),
+    )
+
+@get('/gemini_oauth_login')
+@require_token
+def gemini_oauth_login():
+    """Redirect the user to Google's OAuth consent screen."""
+    from .gemini_oauth import get_oauth_url
+    auth_url, _ = get_oauth_url(SERVER_PORT)
+    redirect(auth_url)
+
+@get('/oauth_callback')
+def oauth_callback():
+    """Handle the OAuth redirect from Google."""
+    from .gemini_oauth import exchange_code
+    code = request.query.get('code')
+    state = request.query.get('state')
+    error = request.query.get('error')
+    if error:
+        return f"<html><body><h2>OAuth error: {error}</h2><p>You can close this tab.</p></body></html>"
+    if not code or not state:
+        return "<html><body><h2>Missing authorization code</h2><p>You can close this tab.</p></body></html>"
+    try:
+        exchange_code(code, state)
+    except Exception as e:
+        return f"<html><body><h2>Token exchange failed</h2><p>{e}</p><p>You can close this tab.</p></body></html>"
+    # Enable OAuth preference (API key is kept separately)
+    settings['gemini_oauth_enabled'] = True
+    _saved_settings['gemini_oauth_enabled'] = True
+    try:
+        with open(SETTINGS_FILE, 'w') as f:
+            yaml.dump(dict(_saved_settings), f)
+    except Exception:
+        pass
+    _ensure_active_ai_provider()
+    # Return a page that notifies the opener and closes itself.
+    # Use localStorage as a reliable cross-tab communication channel.
+    return """<html><body>
+<h2>Gemini authentication successful!</h2>
+<p>You can close this tab and return to Plainbook.</p>
+<script>
+localStorage.setItem('plainbook-oauth-done', Date.now());
+window.close();
+</script>
+</body></html>"""
+
+@post('/gemini_oauth_logout')
+@require_token
+def gemini_oauth_logout():
+    """Disable Gemini OAuth preference (falls back to API key if available)."""
+    settings['gemini_oauth_enabled'] = False
+    _saved_settings['gemini_oauth_enabled'] = False
+    try:
+        with open(SETTINGS_FILE, 'w') as f:
+            yaml.dump(dict(_saved_settings), f)
+    except Exception:
+        pass
+    active = _ensure_active_ai_provider()
+    return dict(
+        status='success',
+        active_ai_provider=active,
+        has_gemini_key=bool(settings.get('gemini_api_key')),
+        has_claude_key=bool(settings.get('claude_api_key')),
+        claude_via_bedrock=CLAUDE_VIA_BEDROCK,
+    )
+
 
 @post('/edit_explanation')
 @stateful
@@ -483,11 +567,16 @@ def interrupt_kernel():
     
 def _get_ai_config():
     """Resolve AI provider, model, and API key from server-side active provider setting."""
+    from .gemini import OAUTH_SENTINEL
+    from .gemini_oauth import has_oauth_credentials
     ai_provider = settings.get('active_ai_provider')
     if not ai_provider:
         return None, None, None, 'No AI provider is active. Please set an API key in Settings.'
     for p in AI_PROVIDER_REGISTRY:
         if p['id'] == ai_provider:
+            # For Gemini providers: prefer OAuth if enabled
+            if p['major'] == 'gemini' and settings.get('gemini_oauth_enabled') and has_oauth_credentials():
+                return OAUTH_SENTINEL, p['major'], p['model'], None
             api_key = settings.get(p['key_setting'])
             if not api_key:
                 return None, None, None, f'{p["name"]} API key not set.'
@@ -916,10 +1005,14 @@ def logger_middleware(app):
     return wrapper
     
     
+SERVER_PORT = None  # Set at startup, used by OAuth callback
+
 def main():
+    global SERVER_PORT
     from . import __version__
     print(f"Plainbook {__version__}")
     port = find_free_port()
+    SERVER_PORT = port
     url = f"http://127.0.0.1:{port}/?token={AUTH_TOKEN}"
     print(f"Authentication token: {AUTH_TOKEN}")
     if args.debug:

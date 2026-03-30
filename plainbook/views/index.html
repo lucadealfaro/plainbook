@@ -196,8 +196,10 @@
         :has-gemini-key="hasGeminiKey"
         :has-claude-key="hasClaudeKey"
         :claude-via-bedrock="claudeViaBedrock"
+        :auth-token="authToken"
         @close="showSettings = false"
         @save="(keys) => {showSettings = false; saveSettings(keys); }"
+        @gemini-oauth-login="geminiOAuthLogin"
     />
     <!-- Info Modal -->
     <info-modal

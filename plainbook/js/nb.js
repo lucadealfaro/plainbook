@@ -1167,6 +1167,11 @@ createApp({
             }
         };
 
+        const geminiOAuthLogin = () => {
+            window.open(`/gemini_oauth_login?token=${authToken}`, '_blank');
+        };
+
+
         const setActiveAiProvider = async (providerId) => {
             try {
                 const r = await apiCall('/set_active_ai', 'POST', { provider: providerId });
@@ -1222,6 +1227,7 @@ createApp({
             genError, uiError, closeUiError, debug, sendDebugRequest,
             explanationEditKey, deleteCell, moveCell,
             clearOutputs, activeAiProvider, availableAiProviders, setActiveAiProvider, isCodespace, hasGeminiKey, hasClaudeKey, claudeViaBedrock,
+            geminiOAuthLogin,
             restarting, ui_restart,
             ui_runTestCell, ui_runAllTests, ui_saveExplanationAndRunTest, ui_forceRegenerateTestCode,
             unitTestTargetIndex, enterUnitTestMode, exitUnitTestMode,

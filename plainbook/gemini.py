@@ -1,6 +1,8 @@
 from google import genai
 from google.genai import types
 
+OAUTH_SENTINEL = '__oauth__'
+
 from .ai_common import (
     SYSTEM_INSTRUCTIONS,
     TEST_SYSTEM_INSTRUCTIONS,
@@ -18,13 +20,43 @@ from .ai_common import (
 )
 
 
+def _make_client(api_key, dump_ai_requests=False):
+    """Create a Gemini client from an API key or OAuth credentials."""
+    if api_key == OAUTH_SENTINEL:
+        from .gemini_oauth import load_oauth_credentials
+        creds = load_oauth_credentials()
+        if not creds:
+            raise RuntimeError(
+                "Gemini OAuth credentials not found or expired. "
+                "Please re-authenticate via Settings.")
+        if dump_ai_requests:
+            print("[Gemini auth] Using Google OAuth credentials")
+        # The google-genai Client requires api_key for the Developer API path.
+        # We pass a dummy key to satisfy validation, then inject our OAuth
+        # Bearer token via http_options (which patches headers after init).
+        # We also override x-goog-api-key to remove the dummy value so
+        # Google doesn't reject it.
+        return genai.Client(
+            api_key='oauth_placeholder',
+            http_options=types.HttpOptions(
+                headers={
+                    'Authorization': f'Bearer {creds.token}',
+                    'x-goog-api-key': '',
+                }
+            )
+        )
+    if dump_ai_requests:
+        print("[Gemini auth] Using API key")
+    return genai.Client(api_key=api_key)
+
+
 def get_gemini_models(api_key, families):
     """Fetches latest Gemini model IDs for the given families from the API.
     families: list of family keys like ["2.5-flash", "2.5-pro", "3-flash", "3-pro"]
     Returns a dict mapping family key to model ID.
     Prefers shorter model names (base aliases like "gemini-2.5-flash" over
     versioned names like "gemini-2.5-flash-001")."""
-    client = genai.Client(api_key=api_key)
+    client = _make_client(api_key, dump_ai_requests=dump_ai_requests)
     result = {f: None for f in families}
     for model in client.models.list():
         model_id = model.name
@@ -55,7 +87,7 @@ def gemini_generate_code(
     debug=False,
     dump_ai_requests=False):
     # 1. Initialize the Gemini client
-    client = genai.Client(api_key=api_key)
+    client = _make_client(api_key, dump_ai_requests=dump_ai_requests)
     model = model or GEMINI_GENERATE_MODEL
 
     # 2. Create the prompt
@@ -111,7 +143,7 @@ def gemini_generate_test_code(
     model=None,
     debug=False,
     dump_ai_requests=False):
-    client = genai.Client(api_key=api_key)
+    client = _make_client(api_key, dump_ai_requests=dump_ai_requests)
     model = model or GEMINI_GENERATE_MODEL
 
     prompt = build_context_prompt(
@@ -169,7 +201,7 @@ def gemini_generate_unit_test_code(
     model=None,
     debug=False,
     dump_ai_requests=False):
-    client = genai.Client(api_key=api_key)
+    client = _make_client(api_key, dump_ai_requests=dump_ai_requests)
     model = model or GEMINI_GENERATE_MODEL
 
     prompt = build_unit_test_prompt(
@@ -211,7 +243,7 @@ def gemini_generate_unit_test_code(
 
 
 def gemini_validate_code(api_key, previous_code, code_to_validate, instructions, variable_context=None, model=None, debug=False, dump_ai_requests=False):
-    client = genai.Client(api_key=api_key)
+    client = _make_client(api_key, dump_ai_requests=dump_ai_requests)
     model = model or GEMINI_VALIDATE_MODEL
 
     prompt = build_context_prompt(
@@ -251,7 +283,7 @@ Validation Result:
 
 
 def gemini_generate_cell_name(api_key, explanation, model=None, debug=False, dump_ai_requests=False):
-    client = genai.Client(api_key=api_key)
+    client = _make_client(api_key, dump_ai_requests=dump_ai_requests)
     model = model or GEMINI_GENERATE_MODEL
     prompt = build_name_prompt(explanation)
     if debug:
