@@ -204,7 +204,7 @@ export default {
                             @validate="$emit('validate')"
                             @run="$emit('run-unit-test', targetCellIndex, activeTestName)"
                             @interrupt="$emit('interrupt')"
-                            @saveandrun="(content) => { $emit('save-explanation', content); $emit('run-unit-test', targetCellIndex, activeTestName); }"
+                            @saveandrun="(content) => { $emit('save-explanation', content); $emit('run-unit-test', targetCellIndex, activeTestName); activeSubCell = 'test'; }"
                             @delete=""
                             @moveUp=""
                             @moveDown="" />
