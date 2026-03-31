@@ -1,4 +1,4 @@
-import { ref, computed, watch, onMounted } from './vue.esm-browser.js';
+import { ref, computed, watch, onMounted, nextTick } from './vue.esm-browser.js';
 import UnitTestTabBar from './UnitTestTabBar.js';
 import UnitTestSubCell from './UnitTestSubCell.js';
 import ExplanationEditor from './ExplanationEditor.js';
@@ -108,15 +108,32 @@ export default {
             emit('delete-unit-test', props.targetCellIndex, testName);
         };
 
+        const rootEl = ref(null);
+        const focusRoot = () => { nextTick(() => rootEl.value?.focus()); };
+
+        const handleKeydown = (e) => {
+            if (e.key === 'Enter' && e.shiftKey) {
+                if (e.target?.tagName === 'TEXTAREA' || e.target?.tagName === 'INPUT') return;
+                e.preventDefault();
+                emit('run-unit-test', props.targetCellIndex, activeTestName.value);
+                if (activeSubCell.value === 'setup') activeSubCell.value = 'target';
+                else if (activeSubCell.value === 'target') activeSubCell.value = 'test';
+            }
+        };
+
+        // Focus root div when entering unit test mode
+        onMounted(focusRoot);
+
         return {
             activeTestName, activeSubCell, targetCell, unitTests, activeTest,
             hasTargetError, targetCodeValid, targetOutputValid, targetOutputVisible,
             activeTestValidity, setupCodeValid, setupOutputValid, testCodeValid, testOutputValid,
-            targetTestOutputs, handleAdd, handleDelete, clearOutputs
+            targetTestOutputs, handleAdd, handleDelete, clearOutputs, handleKeydown,
+            rootEl, focusRoot
         };
     },
     template: /* html */ `
-        <div v-if="targetCell" style="display: flex; flex-direction: column; flex-grow: 1; min-height: 0;">
+        <div v-if="targetCell" ref="rootEl" tabindex="-1" @keydown="handleKeydown" style="display: flex; flex-direction: column; flex-grow: 1; min-height: 0; outline: none;">
             <unit-test-tab-bar
                 :tests="unitTests"
                 :active-name="activeTestName"
@@ -158,7 +175,7 @@ export default {
                     :cell="activeTest.cells.setup"
                     role="setup"
                     :is-active="activeSubCell === 'setup'"
-                    @activate="activeSubCell = 'setup'"
+                    @activate="activeSubCell = 'setup'; focusRoot()"
                     :is-locked="isLocked"
                     :running="running"
                     :code-valid="setupCodeValid"
@@ -177,7 +194,7 @@ export default {
                 <!-- Target cell (read-only-ish display) -->
                 <cell-label :name="targetCell.metadata.name" />
                 <div class="notebook-cell box p-0 mb-5 is-clipped shadow-sm"
-                     @click="activeSubCell = 'target'"
+                     @click="activeSubCell = 'target'; focusRoot()"
                      :class="{ 'is-active-cell': activeSubCell === 'target' }"
                      style="cursor: pointer">
                     <div class="p-2 has-text-weight-semibold is-size-7 text-muted">
@@ -238,7 +255,7 @@ export default {
                     :cell="activeTest.cells.test"
                     role="test"
                     :is-active="activeSubCell === 'test'"
-                    @activate="activeSubCell = 'test'"
+                    @activate="activeSubCell = 'test'; focusRoot()"
                     :is-locked="isLocked"
                     :running="running"
                     :code-valid="testCodeValid"
