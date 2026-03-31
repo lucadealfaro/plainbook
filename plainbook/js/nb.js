@@ -1135,7 +1135,12 @@ createApp({
 
             if (e.key === 'Enter' && e.shiftKey) {
                 if (!notebook.value || activeIndex.value < 0) return;
+                if (unitTestTargetIndex.value !== null) return;
                 e.preventDefault();
+                const cell = notebook.value.cells[activeIndex.value];
+                if (cell && (cell.cell_type === 'code' || cell.cell_type === 'test')) {
+                    ui_runCell(activeIndex.value);
+                }
                 const next = Math.min(activeIndex.value + 1, total - 1);
                 if (next !== activeIndex.value) setActiveCell(next);
             }
