@@ -60,33 +60,6 @@ export default {
             </header>
             <section class="modal-card-body">
                 <div class="field">
-                    <label class="label">Gemini API Key</label>
-                    <div class="control" v-if="geminiRemoved">
-                        <div class="input settings-key-status">
-                            Key will be removed on save
-                        </div>
-                    </div>
-                    <div class="control" v-else-if="hasGeminiKey && !geminiEditing">
-                        <div style="display: flex; align-items: center; gap: 0.5rem;">
-                            <div class="input settings-key-masked"
-                                 @click="startEditing('gemini')">
-                                ●●●●●●●●●●●●
-                            </div>
-                            <button class="button is-small is-danger is-outlined" @click="removeKey('gemini')"><i class="bx bx-trash"></i></button>
-                        </div>
-                    </div>
-                    <div class="control" v-else>
-                        <input class="input" type="text"
-                               v-model="localGeminiKey"
-                               :placeholder="hasGeminiKey ? 'Enter new key (leave blank to keep current)' : 'Enter your Gemini API key (optional)'">
-                    </div>
-                    <p class="help">
-                        <a href="https://aistudio.google.com/app/apikey" target="_blank" class="button is-small is-link is-light" style="margin-top: 0.5rem;">
-                            {{ hasGeminiKey ? 'Manage Gemini API Key' : 'Get Gemini API Key' }}
-                        </a>
-                    </p>
-                </div>
-                <div class="field">
                     <label class="label">Claude API Key</label>
                     <div class="control" v-if="claudeViaBedrock">
                         <div class="input settings-bedrock-status">
@@ -115,6 +88,33 @@ export default {
                     <p class="help" v-if="!claudeViaBedrock">
                         <a href="https://console.anthropic.com/settings/keys" target="_blank" class="button is-small is-link is-light" style="margin-top: 0.5rem;">
                             {{ hasClaudeKey ? 'Manage Claude API Key' : 'Get Claude API Key' }}
+                        </a>
+                    </p>
+                </div>
+                <div class="field">
+                    <label class="label">Gemini API Key</label>
+                    <div class="control" v-if="geminiRemoved">
+                        <div class="input settings-key-status">
+                            Key will be removed on save
+                        </div>
+                    </div>
+                    <div class="control" v-else-if="hasGeminiKey && !geminiEditing">
+                        <div style="display: flex; align-items: center; gap: 0.5rem;">
+                            <div class="input settings-key-masked"
+                                 @click="startEditing('gemini')">
+                                ●●●●●●●●●●●●
+                            </div>
+                            <button class="button is-small is-danger is-outlined" @click="removeKey('gemini')"><i class="bx bx-trash"></i></button>
+                        </div>
+                    </div>
+                    <div class="control" v-else>
+                        <input class="input" type="text"
+                               v-model="localGeminiKey"
+                               :placeholder="hasGeminiKey ? 'Enter new key (leave blank to keep current)' : 'Enter your Gemini API key (optional)'">
+                    </div>
+                    <p class="help">
+                        <a href="https://aistudio.google.com/app/apikey" target="_blank" class="button is-small is-link is-light" style="margin-top: 0.5rem;">
+                            {{ hasGeminiKey ? 'Manage Gemini API Key' : 'Get Gemini API Key' }}
                         </a>
                     </p>
                 </div>

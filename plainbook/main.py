@@ -76,13 +76,13 @@ if CLAUDE_VIA_BEDROCK:
     settings['claude_api_key'] = '__bedrock__'
 
 AI_PROVIDER_REGISTRY = [
+    {"id": "claude:haiku",     "name": "Claude Haiku",      "major": "claude", "key_setting": "claude_api_key", "model": "claude-haiku-4-5-20251001"},
+    {"id": "claude:sonnet",    "name": "Claude Sonnet",     "major": "claude", "key_setting": "claude_api_key", "model": "claude-sonnet-4-5-20250929"},
+    {"id": "claude:opus",      "name": "Claude Opus",       "major": "claude", "key_setting": "claude_api_key", "model": "claude-opus-4-20250514"},
     {"id": "gemini:2.5-flash", "name": "Gemini 2.5 Flash", "major": "gemini", "key_setting": "gemini_api_key", "model": "gemini-2.5-flash"},
     {"id": "gemini:2.5-pro",   "name": "Gemini 2.5 Pro",   "major": "gemini", "key_setting": "gemini_api_key", "model": "gemini-2.5-pro"},
     {"id": "gemini:3-flash",   "name": "Gemini 3 Flash",   "major": "gemini", "key_setting": "gemini_api_key", "model": "gemini-3-flash-preview"},
     {"id": "gemini:3-pro",     "name": "Gemini 3 Pro",     "major": "gemini", "key_setting": "gemini_api_key", "model": "gemini-3-pro-preview"},
-    {"id": "claude:haiku",     "name": "Claude Haiku",      "major": "claude", "key_setting": "claude_api_key", "model": "claude-haiku-4-5-20251001"},
-    {"id": "claude:sonnet",    "name": "Claude Sonnet",     "major": "claude", "key_setting": "claude_api_key", "model": "claude-sonnet-4-5-20250929"},
-    {"id": "claude:opus",      "name": "Claude Opus",       "major": "claude", "key_setting": "claude_api_key", "model": "claude-opus-4-20250514"},
 ]
 
 # When using Bedrock with ANTHROPIC_MODEL, add a dedicated provider entry for it
