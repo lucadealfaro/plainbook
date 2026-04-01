@@ -6,9 +6,10 @@ import CodeCell from './CodeCell.js';
 import ValidationCell from './ValidationCell.js';
 import OutputRenderer from './OutputRenderer.js';
 import CellLabel from './CellLabel.js';
+import UnitTestHelpModal from './UnitTestHelpModal.js';
 
 export default {
-    components: { UnitTestTabBar, UnitTestSubCell, ExplanationEditor, CodeCell, ValidationCell, OutputRenderer, CellLabel },
+    components: { UnitTestTabBar, UnitTestSubCell, ExplanationEditor, CodeCell, ValidationCell, OutputRenderer, CellLabel, UnitTestHelpModal },
     props: ['notebook', 'targetCellIndex', 'authToken', 'running', 'runningActivity',
             'isLocked', 'lastValidCodeCellIndex', 'lastValidOutputCellIndex', 'unitTestValidity'],
     emits: ['exit',
@@ -124,6 +125,8 @@ export default {
             }
         };
 
+        const showHelp = ref(false);
+
         // Focus root div when entering unit test mode
         onMounted(focusRoot);
 
@@ -132,7 +135,7 @@ export default {
             hasTargetError, targetCodeValid, targetOutputValid, targetOutputVisible,
             activeTestValidity, setupCodeValid, setupOutputValid, testCodeValid, testOutputValid,
             targetTestOutputs, handleAdd, handleDelete, clearOutputs, handleKeydown,
-            rootEl, focusRoot
+            rootEl, focusRoot, showHelp
         };
     },
     template: /* html */ `
@@ -149,7 +152,7 @@ export default {
             <!-- Action buttons bar (between tab bar and scrollable area) -->
             <div v-if="activeTest" class="px-4 py-2" style="display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
                 <div style="display: flex; gap: 0.5rem;">
-                    <button class="button is-success is-small">
+                    <button class="button is-success is-small" @click="showHelp = true">
                         <span class="icon"><i class="bx bx-info-circle"></i></span>
                         <span>Test help</span>
                     </button>
@@ -283,6 +286,8 @@ export default {
                 No tests yet. Click the "+" button to add one.
             </div>
             </div>
+
+            <unit-test-help-modal :is-active="showHelp" @close="showHelp = false" />
         </div>
     `
 };
