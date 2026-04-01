@@ -106,11 +106,12 @@ Summarize what this cell does in 2-3 words:"""
 
 
 # Session-level token accumulator
-_session_tokens = {"input": 0}
+_session_tokens = {"input": 0, "output": 0}
 
-def add_tokens(input_tokens, _output_tokens=None):
-    """Accumulate input token usage from an AI API call."""
+def add_tokens(input_tokens, output_tokens=None):
+    """Accumulate token usage from an AI API call."""
     _session_tokens["input"] += input_tokens or 0
+    _session_tokens["output"] += output_tokens or 0
 
 def get_session_tokens():
     """Return current session token totals."""
@@ -119,6 +120,7 @@ def get_session_tokens():
 def reset_session_tokens():
     """Zero out session token counters."""
     _session_tokens["input"] = 0
+    _session_tokens["output"] = 0
 
 
 def _chars_and_tokens(n):
@@ -170,7 +172,7 @@ def log_ai_request_size(label, system_instructions, prompt, *,
     sys_len = len(system_instructions)
     prompt_len = len(prompt)
     total = sys_len + prompt_len
-    print(f"[AI {label}] system={sys_len} prompt={prompt_len} total={total} chars (~{total // CHARS_PER_TOKEN} tokens)")
+    print(f"[AI {label}] system={sys_len} prompt={prompt_len} total={total} chars (~{total // CHARS_PER_TOKEN} tokens)", flush=True)
     # Breakdown of preceding notebook context.
     breakdown = _breakdown_preceding(preceding)
     if breakdown:
@@ -187,7 +189,7 @@ def log_ai_request_size(label, system_instructions, prompt, *,
     ]
     parts = [f"{name}={_chars_and_tokens(len(val))}" for name, val in fields if val]
     if parts:
-        print(f"  Cell information:\n    {NEWLINE_INDENTATION.join(parts)}")
+        print(f"  Cell information:\n    {NEWLINE_INDENTATION.join(parts)}", flush=True)
 
 
 def dump_ai_request(label, system_instructions, prompt):

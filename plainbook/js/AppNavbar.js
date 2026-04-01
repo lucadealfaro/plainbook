@@ -190,7 +190,7 @@ export default {
                                 <i :class="shareOutputWithAi ? 'bx bx-shield' : 'bx bx-check-shield'"></i>
                             </span>
                         </button>
-                        <span v-if="debug" class="tag is-dark" :title="'AI input tokens: ' + (aiTokens.input || 0) + '. Click to reset.'" style="cursor: pointer; margin-right: 0.25rem;" @click="$emit('reset-tokens')">
+                        <span v-if="debug" class="tag is-dark" :title="'AI tokens: ' + (aiTokens.input || 0) + ' input, ' + (aiTokens.output || 0) + ' output. Click to reset.'" style="cursor: pointer; margin-right: 0.25rem;" @click="$emit('reset-tokens')">
                             <span class="icon is-small" style="margin-right: 0.25rem;"><i class="bx bx-chip"></i></span>
                             {{ formattedTokens }}
                         </span>
