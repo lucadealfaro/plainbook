@@ -6,43 +6,28 @@ export default {
         <div class="modal-background" @click="$emit('close')"></div>
         <div class="modal-card" style="width: 90%; max-width: 900px;">
             <header class="modal-card-head">
-                <p class="modal-card-title">Test Cells</p>
+                <p class="modal-card-title">Global Test Cells</p>
                 <button class="delete" aria-label="close" @click="$emit('close')"></button>
             </header>
             <section class="modal-card-body">
                 <div class="help-container p-5">
                     <div class="content">
-                        <h2 class="title is-4">Writing Tests</h2>
+                        <h2 class="title is-4">Global Test Cells</h2>
                         <p>
-                        Test cells allow you to check that the plainbook is working as expected. 
-                        In a test cell, you can write properties that should hold. 
+                        Global test cells allow you to write tests that the notebook should satisfy.
                         </p><p>
-                        A simple property can refer to the state after the previous cell has run, 
-                        such as <em>check that the threshold computed is greater than 0.</em>
-                        </p><p>
-                        Properties can also relate the plainbook states after different cells. 
-                        To refer to cells, you can use their names, displayed on the top left of cells. 
-                        For instance, if a cell <em>load_data</em> loads a dataset, your property can say:
+                        You can write simple, or global tests:
                         </p>
-                        <blockquote><em>
-                            Check that the dataset, as filtered from the previous cell, contains all the
-                            data loaded in cell load_data that has non-null values for phone number.
-                        </em></blockquote>
-                        <p>
-                        The only restriction is that in a test, you can only refer to <em>preceding</em> cells.
-                        You can even compare the values of the same variable after different cells:
-                        </p>
-                        <blockquote><em>
-                            Check that the average computed in cell first_method is greater than the
-                            one computed in second_method, which in turn should be greater than the
-                            one computed in third_method.
-                        </em></blockquote>
-                        <h2 class="title is-4">Running Tests</h2>
-                        <p>
-                        Tests can be run either individually, by clicking the Run button in the 
-                        cell itself, or all at once by clicking the "Run tests" button in the 
-                        navbar.
-                        </p>
+                        <ul>
+                            <li class="mt-4"><b>Simple tests</b> validate the output of the previous cell. 
+                            <blockquote><em>Example:</em> Check that for each team, the total of the 
+                            at home and away matches equals the total matches.</blockquote></li>
+                            <li class="mt-4"><b>Global tests</b> compare values between different cells by 
+                            referencing the cell names. 
+                            <blockquote><em>Example:</em> Ensure that all teams loaded in the <t>load_teams</t> cell are present 
+                            in the table computed by the <t>compute_stats</t> cell.</blockquote></li>
+                        </ul>
+                        Of course, a global test cell can only refer to the values of <em>previous</em> cells. 
                     </div>
                 </div>
             </section>
