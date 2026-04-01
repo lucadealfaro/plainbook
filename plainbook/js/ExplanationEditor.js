@@ -147,11 +147,19 @@ const ExplanationRenderer = {
         });
         const validateLabel = computed(() => isTestCell.value ? 'Validate code' : 'Validate code');
 
+        const placeholderText = computed(() => {
+            if (mode.value === 'unit_setup') return 'Describe how to prepare the data before running the target cell...';
+            if (mode.value === 'unit_test') return 'Describe what should be checked after the target cell runs...';
+            if (isTestCell.value) return 'Describe what should be tested. For help on writing tests, click on the green information button below.';
+            return 'Explain what the cell should do...';
+        });
+
         return { isEditing, localSource, rendered, enterEditMode, saveChanges,
             cancelEdit, textareaEl, autoResize, saveAndRun, onBlur, localIsLocked,
             isTestCell, clearLabel, generateLabel, stopGenerateLabel, validateLabel,
             generating, onGenCode, validating, onValidate,
-            mode, showRun, showMoveUpDown, showDelete, showTestHelp, showUnitTest, showSaveAndRun };
+            mode, showRun, showMoveUpDown, showDelete, showTestHelp, showUnitTest, showSaveAndRun,
+            placeholderText };
     },
 
     template: /* html */ `
@@ -179,7 +187,7 @@ const ExplanationRenderer = {
                         <span v-else>Run test</span>
                     </button>
                 </template>
-                <button v-if="showTestHelp" class="button is-small mr-1" title="Test Help" @click.stop="$emit('open-test-help')">
+                <button v-if="showTestHelp" class="button is-success is-small mr-1" title="Test Help" @click.stop="$emit('open-test-help')">
                     <span class="icon"><i class="bx bx-info-circle"></i></span>
                 </button>
                 <button class="button is-small" style="opacity: 0.6;"
@@ -256,7 +264,7 @@ const ExplanationRenderer = {
             <textarea 
                 ref="textareaEl"
                 v-model="localSource" 
-                :placeholder="mode === 'unit_setup' ? 'Describe how to prepare the data before running the target cell...' : isTestCell ? 'Describe your test here...' : mode === 'unit_test' ? 'Describe what should be checked after the target cell runs...' : 'Explain what the cell should do...'"
+                :placeholder="placeholderText"
                 class="textarea is-family-monospace mb-2" 
                 rows="1"
                 style="overflow: hidden; resize: none; height: 0;"
@@ -266,7 +274,7 @@ const ExplanationRenderer = {
             </textarea>
             <div style="display: flex; justify-content: space-between; align-items: center;">
                 <div>
-                    <button v-if="isTestCell" class="button is-small" title="Test Help" @mousedown.prevent @click.stop="$emit('open-test-help')">
+                    <button v-if="isTestCell" class="button is-success is-small" title="Test Help" @mousedown.prevent @click.stop="$emit('open-test-help')">
                         <span class="icon"><i class="bx bx-info-circle"></i></span>
                     </button>
                 </div>

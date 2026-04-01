@@ -19,7 +19,7 @@ export default {
                     v-if="cellCount > 0"
                     class="button insert-cell is-warning is-small py-0 px-3"
                     @click.stop="$emit('insert', 'test')">
-                    Insert Test
+                    Insert Global Test
                 </button>
             </div>
         </div>
