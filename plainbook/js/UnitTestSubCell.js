@@ -4,16 +4,12 @@ import CodeCell from './CodeCell.js';
 import ValidationCell from './ValidationCell.js';
 import OutputRenderer from './OutputRenderer.js';
 
-const SETUP_HINT = "Please describe here how to prepare the data before running the target cell below. For instance, you can say that you want to generate and display small sample data, that you want to create a test dataset like the normal one but with only 5 lines and special values in it, and so on.";
-const TEST_HINT = "Write here what should be checked or displayed after the above cell runs.";
-
 export default {
     components: { ExplanationEditor, CodeCell, ValidationCell, OutputRenderer },
     props: ['cell', 'role', 'isActive', 'isLocked', 'running', 'codeValid', 'outputValid'],
     emits: ['save-explanation', 'save-code', 'save-and-run', 'gencode', 'clearcode', 'validate', 'dismiss-validation', 'run', 'interrupt', 'activate'],
     setup(props) {
         const mode = computed(() => props.role === 'setup' ? 'unit_setup' : 'unit_test');
-        const hint = computed(() => props.role === 'setup' ? SETUP_HINT : TEST_HINT);
         const hasError = computed(() => {
             if (!props.cell || !props.cell.outputs) return false;
             return props.cell.outputs.some(out => out.output_type === 'error');
@@ -41,7 +37,7 @@ export default {
             startEditKey.value = Date.now();
         };
 
-        return { mode, hint, hasError, hasCode, explanation, outputVisible, startEditKey, triggerEdit };
+        return { mode, hasError, hasCode, explanation, outputVisible, startEditKey, triggerEdit };
     },
     template: /* html */ `
         <div class="unit-test-sub-cell notebook-cell box p-0 mb-5 is-clipped shadow-sm"
@@ -50,7 +46,7 @@ export default {
              style="cursor: pointer">
             <div class="p-2 has-text-weight-semibold is-size-7 text-muted bg-warning-adaptive"
                  @dblclick="triggerEdit">
-                {{ role === 'setup' ? 'Prepare data' : 'Test results' }}
+                {{ role === 'setup' ? 'Data preparation' : 'Test' }}
             </div>
             <div class="p-0 border-bottom bg-warning-adaptive" @dblclick="triggerEdit">
                 <explanation-editor
