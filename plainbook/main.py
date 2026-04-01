@@ -4,6 +4,8 @@ import asyncio
 import datetime
 from functools import wraps
 import json
+from . import __version__
+from .ai_common import reset_session_tokens
 from .plainbook import CellExecutionError
 import os
 from pathlib import Path
@@ -891,6 +893,12 @@ def debug_request():
     notebook.debug_request()
     return dict(status='success')
 
+@post('/reset_tokens')
+@require_token
+def reset_tokens():
+    reset_session_tokens()
+    return dict(status='success')
+
 
 ################################
 # Server startup
@@ -917,7 +925,6 @@ def logger_middleware(app):
     
     
 def main():
-    from . import __version__
     print(f"Plainbook {__version__}")
     port = find_free_port()
     url = f"http://127.0.0.1:{port}/?token={AUTH_TOKEN}"

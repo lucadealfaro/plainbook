@@ -222,6 +222,15 @@ createApp({
             }
         };
 
+        const resetTokens = async () => {
+            try {
+                await apiCall('/reset_tokens', 'POST');
+                aiTokens.value = { input: 0, output: 0 };
+            } catch (err) {
+                console.error('Failed to reset tokens:', err);
+            }
+        };
+
         const sendExplanationToServer = async (content, cellIndex) => {
             asRead.value = false;
             const savePromise = (async () => {
@@ -1224,7 +1233,7 @@ createApp({
             last_executed_cell_index, last_valid_code_cell_index, last_valid_output_cell_index,
             last_valid_test_cell_index,
             saveSettings, showSettings, showInfo, showTestHelp,
-            genError, uiError, closeUiError, debug, sendDebugRequest,
+            genError, uiError, closeUiError, debug, sendDebugRequest, resetTokens,
             explanationEditKey, deleteCell, moveCell,
             clearOutputs, activeAiProvider, availableAiProviders, setActiveAiProvider, isCodespace, hasGeminiKey, hasClaudeKey, claudeViaBedrock,
             restarting, ui_restart,

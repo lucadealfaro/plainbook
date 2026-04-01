@@ -4,7 +4,7 @@ export default {
     emits: [
         'lock', 'refresh', 'interrupt', 'regenerate-all',
         'restart', 'reset-run-all', 'run-all', 'run-all-tests', 'clear-outputs', 'open-info', 'open-settings', 'debug-request',
-        'set-ai-provider', 'toggle-share-output'
+        'set-ai-provider', 'toggle-share-output', 'reset-tokens'
         ],
     data() {
         return { aiDropdownOpen: false };
@@ -12,7 +12,7 @@ export default {
     computed: {
         totalTokens() {
             if (!this.aiTokens) return 0;
-            return (this.aiTokens.input || 0) + (this.aiTokens.output || 0);
+            return this.aiTokens.input || 0;
         },
         formattedTokens() {
             const t = this.totalTokens;
@@ -190,7 +190,7 @@ export default {
                                 <i :class="shareOutputWithAi ? 'bx bx-shield' : 'bx bx-check-shield'"></i>
                             </span>
                         </button>
-                        <span v-if="debug" class="tag is-dark" :title="'AI tokens: ' + (aiTokens.input || 0) + ' input, ' + (aiTokens.output || 0) + ' output'" style="cursor: default; margin-right: 0.25rem;">
+                        <span v-if="debug" class="tag is-dark" :title="'AI input tokens: ' + (aiTokens.input || 0) + '. Click to reset.'" style="cursor: pointer; margin-right: 0.25rem;" @click="$emit('reset-tokens')">
                             <span class="icon is-small" style="margin-right: 0.25rem;"><i class="bx bx-chip"></i></span>
                             {{ formattedTokens }}
                         </span>
