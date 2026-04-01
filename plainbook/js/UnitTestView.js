@@ -113,7 +113,13 @@ export default {
         };
 
         const rootEl = ref(null);
-        const focusRoot = () => { nextTick(() => rootEl.value?.focus()); };
+        const focusRoot = () => {
+            nextTick(() => {
+                const active = document.activeElement;
+                if (active && (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT')) return;
+                rootEl.value?.focus();
+            });
+        };
 
         const handleKeydown = (e) => {
             if (e.key === 'Enter' && e.shiftKey) {
