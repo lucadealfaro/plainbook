@@ -50,7 +50,7 @@ export default {
              style="cursor: pointer">
             <div class="p-2 has-text-weight-semibold is-size-7 text-muted bg-warning-adaptive"
                  @dblclick="triggerEdit">
-                {{ role === 'setup' ? 'Setup' : 'Test' }}
+                {{ role === 'setup' ? 'Prepare data' : 'Test results' }}
             </div>
             <div class="p-0 border-bottom bg-warning-adaptive" @dblclick="triggerEdit">
                 <explanation-editor

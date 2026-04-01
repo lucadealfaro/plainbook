@@ -222,7 +222,7 @@ const ExplanationRenderer = {
                         @click.stop="$emit('open-unit-test')">
                     <span v-if="unitTestCount" class="unit-test-counter mr-1" style="font-weight: 600;">{{ unitTestCount }}</span>
                     <span class="icon"><i class="bx bx-medical-flask"></i></span>
-                    <span>Test cell</span>
+                    <span>Test this cell</span>
                 </button>
                 <button class="button is-small"
                         :class="isTestCell ? 'is-warning' : 'is-success'"
