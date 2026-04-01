@@ -81,6 +81,9 @@ export default {
             const newName = `Test ${testNum}`;
             emit('add-unit-test', props.targetCellIndex);
             activeTestName.value = newName;
+            // Force the setup sub-cell's isActive watch to fire so it enters edit mode
+            activeSubCell.value = null;
+            nextTick(() => { activeSubCell.value = 'setup'; });
         };
 
         const clearOutputs = () => {
