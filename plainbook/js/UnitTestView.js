@@ -149,6 +149,10 @@ export default {
             <!-- Action buttons bar (between tab bar and scrollable area) -->
             <div v-if="activeTest" class="px-4 py-2" style="display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; box-shadow: 0 2px 4px rgba(0,0,0,0.1);">
                 <div style="display: flex; gap: 0.5rem;">
+                    <button class="button is-success is-small">
+                        <span class="icon"><i class="bx bx-info-circle"></i></span>
+                        <span>Test help</span>
+                    </button>
                     <button class="button is-small is-light"
                             :disabled="running"
                             @click="clearOutputs">

@@ -148,8 +148,8 @@ const ExplanationRenderer = {
         const validateLabel = computed(() => isTestCell.value ? 'Validate code' : 'Validate code');
 
         const placeholderText = computed(() => {
-            if (mode.value === 'unit_setup') return 'Describe how to prepare the data before running the target cell...';
-            if (mode.value === 'unit_test') return 'Describe what should be checked after the target cell runs...';
+            if (mode.value === 'unit_setup') return 'Describe how to prepare the data before running the target cell. For help on testing a cell, click on the green info button above.';
+            if (mode.value === 'unit_test') return 'Describe what should be checked after the target cell runs.';
             if (isTestCell.value) return 'Describe what should be tested. For help on writing tests, click on the green information button below.';
             return 'Explain what the cell should do...';
         });
