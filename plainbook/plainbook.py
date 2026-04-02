@@ -1009,35 +1009,6 @@ class Plainbook:
             self._write()
             return outputs
 
-
-    def _format_ut_subcell_for_ai(self, cell_or_dict, label):
-        """Format a unit test sub-cell (or main cell) for AI context.
-        Works with both nbformat cell objects (for target) and plain dicts (for setup/test).
-        Returns a string like '# Explanation: ...\ncode...' or None if empty."""
-        # Handle both nbformat objects (attribute access) and plain dicts
-        if hasattr(cell_or_dict, 'metadata'):
-            explanation = cell_or_dict.metadata.get('explanation', '')
-            source = cell_or_dict.source or ''
-        else:
-            explanation = cell_or_dict.get('metadata', {}).get('explanation', '')
-            source = cell_or_dict.get('source', '')
-        if not explanation and not source:
-            return None
-        parts = []
-        if explanation:
-            parts.append(f"# {label.capitalize()} explanation: {explanation}")
-        if source:
-            parts.append(f"# {label.capitalize()} code:\n{source}")
-        return "\n".join(parts)
-
-    def _ut_extract_error_context(self, outputs):
-        """Extract error traceback from unit test sub-cell outputs."""
-        for output in reversed(outputs):
-            if output.get('output_type') == 'error':
-                return ("The previous attempt to run this cell resulted in this error traceback:\n"
-                        + "\n".join(getlist(output.get('traceback', []))))
-        return None
-
  
     # Methods to support AI
 
@@ -1137,7 +1108,7 @@ class Plainbook:
         return -1
 
 
-    def _get_previous_code_cell(self, index):
+    def _get_preceding_code_cell(self, index):
         """Returns the last code cell before the given index, or None if none exists."""
         prev_index = self._get_previous_code_cell_index(index)
         return self.nb.cells[prev_index] if prev_index >= 0 else None
@@ -1183,7 +1154,7 @@ class Plainbook:
             unit_tests = cell.metadata.get('unit_tests', {})
             if unit_tests:
                 # State before unit tests = state of the previous code cell
-                prev_code_cell = self._get_previous_code_cell(i)
+                prev_code_cell = self._get_preceding_code_cell(i)
                 if prev_code_cell is not None:
                     prev_state = self._cell_states.get(prev_code_cell.id)
                 else:
@@ -1206,34 +1177,29 @@ class Plainbook:
         sys.stdout.flush()
 
 
-    def _get_preceding_code_for_ai(self, index, include_all_variables=True):
-        """Returns the JSON representation of all previous code cells for context.
-        If include_all_variables is False, strip variables metadata and outputs
-        from all cells, to reduce prompt size."""
-        # There are two cases.  If output is included, we give the prior notebook in json,
-        # so there is a clear place for the outputs. But if the outputs are not included, 
-        # then we might as well be more concise and use only text. 
+    def _get_cell_text_for_ai(self, cell):
+        """Returns the text representation of a single cell for AI context."""
+        lines = cell.source.split("\n")
+        if cell.metadata.get('name'):
+            s = f"# Cell {cell.metadata.get('name', '')}:\n"
+        else:
+            s = "# Cell:\n"
+        s += "\n".join(lines) + "\n\n"
+        if self.nb.metadata.get('share_output_with_ai', True):
+            s += "# Outputs:\n"
+            for o in cell.outputs:
+                o_lines = json.dumps(o, default=str, indent=2).split("\n")
+                s += "\n".join([f"# {l}" for l in o_lines]) + "\n"
+            s += "\n"
+        return s
+
+
+    def _get_preceding_code_for_ai(self, index):
+        """Returns text representation of all previous code cells for context.
+        If include_all_variables is False, strip outputs from all cells to reduce prompt size."""
         cells = [self._get_cell_json_for_ai(self.nb.cells[i]) for i in range(index)
                 if self.nb.cells[i].cell_type != 'test']
-        if not include_all_variables:
-            # Strips variables and outputs from previous cels. 
-            # Find the last code cell and strip variables/outputs from all others.
-            for _, cell in enumerate(cells):
-                if 'variables' in cell.metadata:
-                    cell.metadata.pop('variables', None)
-                cell.outputs = []
-        s = ""
-        for c in cells:
-            lines = c.source.split("\n")
-            s += f"# Cell {c.metadata.get('name', '')}:\n"
-            s += "\n".join(lines) + "\n\n"
-            if self.nb.metadata.get('share_output_with_ai', True):
-                s += "# Outputs:\n"
-                for o in c.outputs:
-                    o_lines = json.dumps(o, default=str, indent=2).split("\n")
-                    s += "\n".join([f"# {l}" for l in o_lines]) + "\n"
-                s += "\n"
-        return s
+        return "".join(self._get_cell_text_for_ai(c) for c in cells)
 
 
     def _get_cell_w_change_noted(self, cell):
@@ -1241,8 +1207,7 @@ class Plainbook:
         if cell.cell_type != 'code' or cell.source is None or cell.source.strip() == "":
             return None
         code_string = self._get_cell_json_for_ai(cell)
-        lines = [line + "\n" for line in code_string.source.split("\n")]
-        source = json.dumps({"source": lines}, indent=2)
+        source = self._get_cell_text_for_ai(cell)
         if cell.metadata['explanation_timestamp'] < cell.metadata['code_timestamp']:
             return PREVIOUS_CODE_NEEDS_REVISION.format(code_string=source)
         else:
@@ -1255,6 +1220,7 @@ class Plainbook:
         if ai_instructions:
             return explanation + "\n\nADDITIONAL INSTRUCTIONS:\n" + ai_instructions
         return explanation
+    
 
     def _is_previous_code_and_output_valid(self, index):
         last_code_cell_idx = self._get_previous_code_cell_index(index)
@@ -1262,7 +1228,36 @@ class Plainbook:
             return True # No previous code.
         # If we share output with AI, then we need valid output, but in any case we need valid variables.  
         return self.last_valid_output_cell >= last_code_cell_idx
+
             
+    def _format_ut_subcell_for_ai(self, cell_or_dict, label):
+        """Format a unit test sub-cell (or main cell) for AI context.
+        Works with both nbformat cell objects (for target) and plain dicts (for setup/test).
+        Returns a string like '# Explanation: ...\ncode...' or None if empty."""
+        # Handle both nbformat objects (attribute access) and plain dicts
+        if hasattr(cell_or_dict, 'metadata'):
+            explanation = cell_or_dict.metadata.get('explanation', '')
+            source = cell_or_dict.source or ''
+        else:
+            explanation = cell_or_dict.get('metadata', {}).get('explanation', '')
+            source = cell_or_dict.get('source', '')
+        if not explanation and not source:
+            return None
+        parts = []
+        if explanation:
+            parts.append(f"# {label.capitalize()} explanation: {explanation}")
+        if source:
+            parts.append(f"# {label.capitalize()} code:\n{source}")
+        return "\n".join(parts)
+
+    def _ut_extract_error_context(self, outputs):
+        """Extract error traceback from unit test sub-cell outputs."""
+        for output in reversed(outputs):
+            if output.get('output_type') == 'error':
+                return ("The previous attempt to run this cell resulted in this error traceback:\n"
+                        + "\n".join(getlist(output.get('traceback', []))))
+        return None
+
 
     def generate_code_cell(self, api_key, index, ai_provider="gemini", model=None, validation_feedback=None):
         """Generates code for a code or test cell at index using the specified AI provider."""
@@ -1276,7 +1271,7 @@ class Plainbook:
             is_test = (cell.cell_type == 'test')
             instructions = self._get_instructions(cell.metadata.get('explanation'))
             files_context = self._get_files_context()
-            previous_code_cell = self._get_previous_code_cell(index)
+            previous_code_cell = self._get_preceding_code_cell(index)
             error_context = self._get_error_context(index)
             variable_context = self._get_variables_for_ai(previous_code_cell) if previous_code_cell else ""
             preceding_code = self._get_preceding_code_for_ai(index, include_all_variables=is_test)
@@ -1435,16 +1430,16 @@ class Plainbook:
             preceding_code = self._get_preceding_code_for_ai(cell_index, include_all_variables=False)
 
             # Previous code for the sub-cell being generated
-            existing_source = sub_cell.get('source', '').strip()
+            existing_source = self._get_cell_text_for_ai(sub_cell)
             previous_code = (PREVIOUS_CODE_EXPLANATION_CHANGED.format(code_string=existing_source)
                              if existing_source else None)
 
             # Role-specific context
             if role == 'setup':
-                previous_code_cell = self._get_previous_code_cell(cell_index)
-                variable_context = self._get_variables_for_ai(previous_code_cell) if previous_code_cell else ""
+                preceding_code_cell = self._get_preceding_code_cell(cell_index)
+                variable_context = self._get_variables_for_ai(preceding_code_cell) if preceding_code_cell else ""
                 # Compute variables the target cell accesses that come from previous cells
-                prev_variables = previous_code_cell.metadata.get('variables', {}) if previous_code_cell else {}
+                prev_variables = preceding_code_cell.metadata.get('variables', {}) if preceding_code_cell else {}
                 prev_var_names = set(prev_variables.keys()) - set(self.default_variables.keys())
                 target_accessed = self._get_target_accessed_variables(target_cell.source or '')
                 relevant_vars = prev_var_names & target_accessed
@@ -1520,7 +1515,7 @@ class Plainbook:
             code_to_validate = cell.source
             instructions = self._get_instructions(cell.metadata.get('explanation'))
             previous_code = self._get_preceding_code_for_ai(index, include_all_variables=(cell.cell_type == 'test'))
-            previous_code_cell = self._get_previous_code_cell(index)
+            previous_code_cell = self._get_preceding_code_cell(index)
             variable_context = self._get_variables_for_ai(previous_code_cell) if previous_code_cell else ""
             try:
                 validate_fn = AI_PROVIDERS[ai_provider]["validate"]
@@ -1563,7 +1558,7 @@ class Plainbook:
             preceding_code = self._get_preceding_code_for_ai(
                 cell_index, include_all_variables=False)
             if role == 'setup':
-                previous_code_cell = self._get_previous_code_cell(cell_index)
+                previous_code_cell = self._get_preceding_code_cell(cell_index)
                 variable_context = self._get_variables_for_ai(previous_code_cell) if previous_code_cell else ""
             else:
                 target_variables = unit_test['cells'].get('target', {}).get('variables', {})
