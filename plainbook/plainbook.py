@@ -1185,7 +1185,7 @@ class Plainbook:
         else:
             s = "# Cell:\n"
         s += "\n".join(lines) + "\n\n"
-        if self.nb.metadata.get('share_output_with_ai', True):
+        if self.nb.metadata.get('share_output_with_ai', True) and len(cell.outputs) > 0:
             s += "# Outputs:\n"
             for o in cell.outputs:
                 o_lines = json.dumps(o, default=str, indent=2).split("\n")
@@ -1195,8 +1195,7 @@ class Plainbook:
 
 
     def _get_preceding_code_for_ai(self, index):
-        """Returns text representation of all previous code cells for context.
-        If include_all_variables is False, strip outputs from all cells to reduce prompt size."""
+        """Returns text representation of all previous code cells for context."""
         cells = [self._get_cell_json_for_ai(self.nb.cells[i]) for i in range(index)
                 if self.nb.cells[i].cell_type != 'test']
         return "".join(self._get_cell_text_for_ai(c) for c in cells)
@@ -1206,7 +1205,6 @@ class Plainbook:
         """Returns the source code of the cell at index for context."""
         if cell.cell_type != 'code' or cell.source is None or cell.source.strip() == "":
             return None
-        code_string = self._get_cell_json_for_ai(cell)
         source = self._get_cell_text_for_ai(cell)
         if cell.metadata['explanation_timestamp'] < cell.metadata['code_timestamp']:
             return PREVIOUS_CODE_NEEDS_REVISION.format(code_string=source)
@@ -1243,12 +1241,16 @@ class Plainbook:
             source = cell_or_dict.get('source', '')
         if not explanation and not source:
             return None
-        parts = []
+        lines = []
         if explanation:
-            parts.append(f"# {label.capitalize()} explanation: {explanation}")
+            lines.append(f"# {label.capitalize()} explanation:")
+            lines.extend(f"# {l}" for l in explanation.split("\n"))
+            lines.append("")  # Blank line between explanation and code
         if source:
-            parts.append(f"# {label.capitalize()} code:\n{source}")
-        return "\n".join(parts)
+            lines.append(f"# {label.capitalize()} code:")
+            lines.extend(source.split("\n"))
+        return "\n".join(lines)
+
 
     def _ut_extract_error_context(self, outputs):
         """Extract error traceback from unit test sub-cell outputs."""
@@ -1274,7 +1276,7 @@ class Plainbook:
             previous_code_cell = self._get_preceding_code_cell(index)
             error_context = self._get_error_context(index)
             variable_context = self._get_variables_for_ai(previous_code_cell) if previous_code_cell else ""
-            preceding_code = self._get_preceding_code_for_ai(index, include_all_variables=is_test)
+            preceding_code = self._get_preceding_code_for_ai(index)
             previous_code = self._get_cell_w_change_noted(cell)
             # Mark that an AI request is pending
             if self.ai_request_pending:
@@ -1427,7 +1429,7 @@ class Plainbook:
             instructions = self._get_instructions(sub_cell['metadata'].get('explanation', ''))
             files_context = self._get_files_context()
             error_context = self._ut_extract_error_context(sub_cell.get('outputs', []))
-            preceding_code = self._get_preceding_code_for_ai(cell_index, include_all_variables=False)
+            preceding_code = self._get_preceding_code_for_ai(cell_index)
 
             # Previous code for the sub-cell being generated
             existing_source = self._get_cell_text_for_ai(sub_cell)
@@ -1514,7 +1516,7 @@ class Plainbook:
             assert cell.cell_type in ('code', 'test')
             code_to_validate = cell.source
             instructions = self._get_instructions(cell.metadata.get('explanation'))
-            previous_code = self._get_preceding_code_for_ai(index, include_all_variables=(cell.cell_type == 'test'))
+            previous_code = self._get_preceding_code_for_ai(index)
             previous_code_cell = self._get_preceding_code_cell(index)
             variable_context = self._get_variables_for_ai(previous_code_cell) if previous_code_cell else ""
             try:
@@ -1555,8 +1557,7 @@ class Plainbook:
             code_to_validate = sub_cell.get('source', '')
             instructions = self._get_instructions(sub_cell.get('metadata', {}).get('explanation', ''))
             # Build context similar to generate_unit_test_cell
-            preceding_code = self._get_preceding_code_for_ai(
-                cell_index, include_all_variables=False)
+            preceding_code = self._get_preceding_code_for_ai(cell_index)
             if role == 'setup':
                 previous_code_cell = self._get_preceding_code_cell(cell_index)
                 variable_context = self._get_variables_for_ai(previous_code_cell) if previous_code_cell else ""
