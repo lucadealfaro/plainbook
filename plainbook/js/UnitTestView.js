@@ -11,17 +11,25 @@ import UnitTestHelpModal from './UnitTestHelpModal.js';
 export default {
     components: { UnitTestTabBar, UnitTestSubCell, ExplanationEditor, CodeCell, ValidationCell, OutputRenderer, CellLabel, UnitTestHelpModal },
     props: ['notebook', 'targetCellIndex', 'authToken', 'running', 'runningActivity',
-            'isLocked', 'lastValidCodeCellIndex', 'lastValidOutputCellIndex', 'unitTestValidity'],
+            'isLocked', 'lastValidCodeCellIndex', 'lastValidOutputCellIndex', 'unitTestValidity',
+            'activeSubCell', 'activeTestName'],
     emits: ['exit',
             'save-unit-tests', 'save-unit-test-explanation', 'save-unit-test-code',
-            'clear-unit-test-code', 'clear-unit-test-outputs', 'run-unit-test', 'generate-unit-test-code',
+            'clear-unit-test-code', 'clear-unit-test-outputs', 'run-unit-test', 'run-unit-test-subcell', 'generate-unit-test-code',
             'validate-unit-test-code', 'dismiss-unit-test-validation',
             'add-unit-test', 'delete-unit-test', 'rename-unit-test',
             'save-explanation', 'save-code', 'gencode', 'clearcode', 'validate', 'dismiss-validation',
-            'interrupt'],
+            'interrupt',
+            'update:activeSubCell', 'update:activeTestName'],
     setup(props, { emit }) {
-        const activeTestName = ref(null);
-        const activeSubCell = ref('setup');
+        const activeTestName = computed({
+            get: () => props.activeTestName,
+            set: (v) => emit('update:activeTestName', v),
+        });
+        const activeSubCell = computed({
+            get: () => props.activeSubCell,
+            set: (v) => emit('update:activeSubCell', v),
+        });
 
         const targetCell = computed(() => {
             if (!props.notebook || !props.notebook.cells) return null;
@@ -121,16 +129,6 @@ export default {
             });
         };
 
-        const handleKeydown = (e) => {
-            if (e.key === 'Enter' && e.shiftKey) {
-                if (e.target?.tagName === 'TEXTAREA' || e.target?.tagName === 'INPUT') return;
-                e.preventDefault();
-                emit('run-unit-test', props.targetCellIndex, activeTestName.value);
-                if (activeSubCell.value === 'setup') activeSubCell.value = 'target';
-                else if (activeSubCell.value === 'target') activeSubCell.value = 'test';
-            }
-        };
-
         const showHelp = ref(false);
 
         // Focus root div when entering unit test mode
@@ -140,12 +138,12 @@ export default {
             activeTestName, activeSubCell, targetCell, unitTests, activeTest,
             hasTargetError, targetCodeValid, targetOutputValid, targetOutputVisible,
             activeTestValidity, setupCodeValid, setupOutputValid, testCodeValid, testOutputValid,
-            targetTestOutputs, handleAdd, handleDelete, clearOutputs, handleKeydown,
+            targetTestOutputs, handleAdd, handleDelete, clearOutputs,
             rootEl, focusRoot, showHelp
         };
     },
     template: /* html */ `
-        <div v-if="targetCell" ref="rootEl" tabindex="-1" @keydown="handleKeydown" style="display: flex; flex-direction: column; flex-grow: 1; min-height: 0; outline: none;">
+        <div v-if="targetCell" ref="rootEl" tabindex="-1" style="display: flex; flex-direction: column; flex-grow: 1; min-height: 0; outline: none;">
             <unit-test-tab-bar
                 :tests="unitTests"
                 :active-name="activeTestName"
@@ -198,12 +196,12 @@ export default {
                     :output-valid="setupOutputValid"
                     @save-explanation="(content) => $emit('save-unit-test-explanation', targetCellIndex, activeTestName, 'setup', content)"
                     @save-code="(content) => $emit('save-unit-test-code', targetCellIndex, activeTestName, 'setup', content)"
-                    @save-and-run="(content) => { $emit('save-unit-test-explanation', targetCellIndex, activeTestName, 'setup', content); $emit('run-unit-test', targetCellIndex, activeTestName); activeSubCell = 'target'; }"
+                    @save-and-run="(content) => { $emit('save-unit-test-explanation', targetCellIndex, activeTestName, 'setup', content); $emit('run-unit-test-subcell', targetCellIndex, activeTestName, 'setup'); activeSubCell = 'target'; }"
                     @gencode="$emit('generate-unit-test-code', targetCellIndex, activeTestName, 'setup')"
                     @clearcode="$emit('clear-unit-test-code', targetCellIndex, activeTestName, 'setup')"
                     @validate="$emit('validate-unit-test-code', targetCellIndex, activeTestName, 'setup')"
                     @dismiss-validation="$emit('dismiss-unit-test-validation', targetCellIndex, activeTestName, 'setup')"
-                    @run="$emit('run-unit-test', targetCellIndex, activeTestName)"
+                    @run="$emit('run-unit-test-subcell', targetCellIndex, activeTestName, 'setup')"
                     @interrupt="$emit('interrupt')"
                 />
 
@@ -235,9 +233,9 @@ export default {
                             @gencode="$emit('gencode')"
                             @clearcode="$emit('clearcode')"
                             @validate="$emit('validate')"
-                            @run="$emit('run-unit-test', targetCellIndex, activeTestName)"
+                            @run="$emit('run-unit-test-subcell', targetCellIndex, activeTestName, 'target')"
                             @interrupt="$emit('interrupt')"
-                            @saveandrun="(content) => { $emit('save-explanation', content); $emit('run-unit-test', targetCellIndex, activeTestName); activeSubCell = 'test'; }"
+                            @saveandrun="(content) => { $emit('save-explanation', content); $emit('run-unit-test-subcell', targetCellIndex, activeTestName, 'target'); activeSubCell = 'test'; }"
                             @delete=""
                             @moveUp=""
                             @moveDown="" />
@@ -278,12 +276,12 @@ export default {
                     :output-valid="testOutputValid"
                     @save-explanation="(content) => $emit('save-unit-test-explanation', targetCellIndex, activeTestName, 'test', content)"
                     @save-code="(content) => $emit('save-unit-test-code', targetCellIndex, activeTestName, 'test', content)"
-                    @save-and-run="(content) => { $emit('save-unit-test-explanation', targetCellIndex, activeTestName, 'test', content); $emit('run-unit-test', targetCellIndex, activeTestName); }"
+                    @save-and-run="(content) => { $emit('save-unit-test-explanation', targetCellIndex, activeTestName, 'test', content); $emit('run-unit-test-subcell', targetCellIndex, activeTestName, 'test'); }"
                     @gencode="$emit('generate-unit-test-code', targetCellIndex, activeTestName, 'test')"
                     @clearcode="$emit('clear-unit-test-code', targetCellIndex, activeTestName, 'test')"
                     @validate="$emit('validate-unit-test-code', targetCellIndex, activeTestName, 'test')"
                     @dismiss-validation="$emit('dismiss-unit-test-validation', targetCellIndex, activeTestName, 'test')"
-                    @run="$emit('run-unit-test', targetCellIndex, activeTestName)"
+                    @run="$emit('run-unit-test-subcell', targetCellIndex, activeTestName, 'test')"
                     @interrupt="$emit('interrupt')"
                 />
             </div>

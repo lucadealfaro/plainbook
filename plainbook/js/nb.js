@@ -844,6 +844,8 @@ createApp({
         // Unit test mode state and methods
 
         const unitTestTargetIndex = ref(null);
+        const unitTestActiveSubcell = ref('setup');
+        const unitTestActiveTestName = ref(null);
         const unitTestValidity = ref({});
 
         function newSubCell() {
@@ -1052,44 +1054,51 @@ createApp({
             return r;
         };
 
-        const executeUnitTest = async (cellIndex, testName) => {
-            // 1. Ensure main notebook cells up to cellIndex-1 are executed.
-            // Only call runCells if we haven't executed far enough yet.
-            // Do NOT call runCells when the notebook is already executed past
-            // cellIndex, as that would reset the kernel and invalidate all
-            // downstream states unnecessarily.
+        // Ensure prerequisites for any unit test sub-cell execution:
+        // main notebook cells executed, target cell code generated.
+        const ensureUnitTestPrereqs = async (cellIndex) => {
             if (cellIndex > 0 && last_executed_cell_index.value < cellIndex - 1) {
                 await runCells(cellIndex - 1);
             }
             if (!running.value) return;
-
-            // 2. Ensure target cell has valid code (setup code generation
-            //    needs to know what the target reads)
             if (last_valid_code_cell_index.value < cellIndex) {
                 await generateCode(cellIndex);
             }
-            if (!running.value) return;
+        };
 
+        // Generate setup code if needed and execute setup.
+        const runUnitTestSetup = async (cellIndex, testName) => {
             const cell = notebook.value.cells[cellIndex];
             const test = cell.metadata.unit_tests[testName];
             const validity = unitTestValidity.value?.[testName];
-
-            // 3. Generate setup code if needed (empty or invalid), then execute setup
             const setupHasExplanation = (test.cells.setup.metadata?.explanation || '').trim();
             const setupCodeInvalid = !validity?.setup?.code_valid;
             if (setupHasExplanation && (!(test.cells.setup.source || '').trim() || setupCodeInvalid)) {
                 await generateUnitTestCodeInner(cellIndex, testName, 'setup');
             }
             if (!running.value) return;
-            // Execute setup (even if empty — server handles no-op)
             await executeUnitTestCell(cellIndex, testName, 'setup');
-            if (!running.value) return;
+        };
 
-            // 4. Execute target
+        // Run setup if needed, then execute target.
+        const runUnitTestTarget = async (cellIndex, testName) => {
+            const validity = unitTestValidity.value?.[testName];
+            if (!validity?.setup?.output_valid) {
+                await runUnitTestSetup(cellIndex, testName);
+            }
+            if (!running.value) return;
             await executeUnitTestCell(cellIndex, testName, 'target');
-            if (!running.value) return;
+        };
 
-            // 5. Generate test code if needed (empty or invalid), then execute test
+        // Run setup + target if needed, then generate test code if needed and execute test.
+        const runUnitTestTest = async (cellIndex, testName) => {
+            const validity = unitTestValidity.value?.[testName];
+            if (!validity?.target?.output_valid) {
+                await runUnitTestTarget(cellIndex, testName);
+            }
+            if (!running.value) return;
+            const cell = notebook.value.cells[cellIndex];
+            const test = cell.metadata.unit_tests[testName];
             const testHasExplanation = (test.cells.test.metadata?.explanation || '').trim();
             const testCodeInvalid = !validity?.test?.code_valid;
             if (testHasExplanation && (!(test.cells.test.source || '').trim() || testCodeInvalid)) {
@@ -1099,7 +1108,28 @@ createApp({
             if ((test.cells.test.source || '').trim()) {
                 await executeUnitTestCell(cellIndex, testName, 'test');
             }
+        };
 
+        const executeUnitTest = async (cellIndex, testName) => {
+            // Full run: prerequisites, then setup, target, test.
+            await ensureUnitTestPrereqs(cellIndex);
+            if (!running.value) return;
+            await runUnitTestSetup(cellIndex, testName);
+            if (!running.value) return;
+            await executeUnitTestCell(cellIndex, testName, 'target');
+            if (!running.value) return;
+            const cell = notebook.value.cells[cellIndex];
+            const test = cell.metadata.unit_tests[testName];
+            const validity = unitTestValidity.value?.[testName];
+            const testHasExplanation = (test.cells.test.metadata?.explanation || '').trim();
+            const testCodeInvalid = !validity?.test?.code_valid;
+            if (testHasExplanation && (!(test.cells.test.source || '').trim() || testCodeInvalid)) {
+                await generateUnitTestCodeInner(cellIndex, testName, 'test');
+            }
+            if (!running.value) return;
+            if ((test.cells.test.source || '').trim()) {
+                await executeUnitTestCell(cellIndex, testName, 'test');
+            }
         };
 
         const ui_runUnitTest = async (cellIndex, testName) => {
@@ -1109,6 +1139,28 @@ createApp({
                 running.value = true;
                 try {
                     await executeUnitTest(cellIndex, testName);
+                } finally {
+                    running.value = false;
+                    runningActivity.value = { type: null, cellIndex: null };
+                }
+            }
+        };
+
+        const ui_runUnitTestSubcell = async (cellIndex, testName, role) => {
+            flushActiveEdits();
+            await waitForPendingSaves();
+            if (!running.value) {
+                running.value = true;
+                try {
+                    await ensureUnitTestPrereqs(cellIndex);
+                    if (!running.value) return;
+                    if (role === 'setup') {
+                        await runUnitTestSetup(cellIndex, testName);
+                    } else if (role === 'target') {
+                        await runUnitTestTarget(cellIndex, testName);
+                    } else if (role === 'test') {
+                        await runUnitTestTest(cellIndex, testName);
+                    }
                 } finally {
                     running.value = false;
                     runningActivity.value = { type: null, cellIndex: null };
@@ -1143,15 +1195,25 @@ createApp({
             }
 
             if (e.key === 'Enter' && e.shiftKey) {
+                if (isEditingField(e.target)) return;
                 if (!notebook.value || activeIndex.value < 0) return;
-                if (unitTestTargetIndex.value !== null) return;
                 e.preventDefault();
-                const cell = notebook.value.cells[activeIndex.value];
-                if (cell && (cell.cell_type === 'code' || cell.cell_type === 'test')) {
-                    ui_runCell(activeIndex.value);
+                if (unitTestTargetIndex.value !== null) {
+                    // Unit test mode: run the active sub-cell and advance.
+                    const testName = unitTestActiveTestName.value;
+                    if (testName) {
+                        ui_runUnitTestSubcell(unitTestTargetIndex.value, testName, unitTestActiveSubcell.value);
+                        if (unitTestActiveSubcell.value === 'setup') unitTestActiveSubcell.value = 'target';
+                        else if (unitTestActiveSubcell.value === 'target') unitTestActiveSubcell.value = 'test';
+                    }
+                } else {
+                    const cell = notebook.value.cells[activeIndex.value];
+                    if (cell && (cell.cell_type === 'code' || cell.cell_type === 'test')) {
+                        ui_runCell(activeIndex.value);
+                    }
+                    const next = Math.min(activeIndex.value + 1, total - 1);
+                    if (next !== activeIndex.value) setActiveCell(next);
                 }
-                const next = Math.min(activeIndex.value + 1, total - 1);
-                if (next !== activeIndex.value) setActiveCell(next);
             }
         };
 
@@ -1238,10 +1300,10 @@ createApp({
             clearOutputs, activeAiProvider, availableAiProviders, setActiveAiProvider, isCodespace, hasGeminiKey, hasClaudeKey, claudeViaBedrock,
             restarting, ui_restart,
             ui_runTestCell, ui_runAllTests, ui_saveExplanationAndRunTest, ui_forceRegenerateTestCode,
-            unitTestTargetIndex, enterUnitTestMode, exitUnitTestMode,
+            unitTestTargetIndex, unitTestActiveSubcell, unitTestActiveTestName, enterUnitTestMode, exitUnitTestMode,
             addUnitTest, deleteUnitTest, renameUnitTest,
             saveUnitTestExplanation, saveUnitTestCode, clearUnitTestCode, clearUnitTestOutputs,
-            ui_runUnitTest, generateUnitTestCode, unitTestValidity,
+            ui_runUnitTest, ui_runUnitTestSubcell, generateUnitTestCode, unitTestValidity,
             ui_validateUnitTestCode, dismissUnitTestValidation };
     },
 
