@@ -2,8 +2,6 @@ const NotebookHelp = {
     template: /* html */ `
         <div class="help-container p-5">
             <div class="content">
-                <h1 class="title">Plainbook</h1>
-
                 <p>A Plainbook is a document that contains a series of cells. 
                 The cells describe in plain language what you want to do.  Your instructions are translated into code and executed.
                 <strong>You need at least one AI API key to use Plainbook</strong>, which you can set in the settings menu.</p>
@@ -21,7 +19,8 @@ const NotebookHelp = {
                     <li><strong>Run:</strong> Click the play button to execute the notebook up to the current cell.  
                     Any missing code is generated before the cells are run.</li>
                     <li><strong>Regenerate Code:</strong> Ask AI to generate or fix code based on your description.</li>
-                    <li><strong>Validate Code:</strong> Check if the generated code matches your description.</li>
+                    <li><strong>Validate Code:</strong> Check if the generated code matches your description. You can use one AI
+                    to check on the work of another.</li>
                     <li><strong>Move:</strong> Use arrow buttons to reorder cells.</li>
                     <li><strong>Delete:</strong> Click the trash button to remove a cell</li>
                 </ul>
@@ -29,10 +28,28 @@ const NotebookHelp = {
                 If you click "Run" on a cell, all preceding cells will be executed first to ensure that the notebook 
                 is always in a consistent state.</p>
 
-                <h2 class="title is-4">Working with Test Cells</h2>
-                <p>Test cells allow you to check that the plainbook is working as expected. 
-                You can write properties that should hold after a cell is executed, and you can even compare the state of the notebook after different cells.
-                For more details on how to write tests, create a test cell and click on the information button.</p>
+                <h2 class="title is-4">Buttons and Settings</h2>
+                <ul style="list-style: none; padding-left: 0;">
+                <li class="mb-2"><button class="button is-small is-light"><i class="bx bx-lock-open"></i></button> 
+                Toggles between read-only and editable modes.</li>
+                <li class="mb-2"><button class="button is-small is-light"><i class="bx bx-broom"></i></button> 
+                Clear all outputs.</li>
+                <li class="mb-2"><button class="button is-small is-primary"><i class="bx bx-rewind"></i></button> 
+                Reset the execution state, so that you can rerun the notebook from the start.</li>
+                <!-- <li class="mb-2"><button class="button is-small is-primary"><i class="bx bx-keyframe-ease-in"></i></button> 
+                Run the notebook from the beginning to the end.</li> -->
+                <li class="mb-2"><button class="button is-small is-primary"><i class="bx bx-play"></i></button> 
+                Run all cells (except tests).</li>
+                <li class="mb-2"><button class="button is-small is-warning"><i class="bx bx-seal-check"></i></button> 
+                Run all tests.  Tests are not run when you run the notebook.</li>
+                <li class="mb-2"><button class="button is-small is-success"><i class="bx bx-shield"></i></button> 
+                Toggles whether cell output is shared with AI (check not shown) or not (check shown).  
+                If you are working with sensitive data, you may not want to share the cell outputs with AI. 
+                Sharing the outputs with AI helps generate better code, and is the default setting for a notebook.</li>
+                <li class="mb-2"><button class="button is-small is-light"><i class="bx bx-light-bulb"></i></button> 
+                This dropdown allows you to switch between different AI models.</li>
+                </ul>
+                
 
                 <h2 class="title is-4">Reading Files</h2>
                 <p>To read a file, first select it using the file manager at the top.  
@@ -42,31 +59,17 @@ const NotebookHelp = {
                 <p>The tab contains an indication of how many files you have selected. 
                 In red are indicated files that cannot be found in the file system; pleaes re-select them. </p>
 
+                <h2 class="title is-4">Testing Your Work</h2>
+                <p>There are two ways to test your work.</p>
+                <p><strong>Global test cells:</strong> You can insert test cells to verify the results of the preceding cell, 
+                or to perform more complex checks referencing multiple previous cells.</p>
+                <p><strong>Testing individual cells:</strong> You can also test individual cells by preparing 
+                specific data for them, running the cell, and inspecting or testing the results.  
+                This is especially useful when working with data, as you can test both normal data and edge cases.</p>
+
                 <h2 class="title is-4">Instructions</h2>
                 <p>In the instructions tab, you can write global instructions to be used in generating code. 
                 You can include here information on APIs to use, and so on. </p>
-
-                <h2 class="title is-4">Buttons and Settings</h2>
-                <ul style="list-style: none; padding-left: 0;">
-                    <li class="mb-2"><button class="button is-small is-light"><i class="bx bx-lock-open"></i></button> 
-                    You can use this button to toggle the read-only state of the notebook.  A read-only notebook can be run, but cannot be accidentally modified.</li>
-                    <li class="mb-2"><button class="button is-small is-light"><i class="bx bx-broom"></i></button> 
-                    Clear all outputs.</li>
-                    <li class="mb-2"><button class="button is-small is-primary"><i class="bx bx-rewind"></i></button> 
-                    Reset the execution state, so that you can rerun the notebook from the start.</li>
-                    <!-- <li class="mb-2"><button class="button is-small is-primary"><i class="bx bx-keyframe-ease-in"></i></button> 
-                    Run the notebook from the beginning to the end.</li> -->
-                    <li class="mb-2"><button class="button is-small is-primary"><i class="bx bx-play"></i></button> 
-                    Run all cells (except tests).</li>
-                    <li class="mb-2"><button class="button is-small is-warning"><i class="bx bx-seal-check"></i></button> 
-                    Run all tests.  Tests are not run when you run the notebook.</li>
-                    <li class="mb-2"><button class="button is-small is-success"><i class="bx bx-shield"></i></button> 
-                    Toggles whether cell output is shared with AI (check not shown) or not (check shown).  
-                    If you are working with sensitive data, you may not want to share the cell outputs with AI. 
-                    Sharing the outputs with AI helps generate better code, and is the default setting for a notebook.</li>
-                    <li class="mb-2"><button class="button is-small is-light"><i class="bx bx-light-bulb"></i></button> 
-                    This dropdown allows you to switch between different AI models.</li>
-                </ul>
 
                 <h2 class="title is-4">Tips for Best Results</h2>
                 <ul>

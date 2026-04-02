@@ -12,7 +12,6 @@ export default {
             <section class="modal-card-body">
                 <div class="help-container p-5">
                     <div class="content">
-                        <h2 class="title is-4">How to test a cell</h2>
                         <p>
                         The cell being tested is copied here as the <em>Target Cell</em>. 
                         Testing it consists of three steps: 

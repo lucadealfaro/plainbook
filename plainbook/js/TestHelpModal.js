@@ -12,7 +12,6 @@ export default {
             <section class="modal-card-body">
                 <div class="help-container p-5">
                     <div class="content">
-                        <h2 class="title is-4">Global Test Cells</h2>
                         <p>
                         Global test cells allow you to write tests that the notebook should satisfy.
                         </p><p>
