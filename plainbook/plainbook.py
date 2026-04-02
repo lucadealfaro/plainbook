@@ -1186,8 +1186,9 @@ class Plainbook:
             s = "# Cell:\n"
         s += "\n".join(lines) + "\n\n"
         if self.nb.metadata.get('share_output_with_ai', True) and len(cell.outputs) > 0:
+            clean_outputs = self._filter_outputs_for_ai(cell.outputs)
             s += "# Outputs:\n"
-            for o in cell.outputs:
+            for o in clean_outputs:
                 o_lines = json.dumps(o, default=str, indent=2).split("\n")
                 s += "\n".join([f"# {l}" for l in o_lines]) + "\n"
             s += "\n"
@@ -1249,6 +1250,14 @@ class Plainbook:
         if source:
             lines.append(f"# {label.capitalize()} code:")
             lines.extend(source.split("\n"))
+        outputs = cell_or_dict.get('outputs', [])
+        if self.nb.metadata.get('share_output_with_ai', True) and len(outputs) > 0:
+            clean_outputs = self._filter_outputs_for_ai(outputs)
+            lines.append("# Outputs:\n")
+            for o in clean_outputs:
+                o_lines = json.dumps(o, default=str, indent=2).split("\n")
+                lines.append("\n".join([f"# {l}" for l in o_lines]) + "\n")
+            lines.append("\n")
         return "\n".join(lines)
 
 
