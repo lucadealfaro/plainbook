@@ -1071,6 +1071,7 @@ class Plainbook:
             new_cell.pop("execution_count", None)
             explanation = cell.metadata.get('explanation', "")
             new_cell.metadata.pop('explanation', None)
+            new_cell.metadata.pop('validation',)
             explanation = ["# " + line for line in explanation.splitlines(keepends=True)]
             explanation_text = "".join(explanation) + "\n"
             new_cell.source = explanation_text + cell.source
