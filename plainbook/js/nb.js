@@ -751,8 +751,8 @@ createApp({
             const cell = notebook.value.cells[cellIndex];
             if (cell.cell_type !== 'test') return;
             if (!running.value) return;
-            // Ensure all previous code cells are run
-            // Find the last code cell before this test
+            // Ensure all previous code cells have valid code and output.
+            // Find the last code cell before this test.
             let lastCodeIdx = -1;
             for (let i = cellIndex - 1; i >= 0; i--) {
                 if (notebook.value.cells[i].cell_type === 'code') {
@@ -760,7 +760,7 @@ createApp({
                     break;
                 }
             }
-            if (lastCodeIdx >= 0 && last_executed_cell_index.value < lastCodeIdx) {
+            if (lastCodeIdx >= 0 && last_valid_output_cell_index.value < lastCodeIdx) {
                 await runCells(lastCodeIdx);
             }
             if (!running.value) return;

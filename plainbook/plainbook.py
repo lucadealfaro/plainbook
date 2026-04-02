@@ -1622,7 +1622,7 @@ class Plainbook:
 
 
     def clear_outputs(self):
-        """Clears all cell outputs (including unit test sub-cells) and resets the last valid output index."""
+        """Clears all cell outputs (including unit test sub-cells) and resets execution/output state."""
         with self._lock:
             for cell in self.nb.cells:
                 if cell.cell_type in ('code', 'test'):
@@ -1633,6 +1633,7 @@ class Plainbook:
                         if 'target' in unit_test['cells']:
                             unit_test['cells']['target']['outputs'] = []
                         unit_test['cells']['test']['outputs'] = []
+            self.last_executed_cell = -1
             self.last_valid_output_cell = -1
             self._write()
 
