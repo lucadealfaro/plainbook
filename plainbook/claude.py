@@ -94,7 +94,11 @@ Code:
                             error_context=error_context, variable_context=variable_context,
                             validation_context=validation_context)
     if dump_ai_requests:
-        dump_ai_request("claude generate_code", SYSTEM_INSTRUCTIONS, prompt)
+        dump_ai_request(dump_ai_requests, "claude generate_code", {
+            "model": model, "max_tokens": 4096,
+            "system": SYSTEM_INSTRUCTIONS,
+            "messages": [{"role": "user", "content": prompt}],
+        })
 
     message = client.messages.create(
         model=model,
@@ -146,7 +150,11 @@ Code:
                             error_context=error_context, variable_context=variable_context,
                             validation_context=validation_context)
     if dump_ai_requests:
-        dump_ai_request("claude generate_test_code", TEST_SYSTEM_INSTRUCTIONS, prompt)
+        dump_ai_request(dump_ai_requests, "claude generate_test_code", {
+            "model": model, "max_tokens": 4096,
+            "system": TEST_SYSTEM_INSTRUCTIONS,
+            "messages": [{"role": "user", "content": prompt}],
+        })
 
     message = client.messages.create(
         model=model,
@@ -203,7 +211,11 @@ def claude_generate_unit_test_code(
                             error_context=error_context, variable_context=variable_context,
                             validation_context=validation_context)
     if dump_ai_requests:
-        dump_ai_request("claude generate_unit_test", UNIT_TEST_SYSTEM_INSTRUCTIONS, prompt)
+        dump_ai_request(dump_ai_requests, "claude generate_unit_test", {
+            "model": model, "max_tokens": 4096,
+            "system": UNIT_TEST_SYSTEM_INSTRUCTIONS,
+            "messages": [{"role": "user", "content": prompt}],
+        })
 
     message = client.messages.create(
         model=model,
@@ -243,7 +255,11 @@ Validation Result:
                             preceding=previous_code, instructions=instructions,
                             variable_context=variable_context)
     if dump_ai_requests:
-        dump_ai_request("claude validate_code", CHECKING_INSTRUCTIONS, prompt)
+        dump_ai_request(dump_ai_requests, "claude validate_code", {
+            "model": model, "max_tokens": 1024,
+            "system": CHECKING_INSTRUCTIONS,
+            "messages": [{"role": "user", "content": prompt}],
+        })
 
     message = client.messages.create(
         model=model,
@@ -265,7 +281,11 @@ def claude_generate_cell_name(api_key, explanation, model=None, debug=False, dum
     if debug:
         log_ai_request_size("claude generate_name", NAME_GENERATION_INSTRUCTIONS, prompt)
     if dump_ai_requests:
-        dump_ai_request("claude generate_name", NAME_GENERATION_INSTRUCTIONS, prompt)
+        dump_ai_request(dump_ai_requests, "claude generate_name", {
+            "model": model, "max_tokens": 50,
+            "system": NAME_GENERATION_INSTRUCTIONS,
+            "messages": [{"role": "user", "content": prompt}],
+        })
     message = client.messages.create(
         model=model,
         max_tokens=50,

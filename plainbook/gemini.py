@@ -80,7 +80,11 @@ Code:
                             error_context=error_context, variable_context=variable_context,
                             validation_context=validation_context)
     if dump_ai_requests:
-        dump_ai_request("gemini generate_code", SYSTEM_INSTRUCTIONS, prompt)
+        dump_ai_request(dump_ai_requests, "gemini generate_code", {
+            "model": model,
+            "contents": prompt,
+            "system_instruction": SYSTEM_INSTRUCTIONS,
+        })
 
     # 3. Generate content
     response = client.models.generate_content(
@@ -135,7 +139,11 @@ Code:
                             error_context=error_context, variable_context=variable_context,
                             validation_context=validation_context)
     if dump_ai_requests:
-        dump_ai_request("gemini generate_test_code", TEST_SYSTEM_INSTRUCTIONS, prompt)
+        dump_ai_request(dump_ai_requests, "gemini generate_test_code", {
+            "model": model,
+            "contents": prompt,
+            "system_instruction": TEST_SYSTEM_INSTRUCTIONS,
+        })
 
     response = client.models.generate_content(
         model=model,
@@ -193,7 +201,11 @@ def gemini_generate_unit_test_code(
                             error_context=error_context, variable_context=variable_context,
                             validation_context=validation_context)
     if dump_ai_requests:
-        dump_ai_request("gemini generate_unit_test", UNIT_TEST_SYSTEM_INSTRUCTIONS, prompt)
+        dump_ai_request(dump_ai_requests, "gemini generate_unit_test", {
+            "model": model,
+            "contents": prompt,
+            "system_instruction": UNIT_TEST_SYSTEM_INSTRUCTIONS,
+        })
 
     response = client.models.generate_content(
         model=model,
@@ -234,7 +246,11 @@ Validation Result:
                             preceding=previous_code, instructions=instructions,
                             variable_context=variable_context)
     if dump_ai_requests:
-        dump_ai_request("gemini validate_code", CHECKING_INSTRUCTIONS, prompt)
+        dump_ai_request(dump_ai_requests, "gemini validate_code", {
+            "model": model,
+            "contents": prompt,
+            "system_instruction": CHECKING_INSTRUCTIONS,
+        })
 
     response = client.models.generate_content(
         model=model,
@@ -257,7 +273,12 @@ def gemini_generate_cell_name(api_key, explanation, model=None, debug=False, dum
     if debug:
         log_ai_request_size("gemini generate_name", NAME_GENERATION_INSTRUCTIONS, prompt)
     if dump_ai_requests:
-        dump_ai_request("gemini generate_name", NAME_GENERATION_INSTRUCTIONS, prompt)
+        dump_ai_request(dump_ai_requests, "gemini generate_name", {
+            "model": model,
+            "contents": prompt,
+            "system_instruction": NAME_GENERATION_INSTRUCTIONS,
+            "max_output_tokens": 50,
+        })
     response = client.models.generate_content(
         model=model,
         contents=prompt,

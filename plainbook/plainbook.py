@@ -1045,14 +1045,13 @@ class Plainbook:
     def _filter_outputs_for_ai(self, outputs):
         """Filters cell outputs to remove images and oversized data before
         sending to AI. Returns a new list of filtered output items."""
-        media_keys = {'image/png', 'image/jpeg', 'image/gif', 'image/svg+xml',
-                      'image/bmp', 'image/webp', 'application/pdf'}
         filtered = []
         for output in outputs:
             output_type = output.get('output_type', '')
             if output_type in ('display_data', 'execute_result'):
                 data = output.get('data', {})
-                data = {k: v for k, v in data.items() if k not in media_keys}
+                data = {k: v for k, v in data.items()
+                        if not k.startswith('image/') and k != 'application/pdf'}
                 if not data:
                     continue
                 output = copy.copy(output)
@@ -1067,11 +1066,18 @@ class Plainbook:
         """Returns the content of a cell for AI processing, in JSON format.
         Needs to be called with the lock held."""
         new_cell = copy.deepcopy(cell)
+        new_cell.pop("id", None)
         if cell.cell_type == 'code':
+            new_cell.pop("execution_count", None)
             explanation = cell.metadata.get('explanation', "")
+            new_cell.metadata.pop('explanation', None)
             explanation = ["# " + line for line in explanation.splitlines(keepends=True)]
             explanation_text = "".join(explanation) + "\n"
             new_cell.source = explanation_text + cell.source
+        # Remove unit test data from metadata — it's large and not needed for context.
+        new_cell.metadata.pop('unit_tests', None)
+        new_cell.metadata.pop("code_timestamp", None)
+        new_cell.metadata.pop("explanation_timestamp", None)
         if not self.nb.metadata.get('share_output_with_ai', True):
             new_cell.outputs = []
         else:
@@ -1221,10 +1227,12 @@ class Plainbook:
         if cell.cell_type != 'code' or cell.source is None or cell.source.strip() == "":
             return None
         code_string = self._get_cell_json_for_ai(cell)
+        lines = [line + "\n" for line in code_string.source.split("\n")]
+        source = json.dumps({"source": lines}, indent=2)
         if cell.metadata['explanation_timestamp'] < cell.metadata['code_timestamp']:
-            return PREVIOUS_CODE_NEEDS_REVISION.format(code_string=code_string)
+            return PREVIOUS_CODE_NEEDS_REVISION.format(code_string=source)
         else:
-            return PREVIOUS_CODE_EXPLANATION_CHANGED.format(code_string=code_string)
+            return PREVIOUS_CODE_EXPLANATION_CHANGED.format(code_string=source)
 
 
     def _get_instructions(self, explanation):

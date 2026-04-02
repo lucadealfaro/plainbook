@@ -1,6 +1,8 @@
 import json
+import os
 import re
 import string
+from datetime import datetime
 
 SPACES_AND_PUNCTUATION_PATTERN = f"^[{re.escape(string.punctuation + string.whitespace)}]+"
 
@@ -177,7 +179,7 @@ def log_ai_request_size(label, system_instructions, prompt, *,
     breakdown = _breakdown_preceding(preceding)
     if breakdown:
         parts = [f"{k}={_chars_and_tokens(v)}" for k, v in breakdown.items() if v]
-        print(f"  Preceding context:\n    {NEWLINE_INDENTATION.join(parts)}")
+        print(f"  Preceding context:\n    {NEWLINE_INDENTATION.join(parts)}", flush=True)
     # Breakdown of other fields.
     fields = [
         ("instructions", instructions),
@@ -192,18 +194,50 @@ def log_ai_request_size(label, system_instructions, prompt, *,
         print(f"  Cell information:\n    {NEWLINE_INDENTATION.join(parts)}", flush=True)
 
 
-def dump_ai_request(label, system_instructions, prompt):
-    """Dump the full text of an AI request to stdout."""
-    separator = "=" * 72
-    print(separator)
-    print(f"[AI REQUEST: {label}]")
-    print(separator)
-    print("SYSTEM INSTRUCTIONS:")
-    print(system_instructions)
-    print(separator)
-    print("PROMPT:")
-    print(prompt)
-    print(separator)
+def dump_ai_request(dump_dest, label, request_payload):
+    """Dump an AI request either to stdout or to a file in a folder.
+
+    Args:
+        dump_dest: True to print to stdout, or a folder path to save as a JSON file.
+        label: A short label describing the request (e.g. "claude generate_code").
+        request_payload: A dict representing the exact API request parameters.
+    """
+    if dump_dest is True:
+        separator = "=" * 72
+        print(separator)
+        print(f"[AI REQUEST: {label}]")
+        print(separator)
+        print(json.dumps(request_payload, indent=4, ensure_ascii=False))
+        print(separator, flush=True)
+    else:
+        os.makedirs(dump_dest, exist_ok=True)
+        timestamp = datetime.now().strftime("%Y-%m-%d_%H-%M-%S_%f")[:23]
+        safe_label = label.replace(" ", "_")
+        filename = f"{timestamp}_{safe_label}.txt"
+        filepath = os.path.join(dump_dest, filename)
+        separator = "=" * 72
+        with open(filepath, "w", encoding="utf-8") as f:
+            f.write(f"[AI REQUEST: {label}]\n")
+            for key, value in request_payload.items():
+                f.write(f"\n{separator}\n")
+                f.write(f"{key}:\n")
+                f.write(f"{separator}\n")
+                if isinstance(value, str):
+                    f.write(value)
+                elif isinstance(value, list):
+                    # e.g. messages: list of dicts with role/content
+                    for item in value:
+                        if isinstance(item, dict):
+                            for k, v in item.items():
+                                f.write(f"\n--- {k} ---\n")
+                                f.write(str(v))
+                        else:
+                            f.write(str(item))
+                        f.write("\n")
+                else:
+                    f.write(str(value))
+                f.write("\n")
+        print(f"[AI REQUEST: {label}] saved to {filepath}", flush=True)
 
 
 def clean_start(text):

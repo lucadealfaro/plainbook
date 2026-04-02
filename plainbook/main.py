@@ -46,8 +46,8 @@ parser.add_argument('notebook',
                     help='Path to the notebook file to open')
 parser.add_argument('--debug', action='store_true', default=False,
                     help='Enable debug mode')
-parser.add_argument('--dump-ai-requests', action='store_true', default=False,
-                    help='Dump the full text of AI requests to stdout')
+parser.add_argument('--dump-ai-requests', nargs='?', const=True, default=False,
+                    help='Dump AI requests. Optionally specify a folder path to save as JSON files; otherwise prints to stdout.')
 parser.add_argument('--port', type=int, default=8080,
                     help='Port to run the server on')
 parser.add_argument('--host', type=str,
