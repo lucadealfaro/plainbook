@@ -241,6 +241,7 @@ createApp({
                     });
                     if (notebook.value && notebook.value.cells[cellIndex]) {
                         notebook.value.cells[cellIndex].metadata.explanation = content;
+                        delete notebook.value.cells[cellIndex].metadata.validation;
                         if (response.cell_name) {
                             notebook.value.cells[cellIndex].metadata.name = response.cell_name;
                         }
@@ -281,6 +282,9 @@ createApp({
                         cell_index: cellIndex,
                         source: content
                     });
+                    if (notebook.value && notebook.value.cells[cellIndex]) {
+                        delete notebook.value.cells[cellIndex].metadata.validation;
+                    }
                     console.log('Code saved:', cellIndex);
                 } catch (err) {
                     throw new Error('Failed to save code', { cause: err });
@@ -297,6 +301,7 @@ createApp({
                 if (notebook.value && notebook.value.cells[cellIndex]) {
                     notebook.value.cells[cellIndex].source = '';
                     notebook.value.cells[cellIndex].outputs = [];
+                    delete notebook.value.cells[cellIndex].metadata.validation;
                 }
                 console.log('Code cleared:', cellIndex);
             } catch (err) {
@@ -533,6 +538,7 @@ createApp({
             if (r.status == 'success') {
                 if (notebook.value && notebook.value.cells[cellIndex]) {
                     cell.source = r.code;
+                    delete cell.metadata.validation;
                     console.log('Code generated for cell:', cellIndex);
                 }
             } else if (r.status == 'cancelled') {
@@ -730,6 +736,7 @@ createApp({
             if (r.status === 'success') {
                 if (notebook.value && notebook.value.cells[cellIndex]) {
                     cell.source = r.code;
+                    delete cell.metadata.validation;
                     console.log('Test code generated for cell:', cellIndex);
                 }
             } else if (r.status === 'cancelled') {

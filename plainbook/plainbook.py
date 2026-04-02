@@ -721,12 +721,17 @@ class Plainbook:
 
     # Cell editing methods
 
+    def _clear_validation(self, cell):
+        cell.metadata.pop('validation', None)  # Clear cached validation results
+        cell.metadata.pop('validation_timestamp', None)
+        
     def set_cell_source(self, index, source):
         """Sets the source code of a cell at the given index."""
         with self._lock:
             assert 0 <= index < len(self.nb.cells)
             cell = self.nb.cells[index]
             cell.source = source
+            cell._clear_validation()  # Clear any cached validation results
             cell.metadata['code_timestamp'] = datetime.datetime.now().isoformat()
             if cell.cell_type == 'test':
                 cell.outputs = []
@@ -758,6 +763,7 @@ class Plainbook:
             cell = self.nb.cells[index]
             assert cell.cell_type in ('code', 'test')
             cell.source = ''
+            self._clear_validation(cell)  # Clear any cached validation results
             cell.outputs = []
             if cell.cell_type == 'test':
                 self.last_valid_test_cell = min(self.last_valid_test_cell, index - 1)
@@ -1308,6 +1314,7 @@ class Plainbook:
                 # If we are still in a request, update the cell.
                 if self.ai_request_pending:
                     cell.source = new_code
+                    self._clear_validation(cell)
                     cell.metadata['code_timestamp'] = datetime.datetime.now().isoformat()
                     cell.outputs = []
                     if is_test:
