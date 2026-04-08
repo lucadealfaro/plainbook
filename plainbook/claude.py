@@ -296,4 +296,4 @@ def claude_generate_cell_name(api_key, explanation, model=None, debug=False, dum
     response_text = message.content[0].text
     if debug:
         print("Response to name generation:", response_text)
-    return response_text.strip()
+    return response_text

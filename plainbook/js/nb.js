@@ -549,10 +549,16 @@ createApp({
         };
 
 
-        // Executes cells up to the current cell. 
+        // Executes cells up to the current cell.
         const runCells = async (cellIndex) => {
             asRead.value = false;
-            // First, to execute this cell we need to have valid code for it. 
+            // If this cell's output is already valid (e.g. after a Run All),
+            // clicking run on it should be a no-op — match the server-side
+            // caching condition in plainbook.py execute_cell.
+            if (cellIndex <= last_valid_output_cell_index.value) {
+                return;
+            }
+            // First, to execute this cell we need to have valid code for it.
             if (last_valid_code_cell_index.value < cellIndex) {
                 await generateCode(cellIndex);
             }

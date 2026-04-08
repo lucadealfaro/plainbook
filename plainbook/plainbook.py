@@ -1706,16 +1706,21 @@ class Plainbook:
                 return None
             name_fn = AI_PROVIDERS[ai_provider]["name"]
         # Call AI outside the lock (network I/O)
-        raw_name = name_fn(api_key, explanation, model=model, debug=self.debug, dump_ai_requests=self.dump_ai_requests)
-        if not raw_name:
+        try:
+            raw_name = name_fn(api_key, explanation, model=model, debug=self.debug, dump_ai_requests=self.dump_ai_requests)
+            if not raw_name:
+                raw_name = _generate_random_name()
+            raw_name = raw_name.strip()
+        except Exception as e:
+            print(f"Error generating name for cell {index}: {e}")
             raw_name = _generate_random_name()
         # Sanitize: split into words, keep first 3, lowercase, remove punctuation, join with underscores
         words = raw_name.split()[:3]
         words = [re.sub(r'[^a-z0-9]', '', w.lower()) for w in words]
         words = [w for w in words if w]  # Remove empty strings
         sanitized = '_'.join(words)
-        if not sanitized:
-            sanitized = 'cell'
+        if not sanitized or len(words) < 1:
+            sanitized = _generate_random_name()
         with self._lock:
             # Re-check in case another thread set it
             if cell.metadata.get('name'):

@@ -291,4 +291,4 @@ def gemini_generate_cell_name(api_key, explanation, model=None, debug=False, dum
         add_tokens(response.usage_metadata.prompt_token_count, response.usage_metadata.candidates_token_count)
     if debug:
         print("Response to name generation:", response.text)
-    return response.text.strip()
+    return response.text
