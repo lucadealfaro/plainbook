@@ -1676,11 +1676,14 @@ class Plainbook:
         return "\n".join(context_parts) + "\n"
 
 
-    def _get_existing_cell_names(self):
+    def _get_existing_cell_names(self, exclude_index=None):
         """Returns a set of all cell names currently in the notebook.
+        If exclude_index is given, the name of that cell is omitted.
         Must be called with self._lock held."""
         names = set()
-        for cell in self.nb.cells:
+        for i, cell in enumerate(self.nb.cells):
+            if i == exclude_index:
+                continue
             name = cell.metadata.get('name')
             if name:
                 names.add(name)
@@ -1696,39 +1699,59 @@ class Plainbook:
         return f"{name}_{counter}"
 
     def generate_cell_name(self, api_key, index, ai_provider, model=None):
-        """Generates a unique name for a code cell based on its explanation."""
+        """Generates a unique name for a code cell based on its explanation.
+        Always returns a non-empty, unique name; never returns None and never
+        raises on bad inputs."""
         with self._lock:
+            if index < 0 or index >= len(self.nb.cells):
+                return _generate_random_name()
             cell = self.nb.cells[index]
-            if cell.metadata.get('name'):
-                return cell.metadata['name']  # Already has a name
+            existing_name = cell.metadata.get('name')
+            if existing_name:
+                # Ensure it is still unique among the other cells.
+                existing = self._get_existing_cell_names(exclude_index=index)
+                if existing_name not in existing:
+                    return existing_name
+                unique_name = self._make_unique_name(existing_name, existing)
+                cell.metadata['name'] = unique_name
+                try:
+                    self._write()
+                except Exception as e:
+                    print(f"Error writing notebook for cell {index}: {e}")
+                return unique_name
             explanation = cell.metadata.get('explanation', '')
-            if not explanation.strip():
-                return None
-            name_fn = AI_PROVIDERS[ai_provider]["name"]
+            provider_entry = AI_PROVIDERS.get(ai_provider)
+            name_fn = provider_entry["name"] if provider_entry else None
         # Call AI outside the lock (network I/O)
-        try:
-            raw_name = name_fn(api_key, explanation, model=model, debug=self.debug, dump_ai_requests=self.dump_ai_requests)
-            if not raw_name:
-                raw_name = _generate_random_name()
-            raw_name = raw_name.strip()
-        except Exception as e:
-            print(f"Error generating name for cell {index}: {e}")
+        if not explanation.strip() or name_fn is None:
             raw_name = _generate_random_name()
+        else:
+            try:
+                raw_name = name_fn(api_key, explanation, model=model, debug=self.debug, dump_ai_requests=self.dump_ai_requests)
+                if not raw_name or not isinstance(raw_name, str):
+                    raw_name = _generate_random_name()
+                raw_name = raw_name.strip()
+            except Exception as e:
+                print(f"Error generating name for cell {index}: {e}")
+                raw_name = _generate_random_name()
         # Sanitize: split into words, keep first 3, lowercase, remove punctuation, join with underscores
         words = raw_name.split()[:3]
         words = [re.sub(r'[^a-z0-9]', '', w.lower()) for w in words]
         words = [w for w in words if w]  # Remove empty strings
         sanitized = '_'.join(words)
-        if not sanitized or len(words) < 1:
+        if not sanitized:
             sanitized = _generate_random_name()
         with self._lock:
             # Re-check in case another thread set it
             if cell.metadata.get('name'):
                 return cell.metadata['name']
-            existing = self._get_existing_cell_names()
+            existing = self._get_existing_cell_names(exclude_index=index)
             unique_name = self._make_unique_name(sanitized, existing)
             cell.metadata['name'] = unique_name
-            self._write()
+            try:
+                self._write()
+            except Exception as e:
+                print(f"Error writing notebook for cell {index}: {e}")
             return unique_name
 
     def _get_error_context(self, cell_index):
