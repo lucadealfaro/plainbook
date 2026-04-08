@@ -731,7 +731,7 @@ class Plainbook:
             assert 0 <= index < len(self.nb.cells)
             cell = self.nb.cells[index]
             cell.source = source
-            cell._clear_validation()  # Clear any cached validation results
+            self._clear_validation(cell)  # Clear any cached validation results
             cell.metadata['code_timestamp'] = datetime.datetime.now().isoformat()
             if cell.cell_type == 'test':
                 cell.outputs = []
@@ -1719,7 +1719,7 @@ class Plainbook:
                 except Exception as e:
                     print(f"Error writing notebook for cell {index}: {e}")
                 return unique_name
-            explanation = cell.metadata.get('explanation', '')
+            explanation = str(cell.metadata.get('explanation') or '')
             provider_entry = AI_PROVIDERS.get(ai_provider)
             name_fn = provider_entry["name"] if provider_entry else None
         # Call AI outside the lock (network I/O)
