@@ -1057,9 +1057,9 @@ class Plainbook:
         new_cell.metadata.pop('unit_tests', None)
         new_cell.metadata.pop("code_timestamp", None)
         new_cell.metadata.pop("explanation_timestamp", None)
-        if not self.nb.metadata.get('share_output_with_ai', True):
-            new_cell.outputs = []
-        else:
+        new_cell.outputs = []
+        if (self.nb.metadata.get('share_output_with_ai', True) and 
+            new_cell.cell_type == 'code' and hasattr(cell, 'outputs')): 
             new_cell.outputs = self._filter_outputs_for_ai(new_cell.outputs)
         return new_cell
 
