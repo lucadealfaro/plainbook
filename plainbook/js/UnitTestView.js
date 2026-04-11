@@ -125,7 +125,7 @@ export default {
             nextTick(() => {
                 const active = document.activeElement;
                 if (active && (active.tagName === 'TEXTAREA' || active.tagName === 'INPUT')) return;
-                rootEl.value?.focus();
+                rootEl.value?.focus({ preventScroll: true });
             });
         };
 

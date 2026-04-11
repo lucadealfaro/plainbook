@@ -113,7 +113,10 @@ createApp({
             console.log(display);
             uiError.value = err.message || String(err);
             // Scroll to the cell that caused the error, if known.
-            if (err.cellIndex != null) {
+            // Skip in unit test mode — the cell index refers to the main
+            // notebook, and scrollIntoView can shift the page up, moving
+            // the navbar and panel bar off-screen.
+            if (err.cellIndex != null && unitTestTargetIndex.value === null) {
                 nextTick(() => {
                     const cells = document.querySelectorAll('.notebook-cell');
                     if (cells[err.cellIndex]) {
