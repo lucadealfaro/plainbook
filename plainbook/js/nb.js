@@ -144,6 +144,20 @@ createApp({
             }
         };
 
+        const normalizeSource = (source) => {
+            if (Array.isArray(source)) return source.join('');
+            if (source == null) return '';
+            return String(source);
+        };
+
+        const applyGeneratedCode = (cellIndex, code) => {
+            if (!notebook.value?.cells?.[cellIndex]) return;
+            const cell = notebook.value.cells[cellIndex];
+            cell.source = normalizeSource(code);
+            cell.outputs = [];
+            delete cell.metadata.validation;
+        };
+
         const apiCall = async (url, method = 'GET', body = null) => {
             const options = {
                 method,
@@ -281,11 +295,14 @@ createApp({
             asRead.value = false;
             const savePromise = (async () => {
                 try {
+                    const normalizedContent = normalizeSource(content);
                     await apiCall('/edit_code', 'POST', {
                         cell_index: cellIndex,
-                        source: content
+                        source: normalizedContent
                     });
                     if (notebook.value && notebook.value.cells[cellIndex]) {
+                        notebook.value.cells[cellIndex].source = normalizedContent;
+                        notebook.value.cells[cellIndex].outputs = [];
                         delete notebook.value.cells[cellIndex].metadata.validation;
                     }
                     console.log('Code saved:', cellIndex);
@@ -540,8 +557,7 @@ createApp({
             const r = await apiCall('/generate_code', 'POST', body);
             if (r.status == 'success') {
                 if (notebook.value && notebook.value.cells[cellIndex]) {
-                    cell.source = r.code;
-                    delete cell.metadata.validation;
+                    applyGeneratedCode(cellIndex, r.code);
                     console.log('Code generated for cell:', cellIndex);
                 }
             } else if (r.status == 'cancelled') {
@@ -744,8 +760,7 @@ createApp({
             const r = await apiCall('/generate_test_code', 'POST', body);
             if (r.status === 'success') {
                 if (notebook.value && notebook.value.cells[cellIndex]) {
-                    cell.source = r.code;
-                    delete cell.metadata.validation;
+                    applyGeneratedCode(cellIndex, r.code);
                     console.log('Test code generated for cell:', cellIndex);
                 }
             } else if (r.status === 'cancelled') {
@@ -1060,9 +1075,10 @@ createApp({
                 const cell = notebook.value.cells[cellIndex];
                 const test = cell.metadata.unit_tests[testName];
                 if (role === 'target') {
-                    cell.source = r.code;
+                    applyGeneratedCode(cellIndex, r.code);
                 } else {
-                    test.cells[role].source = r.code;
+                    test.cells[role].source = normalizeSource(r.code);
+                    test.cells[role].outputs = [];
                 }
             } else if (r.status === 'error') {
                 throw new Error(r.message || 'Failed to generate unit test code');
