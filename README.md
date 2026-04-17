@@ -9,20 +9,22 @@ The use of plain language allows you to share your data analysis and science wit
 Plainbook can use multiple AIs to check that the code faithfully implements the natural language description, and can include tests to further validate the notebook. 
 When you share a notebook, the recipients can also check that the code under the hood implements the natural-language tasks. Recipients can also edit the plainbook, regenerate the code, and rerun it, just as in Jupyter notebooks. 
 
-Thus, the goal of the Plainbook project is to replicate in natural language what made Juptyter notebooks so successful: the ability to share together code and results, so that any recipient can validate and modify the notebook.
+Thus, the goal of the Plainbook project is to replicate in natural language what made Jupyter notebooks so successful: the ability to share together code and results, so that any recipient can validate and modify the notebook.
 
-### Trying Plainbook 
+### Try Plainbook Now
 
-* [30s short video](https://youtu.be/0t4ND8wPoYA)
-* [5 min Introductory video](https://youtu.be/Mkv5cl5rA7s). 
-* **Run it on Codespaces:** You can run plainbook right here on GitHub, with a trial Claude key, as follows:
-    * Create a codespace (Click on Code > Codespaces in the GitHub interface).
-    * Wait about 3 minutes, until after it finishes the postStartCommand.
-    * Once you see the button "Open in Browser" for port 8080 on the lower right, press it. 
-    * The Claude key provided in the trial has a low spending limit, and might not work.  You can add your own keys. 
+**Quick Start Videos:**
+* [30-second demo](https://youtu.be/0t4ND8wPoYA)
+* [5-minute introduction](https://youtu.be/Mkv5cl5rA7s)
 
-Example plainbooks:
-* Plainbook on soccer matches: [Download Soccer_w_Tests.plnb](https://github.com/lucadealfaro/plainbook/raw/main/examples/Soccer_w_Tests.plnb).  
+**Run on GitHub Codespaces (no installation needed):**
+1. Click **Code** → **Codespaces** in the GitHub interface
+2. Wait ~3 minutes for the environment to set up
+3. Click **Open in Browser** for port 8080
+4. A trial Claude API key is provided; you can add your own in Settings
+
+**Example Notebooks:**
+* [Soccer World Cup Analysis](https://github.com/lucadealfaro/plainbook/raw/main/examples/Soccer_w_Tests.plnb) — demonstrates action cells, tests, and AI validation
 
 
 ## Installation and use
@@ -36,12 +38,19 @@ pip install plainbook
 To open a plainbook (which will be created if it does not exist): 
 
 ```bash
-plainbook notebook.nlb
+plainbook notebook.plnb
 ```
 
 You can use any file name you like, with any extension you like. 
 
-**AI API Keys.** You need a Gemini or Claude API key to use Plainbook.  Click on the Settings button (the gear on the top right) to see instructions on how to set them.  The lead developer is spending only about $2/month on Gemini and Claude together, so the expense should be very low.
+**AI API Keys.** You need a Gemini or Claude API key to use Plainbook. Click on the Settings button (the gear on the top right) to see instructions on how to set them. Both providers offer free trial credits, and usage costs are typically low for regular notebook work.
+
+### Key Features
+
+- **Natural language notebooks:** Describe what you want in plain English; AI generates and validates the code. 
+- **Multiple AI providers:** Use Gemini, Claude, or both—cross-check implementations for robustness.
+- **Built-in testing:** Write test cells to verify notebook behavior automatically.
+- **Shareable & reproducible:** Share notebooks with others who can modify, regenerate, and rerun your work.
 
 ### Resources
 
@@ -49,7 +58,7 @@ You can use any file name you like, with any extension you like.
 * [Pypi package](https://pypi.org/project/plainbook/).
 
 
-## Plainbook Structure ##
+## Plainbook Structure
 
 Plainbooks consist of three types of cells: 
 

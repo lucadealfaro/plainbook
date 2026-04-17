@@ -53,6 +53,10 @@ parser.add_argument('--port', type=int, default=8080,
 parser.add_argument('--host', type=str,
                     default='0.0.0.0' if os.environ.get('CODESPACES') else '127.0.0.1',
                     help='Host to bind the server to (default: 0.0.0.0 in Codespaces, 127.0.0.1 otherwise)')
+parser.add_argument('--log', action='store_true', default=False,
+                    help='Log all user actions to notebook.metadata["log"] for user studies. See Log.md.')
+parser.add_argument('--logview', action='store_true', default=False,
+                    help='Open the notebook in read-only log-view mode. Enables the /log_view replay UI and rejects all mutations. Does not write new log entries.')
 args = parser.parse_args()
 
 try:
@@ -207,9 +211,12 @@ AUTH_TOKEN = _get_or_create_debug_token() if args.debug else secrets.token_hex(3
 notebook_path = os.path.abspath(args.notebook)
 
 from .plainbook import Plainbook
+from . import action_log
 notebook = Plainbook(notebook_path, debug=args.debug, dump_ai_requests=args.dump_ai_requests)
 assert notebook.kc is not None
 assert notebook.km.is_alive()
+action_log.LOGVIEW_ENABLED = args.logview
+action_log.bind(notebook, args.log and not args.logview)
                     
 # Static file routes 
 @route('/js/<filepath:path>')
@@ -297,9 +304,12 @@ def get_notebook():
         active_ai_provider=settings.get('active_ai_provider'),
         ai_providers=AI_PROVIDER_REGISTRY,
         is_codespace=_in_codespace,
+        log_enabled=args.log and not args.logview,
+        logview_enabled=args.logview,
     )
 
 @post('/set_key')
+@action_log.logged('set_key')
 @require_token
 def set_key():
     data = request.json
@@ -344,6 +354,7 @@ def set_key():
     )
 
 @post('/set_active_ai')
+@action_log.logged('set_active_ai')
 @require_token
 def set_active_ai():
     data = request.json
@@ -362,6 +373,7 @@ def set_active_ai():
     return dict(status='success', active_ai_provider=provider_id)
 
 @post('/edit_explanation')
+@action_log.logged('edit_explanation')
 @stateful
 @require_token
 def edit_explanation():
@@ -383,6 +395,7 @@ def edit_explanation():
     return dict(status='success', cell_name=cell_name)
 
 @post('/edit_code')
+@action_log.logged('edit_code')
 @stateful
 @require_token
 def edit_code():
@@ -393,6 +406,7 @@ def edit_code():
     return dict(status='success')
 
 @post('/clear_code')
+@action_log.logged('clear_code')
 @stateful
 @require_token
 def clear_code():
@@ -402,6 +416,7 @@ def clear_code():
     return dict(status='success')
 
 @post('/edit_markdown')
+@action_log.logged('edit_markdown')
 @stateful
 @require_token
 def edit_markdown():
@@ -412,6 +427,7 @@ def edit_markdown():
     return dict(status='success')
 
 @post('/insert_cell')
+@action_log.logged('insert_cell')
 @stateful
 @require_token
 def insert_cell():
@@ -422,6 +438,7 @@ def insert_cell():
     return dict(status='success', cell=new_cell, index=idx)
 
 @post('/delete_cell')
+@action_log.logged('delete_cell')
 @stateful
 @require_token
 def delete_cell():
@@ -431,6 +448,7 @@ def delete_cell():
     return dict(status='success')
 
 @post('/move_cell')
+@action_log.logged('move_cell')
 @stateful
 @require_token
 def move_cell():
@@ -448,6 +466,7 @@ def get_notebook_state():
     return {}
 
 @post('/execute_cell')
+@action_log.logged('execute_cell')
 @stateful
 @require_token
 def execute_cell():
@@ -466,6 +485,7 @@ def execute_cell():
         return dict(status='error', message=str(e))
 
 @post('/reset_kernel')
+@action_log.logged('reset_kernel')
 @stateful
 @require_token
 def reset_kernel():
@@ -473,6 +493,7 @@ def reset_kernel():
     return dict(status='success')
 
 @post('/interrupt_kernel')
+@action_log.logged('interrupt_kernel')
 @stateful
 @require_token
 def interrupt_kernel():
@@ -507,6 +528,7 @@ def _check_billing_error(e):
     return None
 
 @post('/generate_code')
+@action_log.logged('generate_code')
 @stateful
 @require_token
 def generate_code_cell():
@@ -533,6 +555,7 @@ def generate_code_cell():
 
 
 @post('/generate_test_code')
+@action_log.logged('generate_test_code')
 @stateful
 @require_token
 def generate_test_code():
@@ -558,6 +581,7 @@ def generate_test_code():
 
 
 @post('/execute_test_cell')
+@action_log.logged('execute_test_cell')
 @stateful
 @require_token
 def execute_test_cell():
@@ -573,6 +597,7 @@ def execute_test_cell():
 
 
 @post('/validate_code')
+@action_log.logged('validate_code')
 @stateful
 @require_token
 def validate_code_cell():
@@ -594,6 +619,7 @@ def validate_code_cell():
 
 
 @post('/validate_unit_test_code')
+@action_log.logged('validate_unit_test_code')
 @stateful
 @require_token
 def validate_unit_test_code():
@@ -619,6 +645,7 @@ def validate_unit_test_code():
 
 
 @post('/set_validation_visibility')
+@action_log.logged('set_validation_visibility')
 @stateful
 @require_token
 def set_validation_visibility():
@@ -630,6 +657,7 @@ def set_validation_visibility():
 
 
 @post('/set_unit_test_validation_visibility')
+@action_log.logged('set_unit_test_validation_visibility')
 @stateful
 @require_token
 def set_unit_test_validation_visibility():
@@ -643,6 +671,7 @@ def set_unit_test_validation_visibility():
 
 
 @post('/cancel_ai_request')
+@action_log.logged('cancel_ai_request')
 @stateful
 @require_token
 def cancel_ai_request():
@@ -654,6 +683,7 @@ def cancel_ai_request():
     
     
 @post('/clear_outputs')
+@action_log.logged('clear_outputs')
 @stateful
 @require_token
 def clear_outputs():
@@ -662,6 +692,7 @@ def clear_outputs():
 
 
 @post('/lock_notebook')
+@action_log.logged('lock_notebook')
 @stateful
 @require_token
 def lock_notebook():
@@ -672,6 +703,7 @@ def lock_notebook():
 
 
 @post('/set_share_output')
+@action_log.logged('set_share_output')
 @stateful
 @require_token
 def set_share_output():
@@ -723,6 +755,7 @@ def file_list():
     
     
 @post('/set_files')
+@action_log.logged('set_files')
 @require_token
 def set_files():
     data = request.json
@@ -740,6 +773,7 @@ def get_files():
 
 
 @post('/set_ai_instructions')
+@action_log.logged('set_ai_instructions')
 @require_token
 def set_ai_instructions():
     data = request.json
@@ -757,6 +791,7 @@ def get_ai_instructions():
 ## Unit test stub endpoints
 
 @post('/save_unit_tests')
+@action_log.logged('save_unit_tests')
 @stateful
 @unit_test_stateful
 @require_token
@@ -768,6 +803,7 @@ def save_unit_tests():
     return dict(status='success')
 
 @post('/save_unit_test_explanation')
+@action_log.logged('save_unit_test_explanation')
 @stateful
 @unit_test_stateful
 @require_token
@@ -781,6 +817,7 @@ def save_unit_test_explanation():
     return dict(status='success')
 
 @post('/save_unit_test_code')
+@action_log.logged('save_unit_test_code')
 @stateful
 @unit_test_stateful
 @require_token
@@ -794,6 +831,7 @@ def save_unit_test_code():
     return dict(status='success')
 
 @post('/clear_unit_test_code')
+@action_log.logged('clear_unit_test_code')
 @stateful
 @unit_test_stateful
 @require_token
@@ -820,6 +858,7 @@ def get_unit_test_state():
         return dict(status='error', message=str(e))
 
 @post('/run_unit_test_cell')
+@action_log.logged('run_unit_test_cell')
 @stateful
 @unit_test_stateful
 @require_token
@@ -845,6 +884,7 @@ def run_unit_test_cell():
         return dict(status='error', message=str(e))
 
 @post('/clear_unit_test_outputs')
+@action_log.logged('clear_unit_test_outputs')
 @unit_test_stateful
 @require_token
 def clear_unit_test_outputs():
@@ -858,6 +898,7 @@ def clear_unit_test_outputs():
         return dict(status='error', message=str(e))
 
 @post('/generate_unit_test_cell_code')
+@action_log.logged('generate_unit_test_cell_code')
 @stateful
 @unit_test_stateful
 @require_token
@@ -894,9 +935,30 @@ def debug_request():
     return dict(status='success')
 
 @post('/reset_tokens')
+@action_log.logged('reset_tokens')
 @require_token
 def reset_tokens():
     reset_session_tokens()
+    return dict(status='success')
+
+
+@get('/log_view')
+@require_token
+def log_view():
+    if not args.logview:
+        raise HTTPError(404, 'Log viewer is only available when the server is started with --logview')
+    return static_file('log_view.html', root=os.path.join(APP_FOLDER, 'views'))
+
+
+@post('/log_client_event')
+@require_token
+def log_client_event():
+    if not action_log.LOG_ENABLED:
+        return dict(status='success')
+    try:
+        action_log.append_client_event(request.json or {})
+    except Exception as e:
+        return dict(status='error', message=str(e))
     return dict(status='success')
 
 

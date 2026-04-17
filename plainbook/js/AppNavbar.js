@@ -1,6 +1,6 @@
 export default {
     props: ['isLocked', 'running', 'restarting', 'runningActivity', 'hasNotebook', 'upToDate', 'cellCount', 'hasApiKey', 'debug',
-            'activeAiProvider', 'availableAiProviders', 'shareOutputWithAi', 'aiTokens'],
+            'activeAiProvider', 'availableAiProviders', 'shareOutputWithAi', 'aiTokens', 'logEnabled', 'logviewEnabled', 'authToken'],
     emits: [
         'lock', 'refresh', 'interrupt', 'regenerate-all',
         'restart', 'reset-run-all', 'run-all', 'run-all-tests', 'clear-outputs', 'open-info', 'open-settings', 'debug-request',
@@ -91,6 +91,14 @@ export default {
                             <span class="icon"><i class="bx bx-broom"></i></span>
                             <span>Clear outputs</span>
                         </button>
+
+                        <a v-if="logviewEnabled"
+                           :href="'/log_view?token=' + authToken"
+                           title="Open session log viewer"
+                           class="button is-info is-light">
+                            <span class="icon"><i class="bx bx-history"></i></span>
+                            <span>Log viewer</span>
+                        </a>
 
                         <!-- <button v-if="!running && hasNotebook"
                             @click="$emit('refresh')"

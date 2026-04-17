@@ -73,6 +73,8 @@ createApp({
         const hasGeminiKey = ref(false);
         const hasClaudeKey = ref(false);
         const claudeViaBedrock = ref(false);
+        const logEnabled = ref(false);
+        const logviewEnabled = ref(false);
 
         const availableAiProviders = computed(() => {
             const apiKeys = {
@@ -134,7 +136,7 @@ createApp({
             last_valid_code_cell_index.value = state.last_valid_code_cell;
             last_valid_output_cell_index.value = state.last_valid_output_cell;
             last_valid_test_cell_index.value = state.last_valid_test_cell;
-            isLocked.value = state.is_locked;
+            isLocked.value = state.is_locked || logviewEnabled.value;
             shareOutputWithAi.value = state.share_output_with_ai;
             if (state.ai_tokens) {
                 aiTokens.value = state.ai_tokens;
@@ -150,11 +152,11 @@ createApp({
                 headers: { 'Content-Type': 'application/json' }
             };
             if (body) options.body = JSON.stringify(body);
-            
+
             const separator = url.includes('?') ? '&' : '?';
             const response = await fetch(`${url}${separator}token=${authToken}`, options);
             if (!response.ok) throw new Error(`API Error: ${response.statusText}`);
-            
+
             const r = await response.json();
             if (r.state) updateState(r.state);
             if (r.unit_test_state
@@ -162,6 +164,36 @@ createApp({
                 unitTestValidity.value = r.unit_test_state.state;
             }
             return r;
+        };
+
+        // Action logger: emits 'active_cell_change' events to the server when
+        // --log is enabled. Sends only when log_enabled is returned by
+        // /get_notebook; otherwise all methods are no-ops.
+        const ActionLogger = {
+            enabled: false,
+            activeCell: null,
+            init(logEnabled) { this.enabled = !!logEnabled; },
+            trackActiveCell(newIdx, newId) {
+                if (!this.enabled) return;
+                const now = Date.now();
+                const prev = this.activeCell;
+                if (prev && prev.cellId === newId) return;
+                const payload = {
+                    op: 'active_cell_change',
+                    ts_client: new Date().toISOString(),
+                    from_id: prev ? prev.cellId : null,
+                    from_index: prev ? prev.cellIndex : null,
+                    to_id: newId,
+                    to_index: newIdx,
+                    duration_on_prev_ms: prev ? now - prev.startTs : null,
+                };
+                this.activeCell = { cellId: newId, cellIndex: newIdx, startTs: now };
+                fetch(`/log_client_event?token=${authToken}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload),
+                }).catch(() => { /* best-effort; swallow network errors */ });
+            },
         };
 
         // 2. Define the fetch logic
@@ -177,6 +209,10 @@ createApp({
                 hasGeminiKey.value = r.has_gemini_key || false;
                 hasClaudeKey.value = r.has_claude_key || false;
                 claudeViaBedrock.value = r.claude_via_bedrock || false;
+                logEnabled.value = !!r.log_enabled;
+                logviewEnabled.value = !!r.logview_enabled;
+                if (logviewEnabled.value) isLocked.value = true;
+                ActionLogger.init(r.log_enabled);
             } catch (err) {
                 error.value = err.message;
                 throw new Error("Error in loading notebook", { cause: err });
@@ -423,6 +459,9 @@ createApp({
 
         const setActiveCell = (idx, shouldScroll = false) => {
             activeIndex.value = idx;
+            const cell = notebook.value && notebook.value.cells && notebook.value.cells[idx];
+            const cellId = cell ? cell.id : null;
+            if (cellId) ActionLogger.trackActiveCell(idx, cellId);
             if (shouldScroll) {
                 nextTick(() => {
                     const cells = document.querySelectorAll('.notebook-cell');
@@ -1313,7 +1352,7 @@ createApp({
             saveSettings, showSettings, showInfo, showTestHelp,
             genError, uiError, closeUiError, debug, sendDebugRequest, resetTokens,
             explanationEditKey, deleteCell, moveCell,
-            clearOutputs, activeAiProvider, availableAiProviders, setActiveAiProvider, isCodespace, hasGeminiKey, hasClaudeKey, claudeViaBedrock,
+            clearOutputs, activeAiProvider, availableAiProviders, setActiveAiProvider, isCodespace, hasGeminiKey, hasClaudeKey, claudeViaBedrock, logEnabled, logviewEnabled, authToken,
             restarting, ui_restart,
             ui_runTestCell, ui_runAllTests, ui_saveExplanationAndRunTest, ui_forceRegenerateTestCode,
             unitTestTargetIndex, unitTestActiveSubcell, unitTestActiveTestName, enterUnitTestMode, exitUnitTestMode,

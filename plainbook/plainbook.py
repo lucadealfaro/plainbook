@@ -533,6 +533,13 @@ class Plainbook:
         with open(self.path, "w") as f:
             nbformat.write(self.nb, f)
 
+    def append_log_entry(self, entry):
+        """Append an action-log entry to nb.metadata['log'] and persist.
+        Used by the --log user-study logging feature. See Log.md for schema."""
+        with self._lock:
+            self.nb.metadata.setdefault('log', []).append(entry)
+            self._write()
+
     # State and JSON access
 
     def get_state(self):
