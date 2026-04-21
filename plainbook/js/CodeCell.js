@@ -3,7 +3,7 @@ import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from './vu
 export default {
     props: ['source', 'executionCount', 'isActive', 'isLocked',
             'codeValid', 'outputValid', 'executed', 'hasError', 'asRead'],
-    emits: ['save', 'update:source', 'activate'],
+    emits: ['save', 'saveandrun', 'update:source', 'activate'],
     setup(props, { emit }) {
         const isCollapsed = ref(true);
         const isEditing = ref(false);
@@ -152,6 +152,12 @@ export default {
             emit('save', localSource.value);
         };
 
+        const saveAndRunCode = () => {
+            if (!isEditing.value) return;
+            isEditing.value = false;
+            emit('saveandrun', localSource.value);
+        };
+
         const handleFlushEdits = () => {
             if (isEditing.value) {
                 saveCode();
@@ -181,7 +187,7 @@ export default {
 
         return { isCollapsed, toggleCollapse, isEditing, cancelEdit, localSource,
             localIsLocked, highlightedCode, enterEditMode, enterEditModeAtPoint,
-            saveCode, textareaEl, autoResize, handleTabKey, onBlur };
+            saveCode, saveAndRunCode, textareaEl, autoResize, handleTabKey, onBlur };
     },
     template: /* html */ `
         <div class="code-cell-wrapper">
@@ -217,7 +223,7 @@ export default {
                         spellcheck="false"
                         @keydown.tab.prevent="handleTabKey"
                         @blur="onBlur"
-                        @keydown.enter.shift.prevent="saveCode">
+                        @keydown.enter.shift.prevent="saveAndRunCode">
                     </textarea>
                 </div>
                 <div v-if="isEditing" style="display: flex; justify-content: flex-end; gap: 0.5rem; padding: 0 0.5rem 0.5rem;">

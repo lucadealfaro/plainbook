@@ -4,17 +4,139 @@ import { opColor } from './HistoryReplay.js';
 const LANE_COUNT = 6;
 const LANE_LABELS = ['structural', 'edits', 'execute', 'AI', 'settings', 'active cell'];
 
+const UNIT_TEST_EDIT_OPS = new Set([
+    'save_unit_tests',
+    'save_unit_test_explanation',
+    'save_unit_test_code',
+    'clear_unit_test_code',
+    'clear_unit_test_outputs',
+]);
+
 function opLane(op, isClient) {
     if (isClient) return 5;
     if (op === 'insert_cell' || op === 'delete_cell' || op === 'move_cell') return 0;
     if (op.startsWith('edit_') || op === 'clear_code') return 1;
+    if (UNIT_TEST_EDIT_OPS.has(op)) return 1;
     if (op.startsWith('execute_') || op === 'run_unit_test_cell') return 2;
     if (op.startsWith('generate_') || op.startsWith('validate_')) return 3;
     return 4;
 }
 
+// Strip keys ending in "_timestamp" at any depth so two unit-test dicts
+// that differ only in timestamps compare equal.
+function stripTimestamps(value) {
+    if (Array.isArray(value)) return value.map(stripTimestamps);
+    if (value && typeof value === 'object') {
+        const out = {};
+        for (const k of Object.keys(value)) {
+            if (k.endsWith('_timestamp')) continue;
+            out[k] = stripTimestamps(value[k]);
+        }
+        return out;
+    }
+    return value;
+}
+
+function canonicalUnitTests(unitTests) {
+    return JSON.stringify(stripTimestamps(unitTests || {}));
+}
+
+function keyExp(cellId, testName, role) {
+    return `${cellId}\x00${testName}\x00${role}\x00exp`;
+}
+function keySrc(cellId, testName, role) {
+    return `${cellId}\x00${testName}\x00${role}\x00src`;
+}
+function keyUT(cellId) {
+    return `${cellId}\x00_UT_`;
+}
+
+function seedPrev(initialState) {
+    const prev = {};
+    if (!initialState || !Array.isArray(initialState.cells)) return prev;
+    for (const c of initialState.cells) {
+        const cellId = c.id;
+        if (!cellId) continue;
+        const tests = (c.metadata && c.metadata.unit_tests) || {};
+        prev[keyUT(cellId)] = canonicalUnitTests(tests);
+        for (const [testName, t] of Object.entries(tests)) {
+            const subs = (t && t.cells) || {};
+            for (const role of ['setup', 'test']) {
+                const sub = subs[role];
+                if (!sub) continue;
+                prev[keyExp(cellId, testName, role)] = (sub.metadata && sub.metadata.explanation) || '';
+                prev[keySrc(cellId, testName, role)] = sub.source || '';
+            }
+        }
+    }
+    return prev;
+}
+
+// Decide whether an entry is a no-op edit (content unchanged vs tracked prior).
+function isNoOpEdit(entry, prev) {
+    const op = entry.op;
+    const snap = entry.cell_snapshot;
+    const params = entry.params || {};
+    const cellId = entry.cell_id;
+
+    if (op === 'edit_code' || op === 'edit_markdown'
+            || op === 'edit_explanation' || op === 'clear_code') {
+        return !!(snap && snap.changed === false);
+    }
+    if (op === 'save_unit_tests') {
+        const key = keyUT(cellId);
+        const canon = canonicalUnitTests(params.unit_tests);
+        return key in prev && prev[key] === canon;
+    }
+    if (op === 'save_unit_test_explanation') {
+        const key = keyExp(cellId, params.test_name, params.role);
+        return key in prev && prev[key] === (params.explanation ?? '');
+    }
+    if (op === 'save_unit_test_code') {
+        const key = keySrc(cellId, params.test_name, params.role);
+        return key in prev && prev[key] === (params.source ?? '');
+    }
+    if (op === 'clear_unit_test_code') {
+        const key = keySrc(cellId, params.test_name, params.role);
+        return key in prev && prev[key] === '';
+    }
+    return false;
+}
+
+function updatePrev(entry, prev) {
+    const op = entry.op;
+    const params = entry.params || {};
+    const cellId = entry.cell_id;
+    if (op === 'save_unit_tests') {
+        prev[keyUT(cellId)] = canonicalUnitTests(params.unit_tests);
+        // Also seed sub-cell trackers from the new dict so later save_unit_test_*
+        // comparisons have a baseline even if this was the first event.
+        const tests = params.unit_tests || {};
+        for (const [testName, t] of Object.entries(tests)) {
+            const subs = (t && t.cells) || {};
+            for (const role of ['setup', 'test']) {
+                const sub = subs[role];
+                if (!sub) continue;
+                prev[keyExp(cellId, testName, role)] = (sub.metadata && sub.metadata.explanation) || '';
+                prev[keySrc(cellId, testName, role)] = sub.source || '';
+            }
+        }
+    } else if (op === 'save_unit_test_explanation') {
+        prev[keyExp(cellId, params.test_name, params.role)] = params.explanation ?? '';
+    } else if (op === 'save_unit_test_code') {
+        prev[keySrc(cellId, params.test_name, params.role)] = params.source ?? '';
+    } else if (op === 'clear_unit_test_code') {
+        prev[keySrc(cellId, params.test_name, params.role)] = '';
+    } else if (op === 'generate_unit_test_cell_code') {
+        const result = entry.result || {};
+        if (result && result.status === 'success' && typeof result.code === 'string') {
+            prev[keySrc(cellId, params.test_name, params.role)] = result.code;
+        }
+    }
+}
+
 export default {
-    props: ['log', 'current'],
+    props: ['log', 'current', 'initialState'],
     emits: ['seek', 'select'],
     setup(props, { emit }) {
         const zoom = ref(1);
@@ -22,26 +144,25 @@ export default {
         const zoomOut = () => { zoom.value = Math.max(zoom.value / 1.5, 1); };
         const zoomReset = () => { zoom.value = 1; };
 
-        const bounds = computed(() => {
-            if (!props.log || props.log.length === 0) return { t0: 0, t1: 1 };
-            const toMs = (s) => {
-                if (!s) return 0;
-                const t = Date.parse(s.endsWith('Z') ? s : s + 'Z');
-                return Number.isNaN(t) ? 0 : t;
-            };
-            const t0 = toMs(props.log[0].ts_server);
-            const t1 = toMs(props.log[props.log.length - 1].ts_server);
-            return { t0, t1: t1 === t0 ? t0 + 1 : t1 };
-        });
-
         const dots = computed(() => {
-            const b = bounds.value;
-            const span = b.t1 - b.t0 || 1;
-            return props.log.map((e, i) => {
-                const ts = Date.parse((e.ts_server || '').endsWith('Z') ? e.ts_server : e.ts_server + 'Z') || b.t0;
-                const pct = Math.max(0, Math.min(100, ((ts - b.t0) / span) * 100));
+            const prev = seedPrev(props.initialState);
+            const kept = [];
+            for (let i = 0; i < props.log.length; i++) {
+                const e = props.log[i];
+                if (isNoOpEdit(e, prev)) {
+                    updatePrev(e, prev);
+                    continue;
+                }
+                updatePrev(e, prev);
+                kept.push({ e, i });
+            }
+            const denom = Math.max(1, kept.length - 1);
+            return kept.map((item, k) => {
+                const { e, i } = item;
+                const pct = (k / denom) * 100;
                 const isClient = e.source === 'client';
                 const lane = opLane(e.op, isClient);
+                const displayOp = UNIT_TEST_EDIT_OPS.has(e.op) ? 'unit test edit' : e.op;
                 return {
                     idx: i,
                     op: e.op,
@@ -49,7 +170,7 @@ export default {
                     left: pct,
                     top: ((lane + 1) / (LANE_COUNT + 1)) * 100,
                     isClient,
-                    label: `${e.op} · ${(e.ts_server || '').slice(11, 19)}`,
+                    label: `${displayOp} · ${(e.ts_server || '').slice(11, 19)}`,
                 };
             });
         });

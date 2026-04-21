@@ -52,7 +52,6 @@ export default {
         });
 
         const targetCodeValid = computed(() => props.lastValidCodeCellIndex >= props.targetCellIndex);
-        const targetOutputValid = computed(() => props.lastValidOutputCellIndex >= props.targetCellIndex);
         const targetOutputVisible = ref(true);
 
         const activeTestValidity = computed(() => {
@@ -60,6 +59,7 @@ export default {
             return props.unitTestValidity[activeTestName.value] || null;
         });
 
+        const targetOutputValid = computed(() => activeTestValidity.value?.target?.output_valid ?? false);
         const setupCodeValid = computed(() => activeTestValidity.value?.setup?.code_valid ?? false);
         const setupOutputValid = computed(() => activeTestValidity.value?.setup?.output_valid ?? false);
         const testCodeValid = computed(() => activeTestValidity.value?.test?.code_valid ?? false);
@@ -197,6 +197,7 @@ export default {
                     @save-explanation="(content) => $emit('save-unit-test-explanation', targetCellIndex, activeTestName, 'setup', content)"
                     @save-code="(content) => $emit('save-unit-test-code', targetCellIndex, activeTestName, 'setup', content)"
                     @save-and-run="(content) => { $emit('save-unit-test-explanation', targetCellIndex, activeTestName, 'setup', content); $emit('run-unit-test-subcell', targetCellIndex, activeTestName, 'setup'); activeSubCell = 'target'; }"
+                    @save-code-and-run="(content) => { $emit('save-unit-test-code', targetCellIndex, activeTestName, 'setup', content); $emit('run-unit-test-subcell', targetCellIndex, activeTestName, 'setup'); activeSubCell = 'target'; }"
                     @gencode="$emit('generate-unit-test-code', targetCellIndex, activeTestName, 'setup')"
                     @clearcode="$emit('clear-unit-test-code', targetCellIndex, activeTestName, 'setup')"
                     @validate="$emit('validate-unit-test-code', targetCellIndex, activeTestName, 'setup')"
@@ -257,6 +258,7 @@ export default {
                         :hasError="hasTargetError"
                         :asRead="false"
                         @save="(content) => $emit('save-code', content)"
+                        @saveandrun="(content) => { $emit('save-code', content); $emit('run-unit-test-subcell', targetCellIndex, activeTestName, 'target'); activeSubCell = 'test'; }"
                         @activate="" />
 
                     <div v-if="targetOutputVisible && targetTestOutputs.length" class="p-2 border-top bg-scheme-main">
@@ -277,6 +279,7 @@ export default {
                     @save-explanation="(content) => $emit('save-unit-test-explanation', targetCellIndex, activeTestName, 'test', content)"
                     @save-code="(content) => $emit('save-unit-test-code', targetCellIndex, activeTestName, 'test', content)"
                     @save-and-run="(content) => { $emit('save-unit-test-explanation', targetCellIndex, activeTestName, 'test', content); $emit('run-unit-test-subcell', targetCellIndex, activeTestName, 'test'); }"
+                    @save-code-and-run="(content) => { $emit('save-unit-test-code', targetCellIndex, activeTestName, 'test', content); $emit('run-unit-test-subcell', targetCellIndex, activeTestName, 'test'); }"
                     @gencode="$emit('generate-unit-test-code', targetCellIndex, activeTestName, 'test')"
                     @clearcode="$emit('clear-unit-test-code', targetCellIndex, activeTestName, 'test')"
                     @validate="$emit('validate-unit-test-code', targetCellIndex, activeTestName, 'test')"

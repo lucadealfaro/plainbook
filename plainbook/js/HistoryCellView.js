@@ -1,4 +1,4 @@
-import { computed } from './vue.esm-browser.js';
+import { computed, ref } from './vue.esm-browser.js';
 import OutputRenderer from './OutputRenderer.js';
 
 const md = new markdownit({ html: true });
@@ -39,9 +39,34 @@ export default {
             return id ? id.slice(0, 8) : '';
         });
 
+        const renderSubCell = (sub) => {
+            const src = (sub && sub.source) || '';
+            const exp = (sub && sub.metadata && sub.metadata.explanation) || '';
+            return {
+                explanation: exp,
+                source: src,
+                renderedExplanation: exp ? md.render(exp) : '',
+                highlightedCode: src ? highlightPython(src) : '',
+            };
+        };
+
+        const unitTests = computed(() => {
+            const ut = props.cell && props.cell.metadata && props.cell.metadata.unit_tests;
+            if (!ut || typeof ut !== 'object') return [];
+            return Object.entries(ut).map(([name, t]) => ({
+                name,
+                setup: renderSubCell(t && t.cells && t.cells.setup),
+                test: renderSubCell(t && t.cells && t.cells.test),
+            }));
+        });
+
+        const testsExpanded = ref(false);
+        const toggleTests = () => { testsExpanded.value = !testsExpanded.value; };
+
         return {
             cellType, source, explanation, outputs,
             renderedExplanation, renderedMarkdown, highlightedCode, shortId,
+            unitTests, testsExpanded, toggleTests,
         };
     },
     template: /* html */ `
@@ -82,6 +107,39 @@ export default {
 
                 <div v-if="outputs.length" class="log-cell-outputs px-3 py-2 border-top bg-scheme-main">
                     <output-renderer v-for="(out, oIdx) in outputs" :key="oIdx" :output="out" />
+                </div>
+
+                <div v-if="unitTests.length" class="log-cell-unit-tests px-3 py-2 border-top">
+                    <p class="is-size-7 has-text-grey has-text-weight-semibold mb-2"
+                       style="cursor: pointer; user-select: none;"
+                       @click="toggleTests">
+                        <span class="icon is-small">
+                            <i class="bx" :class="testsExpanded ? 'bx-chevron-down' : 'bx-chevron-right'"></i>
+                        </span>
+                        <i class="bx bx-test-tube mr-1"></i>Unit tests ({{ unitTests.length }})
+                        <span class="has-text-grey-light ml-2">{{ testsExpanded ? 'click to collapse' : 'click to expand' }}</span>
+                    </p>
+                    <template v-if="testsExpanded">
+                        <div v-for="t in unitTests" :key="t.name" class="log-unit-test mb-3">
+                            <p class="is-size-7 has-text-weight-semibold mb-1">{{ t.name }}</p>
+                            <div class="log-unit-subcell mb-2">
+                                <p class="is-size-7 has-text-grey mb-1"><em>Setup</em></p>
+                                <div v-if="t.setup.renderedExplanation" class="markdown-body content is-size-7 mb-1"
+                                     v-html="t.setup.renderedExplanation"></div>
+                                <pre v-if="t.setup.highlightedCode" class="language-python m-0"><code class="language-python" v-html="t.setup.highlightedCode + '\\n'"></code></pre>
+                                <p v-if="!t.setup.renderedExplanation && !t.setup.highlightedCode"
+                                   class="is-size-7 has-text-grey-light is-italic">(empty)</p>
+                            </div>
+                            <div class="log-unit-subcell">
+                                <p class="is-size-7 has-text-grey mb-1"><em>Test</em></p>
+                                <div v-if="t.test.renderedExplanation" class="markdown-body content is-size-7 mb-1"
+                                     v-html="t.test.renderedExplanation"></div>
+                                <pre v-if="t.test.highlightedCode" class="language-python m-0"><code class="language-python" v-html="t.test.highlightedCode + '\\n'"></code></pre>
+                                <p v-if="!t.test.renderedExplanation && !t.test.highlightedCode"
+                                   class="is-size-7 has-text-grey-light is-italic">(empty)</p>
+                            </div>
+                        </div>
+                    </template>
                 </div>
             </template>
         </div>

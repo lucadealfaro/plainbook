@@ -16,9 +16,27 @@ export default {
         const resultPretty = computed(() => pretty(props.entry && props.entry.result));
         const snapPretty = computed(() => pretty(props.entry && props.entry.cell_snapshot));
 
+        const parseTs = (s) => {
+            if (!s) return null;
+            const d = new Date(s.endsWith('Z') ? s : s + 'Z');
+            return isNaN(d.getTime()) ? null : d;
+        };
+        const pad2 = (n) => String(n).padStart(2, '0');
         const tsShort = computed(() => {
             const s = (props.entry && props.entry.ts_server) || '';
-            return s.slice(11, 19);
+            const d = parseTs(s);
+            if (!d) return s.slice(11, 19);
+            return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())} `
+                + `${pad2(d.getHours())}:${pad2(d.getMinutes())}:${pad2(d.getSeconds())}`;
+        });
+        const tsLong = computed(() => {
+            const s = (props.entry && props.entry.ts_server) || '';
+            const d = parseTs(s);
+            if (!d) return s;
+            return d.toLocaleString(undefined, {
+                weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+                hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false,
+            });
         });
         const opTagStyle = computed(() => {
             if (!props.entry) return {};
@@ -38,7 +56,7 @@ export default {
         return {
             expanded, toggle,
             paramsPretty, resultPretty, snapPretty,
-            tsShort, opTagStyle, cellLabel,
+            tsShort, tsLong, opTagStyle, cellLabel,
         };
     },
     template: `
@@ -66,7 +84,8 @@ export default {
                 </div>
                 <div v-if="expanded" class="log-entry-details px-3 pb-3">
                     <p class="is-size-7 has-text-grey mb-2">
-                        <span>{{ entry.ts_server }}</span>
+                        <span>{{ tsLong }}</span>
+                        <span class="has-text-grey-light"> · {{ entry.ts_server }}</span>
                         <span v-if="entry.ts_client"> · client: {{ entry.ts_client }}</span>
                     </p>
                     <p v-if="entry.error" class="notification is-danger is-light py-2 px-3 mb-3">

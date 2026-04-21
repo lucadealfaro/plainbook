@@ -12,11 +12,11 @@ export default {
         'asRead', 'markdownEditKey', 'explanationEditKey', 'testCodeValid'],
     emits: [
         'save-markdown', 'save-explanation', 'save-code',
-        'run-cell', 'save-and-run', 'generate-code', 'clear-code',
+        'run-cell', 'save-and-run', 'save-code-and-run', 'generate-code', 'clear-code',
         'validate-code', 'dismiss-validation',
         'delete', 'move-up', 'move-down',
         'activate', 'interrupt',
-        'run-test', 'save-and-run-test', 'generate-test-code', 'open-test-help',
+        'run-test', 'save-and-run-test', 'save-code-and-run-test', 'generate-test-code', 'open-test-help',
         'open-unit-test'
     ],
     setup(props, { emit }) {
@@ -82,9 +82,9 @@ export default {
                     :validation="cell.metadata.validation" 
                     @dismiss_validation="$emit('dismiss-validation')" />
 
-                <code-cell  
-                    v-model:source="cell.source" 
-                    :execution-count="cell.execution_count" 
+                <code-cell
+                    v-model:source="cell.source"
+                    :execution-count="cell.execution_count"
                     :is-active="isActive"
                     :is-locked="isLocked"
                     :codeValid="codeValid"
@@ -93,6 +93,7 @@ export default {
                     :hasError="hasError"
                     :asRead="asRead"
                     @save="$emit('save-code', $event)"
+                    @saveandrun="$emit('save-code-and-run', $event)"
                     @activate="$emit('activate')" />
                 
                 <div v-if="outputVisible && cell.outputs?.length" class="p-2 border-top bg-scheme-main">
@@ -146,6 +147,7 @@ export default {
                     :hasError="hasError"
                     :asRead="asRead"
                     @save="$emit('save-code', $event)"
+                    @saveandrun="$emit('save-code-and-run-test', $event)"
                     @activate="$emit('activate')" />
 
                 <div v-if="outputVisible && cell.outputs?.length" class="p-2 border-top bg-scheme-main">

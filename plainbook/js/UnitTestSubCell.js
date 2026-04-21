@@ -7,7 +7,7 @@ import OutputRenderer from './OutputRenderer.js';
 export default {
     components: { ExplanationEditor, CodeCell, ValidationCell, OutputRenderer },
     props: ['cell', 'role', 'isActive', 'isLocked', 'running', 'codeValid', 'outputValid'],
-    emits: ['save-explanation', 'save-code', 'save-and-run', 'gencode', 'clearcode', 'validate', 'dismiss-validation', 'run', 'interrupt', 'activate'],
+    emits: ['save-explanation', 'save-code', 'save-and-run', 'save-code-and-run', 'gencode', 'clearcode', 'validate', 'dismiss-validation', 'run', 'interrupt', 'activate'],
     setup(props) {
         const mode = computed(() => props.role === 'setup' ? 'unit_setup' : 'unit_test');
         const hasError = computed(() => {
@@ -92,6 +92,7 @@ export default {
                 :hasError="hasError"
                 :asRead="false"
                 @save="$emit('save-code', $event)"
+                @saveandrun="$emit('save-code-and-run', $event)"
                 @activate="" />
 
             <div v-if="outputVisible && cell.outputs?.length" class="p-2 border-top bg-scheme-main">

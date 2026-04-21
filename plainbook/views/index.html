@@ -159,6 +159,8 @@
                         @save-explanation="(content) => sendExplanationToServer(content, index)"
                         @save-code="(content) => sendCodeToServer(content, index)"
                         @save-and-run="(content) => ui_saveExplanationAndRun(content, index)"
+                        @save-code-and-run="(content) => ui_saveCodeAndRun(content, index)"
+                        @save-code-and-run-test="(content) => ui_saveCodeAndRunTest(content, index)"
 
                         @interrupt="ui_interruptKernel"
                         @run-cell="ui_runCell(index)"

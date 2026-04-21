@@ -74,7 +74,7 @@ createApp({
 
         return {
             loading, error, log, cells, sliderIdx, selectedEntry, hasInitialState,
-            notebookName, activeCellId,
+            initialState, notebookName, activeCellId,
             activeAiProvider, replayIsLocked, shareOutputWithAi,
             onSeek, onSelect, backToEditor,
         };
@@ -112,7 +112,7 @@ createApp({
                 <div v-if="!hasInitialState" class="notification is-warning is-light px-3 py-2 m-2 is-size-7">
                     No <code>log_initial_state</code> in this notebook — replay begins from the current notebook state and may be inaccurate before the first logged event.
                 </div>
-                <history-timeline :log="log" :current="sliderIdx" @seek="onSeek" @select="onSelect" />
+                <history-timeline :log="log" :current="sliderIdx" :initial-state="initialState" @seek="onSeek" @select="onSelect" />
                 <history-entry-panel :entry="selectedEntry" />
                 <div class="log-view-cells">
                     <p class="is-size-7 has-text-grey mb-2">

@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Plainbook — Log Viewer</title>
+    <link rel="stylesheet" href="css/prism.min.css">
+    <link rel="stylesheet" href="css/main.css">
+    <link rel="stylesheet" href="css/boxicons-free/fonts/basic/boxicons.min.css">
+    <link rel="stylesheet" href="css/boxicons-free/fonts/animations.min.css">
+    <link rel="stylesheet" href="css/boxicons-free/fonts/transformations.min.css">
+    <script src="js/prism.min.js"></script>
+    <script src="js/prism-python.min.js"></script>
+    <script src="js/markdown-it.min.js"></script>
+    <style>
+      html, body { height: 100%; margin: 0; overflow: hidden; }
+      #log-view-app { display: flex; flex-direction: column; height: 100vh; }
+      .log-view-root {
+        display: flex;
+        flex-direction: column;
+        flex: 1 1 auto;
+        min-height: 0;
+      }
+      .log-view-navbar {
+        display: flex; align-items: center; justify-content: space-between;
+        padding: 0.5rem 1rem; background: #222; color: #fff;
+        flex: 0 0 auto;
+      }
+      .log-view-title { font-weight: 600; }
+      .log-view-title .bx { font-size: 1.25rem; vertical-align: middle; }
+      .log-view-status { display: flex; align-items: center; }
+
+      .log-timeline {
+        background: #f5f5f5; border-bottom: 1px solid #dbdbdb;
+        padding: 0.5rem 1rem;
+        flex: 0 0 auto;
+      }
+      .log-timeline-label {
+        font-size: 0.8rem; color: #4a4a4a; margin-bottom: 0.25rem;
+      }
+      .log-timeline-frame {
+        display: flex; align-items: stretch;
+      }
+      .log-timeline-lanes {
+        flex: 0 0 auto;
+        width: 72px;
+        position: relative;
+        height: 108px;
+      }
+      .log-timeline-lane-label {
+        position: absolute; right: 0.5rem;
+        transform: translateY(-50%);
+        font-size: 0.7rem; color: #6a6a6a;
+        white-space: nowrap;
+      }
+      .log-timeline-scroll {
+        flex: 1 1 auto;
+        overflow-x: auto;
+        overflow-y: hidden;
+      }
+      .log-timeline-track {
+        position: relative; height: 108px; min-width: 100%;
+        background: linear-gradient(to bottom, #eaeaea, #f5f5f5);
+        border-radius: 4px;
+      }
+      .log-timeline-laneline {
+        position: absolute; left: 0; right: 0; height: 1px;
+        background: rgba(0, 0, 0, 0.06);
+        transform: translateY(-50%);
+        pointer-events: none;
+      }
+      .log-timeline-dot {
+        position: absolute; transform: translate(-50%, -50%);
+        width: 12px; height: 12px; border-radius: 50%;
+        cursor: pointer; transition: transform 0.1s ease;
+        border: 1px solid rgba(0, 0, 0, 0.2);
+        box-shadow: 0 1px 1px rgba(0, 0, 0, 0.1);
+      }
+      .log-timeline-dot:hover {
+        transform: translate(-50%, -50%) scale(1.6);
+        z-index: 2;
+      }
+      .log-timeline-dot.is-client {
+        width: 7px; height: 7px; opacity: 0.7; border: none;
+      }
+      .log-timeline-slider {
+        display: block; min-width: 100%; margin: 0.25rem 0 0;
+      }
+
+      .log-entry-panel {
+        flex: 0 0 auto;
+        background: #fafafa;
+        border-bottom: 1px solid #dbdbdb;
+        max-height: 50vh;
+        overflow-y: auto;
+      }
+      .log-entry-header:hover { background: #f0f0f0; }
+      .log-entry-panel pre.log-json {
+        background: #f0f0f0; padding: 0.5rem; border-radius: 4px;
+        font-size: 0.75rem; max-height: 260px; overflow: auto;
+        white-space: pre-wrap; word-break: break-all;
+      }
+
+      .log-view-cells {
+        flex: 1 1 auto;
+        overflow-y: auto;
+        min-height: 0;
+        padding: 1rem 1.25rem 2rem;
+        background: #fff;
+      }
+      .log-cell {
+        border-left: 4px solid transparent;
+        transition: border-color 0.15s ease, background 0.15s ease;
+      }
+      .log-cell.is-active-in-replay {
+        border-left-color: #3298dc;
+        background: #f1fbff;
+      }
+      .log-cell .log-cell-code pre {
+        margin: 0;
+        font-size: 0.8rem;
+      }
+      .log-cell .log-cell-explanation p:last-child { margin-bottom: 0; }
+      .log-cell .log-cell-unit-tests {
+        background: rgba(255, 221, 87, 0.06);
+        border-left: 3px solid #ffdd57;
+        margin: 0.25rem 0.5rem 0.5rem;
+      }
+      .log-cell .log-unit-test {
+        padding-left: 0.5rem;
+      }
+      .log-cell .log-unit-subcell {
+        padding-left: 0.75rem;
+        border-left: 2px solid rgba(0, 0, 0, 0.06);
+      }
+      .log-cell .log-unit-subcell pre {
+        font-size: 0.75rem;
+        margin: 0;
+      }
+      .log-cell .log-unit-subcell .markdown-body p:last-child { margin-bottom: 0; }
+    </style>
+  </head>
+  <body>
+    <div id="log-view-app"></div>
+    <script type="module" src="js/HistoryViewer.js"></script>
+  </body>
+</html>

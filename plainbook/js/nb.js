@@ -682,6 +682,32 @@ createApp({
             }
         };
 
+        const ui_saveCodeAndRun = async (content, cellIndex) => {
+            await sendCodeToServer(content, cellIndex);
+            if (!running.value) {
+                running.value = true;
+                await runCells(cellIndex);
+                running.value = false;
+                runningActivity.value = { type: null, cellIndex: null };
+                const total = notebook.value?.cells?.length ?? 0;
+                const next = Math.min(cellIndex + 1, total - 1);
+                if (next !== cellIndex) setActiveCell(next, true);
+            }
+        };
+
+        const ui_saveCodeAndRunTest = async (content, cellIndex) => {
+            await sendCodeToServer(content, cellIndex);
+            if (!running.value) {
+                running.value = true;
+                await runOneTest(cellIndex);
+                running.value = false;
+                runningActivity.value = { type: null, cellIndex: null };
+                const total = notebook.value?.cells?.length ?? 0;
+                const next = Math.min(cellIndex + 1, total - 1);
+                if (next !== cellIndex) setActiveCell(next, true);
+            }
+        };
+
 
         const ui_runCell = async (cellIndex) => {
             flushActiveEdits();
@@ -1342,7 +1368,7 @@ createApp({
 
         return { notebook, notebook_name, loading, error, isLocked, lockNotebook, shareOutputWithAi, aiTokens, toggleShareOutput,
             sendExplanationToServer, authToken,
-            sendCodeToServer, clearCellCode, ui_saveExplanationAndRun,
+            sendCodeToServer, clearCellCode, ui_saveExplanationAndRun, ui_saveCodeAndRun,
             sendMarkdownToServer, generateCode, activeIndex, reloadNotebook,
             validateCode, ui_validateCode, dismissValidation, ui_resetAndRunAllCells, ui_forceRegenerateCellCode,
             setActiveCell, ui_runCell, running, runningActivity, asRead,
@@ -1354,7 +1380,7 @@ createApp({
             explanationEditKey, deleteCell, moveCell,
             clearOutputs, activeAiProvider, availableAiProviders, setActiveAiProvider, isCodespace, hasGeminiKey, hasClaudeKey, claudeViaBedrock, logEnabled, logviewEnabled, authToken,
             restarting, ui_restart,
-            ui_runTestCell, ui_runAllTests, ui_saveExplanationAndRunTest, ui_forceRegenerateTestCode,
+            ui_runTestCell, ui_runAllTests, ui_saveExplanationAndRunTest, ui_saveCodeAndRunTest, ui_forceRegenerateTestCode,
             unitTestTargetIndex, unitTestActiveSubcell, unitTestActiveTestName, enterUnitTestMode, exitUnitTestMode,
             addUnitTest, deleteUnitTest, renameUnitTest,
             saveUnitTestExplanation, saveUnitTestCode, clearUnitTestCode, clearUnitTestOutputs,

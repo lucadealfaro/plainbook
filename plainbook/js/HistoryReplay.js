@@ -130,8 +130,46 @@ function applyEntry(cells, entry, state) {
             }
             break;
         }
+        case 'save_unit_tests': {
+            if (cells[idx] && params.unit_tests && typeof params.unit_tests === 'object') {
+                cells[idx].metadata = cells[idx].metadata || {};
+                cells[idx].metadata.unit_tests = JSON.parse(JSON.stringify(params.unit_tests));
+            }
+            break;
+        }
+        case 'save_unit_test_explanation':
+        case 'save_unit_test_code':
+        case 'clear_unit_test_code':
+        case 'generate_unit_test_cell_code': {
+            if (!cells[idx]) break;
+            cells[idx].metadata = cells[idx].metadata || {};
+            cells[idx].metadata.unit_tests = cells[idx].metadata.unit_tests || {};
+            const testName = params.test_name;
+            const role = params.role;
+            if (!testName || (role !== 'setup' && role !== 'test')) break;
+            const tests = cells[idx].metadata.unit_tests;
+            if (!tests[testName]) {
+                tests[testName] = { cells: { setup: { source: '', metadata: {} }, test: { source: '', metadata: {} } } };
+            }
+            tests[testName].cells = tests[testName].cells || {};
+            tests[testName].cells[role] = tests[testName].cells[role] || { source: '', metadata: {} };
+            const sub = tests[testName].cells[role];
+            sub.metadata = sub.metadata || {};
+            if (op === 'save_unit_test_explanation') {
+                sub.metadata.explanation = params.explanation ?? '';
+            } else if (op === 'save_unit_test_code') {
+                sub.source = params.source ?? '';
+            } else if (op === 'clear_unit_test_code') {
+                sub.source = '';
+            } else if (op === 'generate_unit_test_cell_code') {
+                if (result && result.status === 'success' && typeof result.code === 'string') {
+                    sub.source = result.code;
+                }
+            }
+            break;
+        }
         default:
-            // unit-test sub-ops and non-mutating ops: show up only as timeline dots
+            // remaining non-mutating ops: show up only as timeline dots
             break;
     }
 }
@@ -189,6 +227,8 @@ export function isMutating(op) { return MUTATING_OPS.has(op); }
 
 export const OP_COLOR = {
     edit_code: '#48c774', edit_markdown: '#48c774', edit_explanation: '#48c774', clear_code: '#48c774',
+    save_unit_tests: '#48c774', save_unit_test_explanation: '#48c774', save_unit_test_code: '#48c774',
+    clear_unit_test_code: '#48c774', clear_unit_test_outputs: '#48c774',
     insert_cell: '#3298dc', delete_cell: '#3298dc', move_cell: '#3298dc',
     execute_cell: '#ffdd57', execute_test_cell: '#ffdd57', run_unit_test_cell: '#ffdd57',
     generate_code: '#b86bff', generate_test_code: '#b86bff', generate_unit_test_cell_code: '#b86bff',
