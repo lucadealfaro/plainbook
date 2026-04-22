@@ -755,7 +755,8 @@ def set_share_output():
 def submit_study():
     try:
         object_path = _submit_study_upload()
-        return dict(status='success', object_path=object_path)
+        submitted_at = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        return dict(status='success', object_path=object_path, submitted_at=submitted_at)
     except Exception as e:
         return dict(status='error', message=str(e))
 

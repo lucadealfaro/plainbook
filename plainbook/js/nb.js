@@ -37,6 +37,7 @@ createApp({
         // For running a notebook.
         const running = ref(false);
         const submitting = ref(false);
+        const lastSubmittedAtLabel = ref('');
         const runningActivity = ref({ type: null, cellIndex: null });
         const last_executed_cell_index = ref(-1);
         const last_valid_code_cell_index = ref(-1);
@@ -366,6 +367,8 @@ createApp({
                 if (r.status !== 'success') {
                     throw new Error(r.message || 'Submit failed');
                 }
+                const submittedAt = r.submitted_at ? new Date(r.submitted_at) : new Date();
+                lastSubmittedAtLabel.value = submittedAt.toLocaleString();
                 window.alert(`Notebook submitted successfully to ${r.object_path}`);
             } catch (err) {
                 throw new Error('Failed to submit study notebook', { cause: err });
@@ -1538,8 +1541,8 @@ createApp({
             saveSettings, showSettings, showInfo, showTestHelp,
             genError, uiError, closeUiError, debug, sendDebugRequest, resetTokens,
             explanationEditKey, deleteCell, moveCell,
-            clearOutputs, activeAiProvider, availableAiProviders, setActiveAiProvider, isCodespace, isUserStudy, hasGeminiKey, hasClaudeKey, claudeViaBedrock, logEnabled, logviewEnabled, authToken,
-            submitting, submitStudy,
+            clearOutputs, activeAiProvider, availableAiProviders, setActiveAiProvider, isCodespace, isUserStudy, hasGeminiKey, hasClaudeKey, claudeViaBedrock, logEnabled, logviewEnabled,
+            submitting, submitStudy, lastSubmittedAtLabel,
             restarting, ui_restart,
             ui_runTestCell, ui_runAllTests, ui_saveExplanationAndRunTest, ui_saveCodeAndRunTest, ui_forceRegenerateTestCode,
             unitTestTargetIndex, unitTestActiveSubcell, unitTestActiveTestName, enterUnitTestMode, exitUnitTestMode,

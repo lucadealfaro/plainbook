@@ -1,5 +1,5 @@
 export default {
-    props: ['isLocked', 'running', 'restarting', 'submitting', 'isUserStudy', 'runningActivity', 'hasNotebook', 'upToDate', 'cellCount', 'hasApiKey', 'debug',
+    props: ['isLocked', 'running', 'restarting', 'submitting', 'lastSubmittedAtLabel', 'isUserStudy', 'runningActivity', 'hasNotebook', 'upToDate', 'cellCount', 'hasApiKey', 'debug',
             'activeAiProvider', 'availableAiProviders', 'shareOutputWithAi', 'aiTokens', 'verification', 'verificationStatus', 'logEnabled', 'logviewEnabled', 'authToken'],
     emits: [
         'lock', 'refresh', 'interrupt', 'regenerate-all',
@@ -235,9 +235,14 @@ export default {
                             @click="$emit('submit-study')"
                             title="Submit the notebook for analysis"
                             class="button is-success">
-                            <span class="icon"><i class="bx bx-upload"></i></span>
+                            <span class="icon"><i class="bx bx-arrow-from-bottom-stroke"></i></span>
                             <span>{{ submitting ? 'Submitting...' : 'Submit' }}</span>
                         </button>
+                        <span v-if="hasNotebook && isUserStudy && lastSubmittedAtLabel"
+                              class="tag is-info is-light"
+                              :title="'Latest submit time'">
+                            Last submit: {{ lastSubmittedAtLabel }}
+                        </span>
 
         </div>
         <span style="flex: 1;"></span>
