@@ -1,10 +1,10 @@
 export default {
-    props: ['isLocked', 'running', 'restarting', 'runningActivity', 'hasNotebook', 'upToDate', 'cellCount', 'hasApiKey', 'debug',
+    props: ['isLocked', 'running', 'restarting', 'submitting', 'isUserStudy', 'runningActivity', 'hasNotebook', 'upToDate', 'cellCount', 'hasApiKey', 'debug',
             'activeAiProvider', 'availableAiProviders', 'shareOutputWithAi', 'aiTokens', 'verification', 'verificationStatus', 'logEnabled', 'logviewEnabled', 'authToken'],
     emits: [
         'lock', 'refresh', 'interrupt', 'regenerate-all',
         'restart', 'reset-run-all', 'run-all', 'run-all-tests', 'verify-notebook', 'clear-outputs', 'open-info', 'open-settings', 'debug-request',
-        'set-ai-provider', 'toggle-share-output', 'reset-tokens', 'download-ipynb'
+        'set-ai-provider', 'toggle-share-output', 'reset-tokens', 'download-ipynb', 'submit-study'
         ],
     data() {
         return { aiDropdownOpen: false };
@@ -227,6 +227,16 @@ export default {
                             :class="['button', verifyButtonClass]">
                             <span class="icon"><i class="bx bx-shield-quarter"></i></span>
                             <span>Verify</span>
+                        </button>
+
+                        <button v-if="hasNotebook && isUserStudy"
+                            :disabled="cellCount === 0 || running || submitting"
+                            @mousedown.prevent
+                            @click="$emit('submit-study')"
+                            title="Submit the notebook for analysis"
+                            class="button is-success">
+                            <span class="icon"><i class="bx bx-upload"></i></span>
+                            <span>{{ submitting ? 'Submitting...' : 'Submit' }}</span>
                         </button>
 
         </div>

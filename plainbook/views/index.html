@@ -55,6 +55,8 @@
         :log-enabled="logEnabled"
         :logview-enabled="logviewEnabled"
         :auth-token="authToken"
+        :submitting="submitting"
+        :is-user-study="isUserStudy"
         @lock="lockNotebook"
         @restart="ui_restart"
         @toggle-share-output="toggleShareOutput"
@@ -71,6 +73,7 @@
         @run-all-tests="ui_runAllTests"
         @download-ipynb="downloadIpynb"
         @verify-notebook="ui_verifyNotebook"
+        @submit-study="submitStudy"
     />
 
     <panel-bar

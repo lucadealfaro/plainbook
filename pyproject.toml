@@ -22,6 +22,7 @@ dependencies = [
     "cherrypy",
     "google-genai",
     "py-machineid",
+    "google-cloud-storage",
     "snapshot-kernel>=0.1.4",
     "nbformat",
     "pyyaml",

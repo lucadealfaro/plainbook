@@ -33,8 +33,10 @@ createApp({
         const aiTokens = ref({input: 0, output: 0});
         const verificationStatus = ref('none');
         const debug = ref(false);
+        const isUserStudy = ref(false);
         // For running a notebook.
         const running = ref(false);
+        const submitting = ref(false);
         const runningActivity = ref({ type: null, cellIndex: null });
         const last_executed_cell_index = ref(-1);
         const last_valid_code_cell_index = ref(-1);
@@ -222,6 +224,7 @@ createApp({
                 aiProviderRegistry.value = r.ai_providers || [];
                 debug.value = r.debug || false;
                 isCodespace.value = r.is_codespace || false;
+                isUserStudy.value = r.is_user_study || false;
                 hasGeminiKey.value = r.has_gemini_key || false;
                 hasClaudeKey.value = r.has_claude_key || false;
                 claudeViaBedrock.value = r.claude_via_bedrock || false;
@@ -345,6 +348,29 @@ createApp({
                 aiTokens.value = { input: 0, output: 0 };
             } catch (err) {
                 console.error('Failed to reset tokens:', err);
+            }
+        };
+
+        const submitStudy = async () => {
+            flushActiveEdits();
+            await waitForPendingSaves();
+            if (submitting.value || running.value || !isUserStudy.value) {
+                return;
+            }
+            if (!window.confirm('Are you sure you want to submit this notebook?')) {
+                return;
+            }
+            submitting.value = true;
+            try {
+                const r = await apiCall('/submit_study', 'POST');
+                if (r.status !== 'success') {
+                    throw new Error(r.message || 'Submit failed');
+                }
+                window.alert(`Notebook submitted successfully to ${r.object_path}`);
+            } catch (err) {
+                throw new Error('Failed to submit study notebook', { cause: err });
+            } finally {
+                submitting.value = false;
             }
         };
 
@@ -1512,7 +1538,8 @@ createApp({
             saveSettings, showSettings, showInfo, showTestHelp,
             genError, uiError, closeUiError, debug, sendDebugRequest, resetTokens,
             explanationEditKey, deleteCell, moveCell,
-            clearOutputs, activeAiProvider, availableAiProviders, setActiveAiProvider, isCodespace, hasGeminiKey, hasClaudeKey, claudeViaBedrock, logEnabled, logviewEnabled, authToken,
+            clearOutputs, activeAiProvider, availableAiProviders, setActiveAiProvider, isCodespace, isUserStudy, hasGeminiKey, hasClaudeKey, claudeViaBedrock, logEnabled, logviewEnabled, authToken,
+            submitting, submitStudy,
             restarting, ui_restart,
             ui_runTestCell, ui_runAllTests, ui_saveExplanationAndRunTest, ui_saveCodeAndRunTest, ui_forceRegenerateTestCode,
             unitTestTargetIndex, unitTestActiveSubcell, unitTestActiveTestName, enterUnitTestMode, exitUnitTestMode,

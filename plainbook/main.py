@@ -4,6 +4,8 @@ import asyncio
 import datetime
 from functools import wraps
 import json
+import threading
+import time
 from . import __version__
 from .ai_common import reset_session_tokens
 from .plainbook import CellExecutionError
@@ -57,6 +59,8 @@ parser.add_argument('--log', action='store_true', default=False,
                     help='Log all user actions to notebook.metadata["log"] for user studies. See Log.md.')
 parser.add_argument('--logview', action='store_true', default=False,
                     help='Open the notebook in read-only log-view mode. Enables the /log_view replay UI and rejects all mutations. Does not write new log entries.')
+parser.add_argument('--user-study', '--user_study', dest='user_study', action='store_true', default=False,
+                    help='Enable user-study mode features (e.g. submit button)')
 args = parser.parse_args()
 
 try:
@@ -306,6 +310,7 @@ def get_notebook():
         is_codespace=_in_codespace,
         log_enabled=args.log and not args.logview,
         logview_enabled=args.logview,
+        is_user_study=args.user_study,
     )
 
 @post('/set_key')
@@ -744,6 +749,56 @@ def set_share_output():
     return {}
 
 
+@post('/submit_study')
+@stateful
+@require_token
+def submit_study():
+    try:
+        object_path = _submit_study_upload()
+        return dict(status='success', object_path=object_path)
+    except Exception as e:
+        return dict(status='error', message=str(e))
+
+
+def _submit_study_upload() -> str:
+    from google.cloud import storage
+
+    if not args.user_study:
+        raise ValueError('Submit is available only in user-study mode')
+
+    bucket_name = os.environ.get('GCS_STUDY_BUCKET', 'plaincoding-bucket')
+    study_code = os.environ.get('PLAINBOOK_STUDY_CODE')
+    container_id = os.environ.get('PLAINBOOK_CONTAINER_INSTANCE_ID')
+    if not study_code or not container_id:
+        raise ValueError('PLAINBOOK_STUDY_CODE and PLAINBOOK_CONTAINER_INSTANCE_ID must be set as environment variables')
+
+    object_path = f"plainbook/user-studies/{study_code}/{container_id}/notebook.plnb"
+
+    notebook_path = "/workspace/notebook.plnb"
+    with open(notebook_path, "rb") as f:
+        data = f.read()
+
+    client = storage.Client()
+    bucket = client.bucket(bucket_name)
+    blob = bucket.blob(object_path)
+    blob.upload_from_string(data, content_type="application/json")
+
+    if args.debug:
+        print(f"Submitted study notebook to gs://{bucket_name}/{object_path}")
+    return object_path
+
+
+def _autosubmit_loop(interval_seconds: int):
+    while True:
+        time.sleep(interval_seconds)
+        try:
+            _submit_study_upload()
+            if args.debug:
+                print(f"Autosubmit completed (interval={interval_seconds}s)")
+        except Exception as e:
+            print(f"Autosubmit failed: {e}")
+
+
 @get('/current_dir')
 @require_token
 def get_current_dir():
@@ -1019,6 +1074,18 @@ def logger_middleware(app):
     
 def main():
     print(f"Plainbook {__version__}")
+
+    if args.user_study:
+        interval_seconds = int(os.environ.get('PLAINBOOK_AUTOSUBMIT_SECONDS', '300'))
+        autosubmit_thread = threading.Thread(
+            target=_autosubmit_loop,
+            args=(interval_seconds,),
+            daemon=True,
+        )
+        autosubmit_thread.start()
+        if args.debug:
+            print(f"User-study autosubmit enabled every {interval_seconds} seconds")
+
     port = find_free_port()
     url = f"http://127.0.0.1:{port}/?token={AUTH_TOKEN}"
     print(f"Authentication token: {AUTH_TOKEN}")
