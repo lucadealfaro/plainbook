@@ -78,6 +78,7 @@
     />
 
     <panel-bar
+        v-if="!isUserStudy"
         :auth-token="authToken"
         :verification="notebook?.metadata?.verification"
         @dismiss-verification="dismissVerification"
