@@ -191,7 +191,7 @@ export default {
     },
     template: /* html */ `
         <div class="code-cell-wrapper">
-            <div style="display: flex; gap: 0.25rem; align-items: center;">
+            <div class="code-cell-toolbar" style="display: flex; gap: 0.25rem; align-items: center;">
                 <button class="button is-small is-ghost px-2 mt-1" style="text-decoration: none;"
                         @click="toggleCollapse">
                     {{ isCollapsed ? '▶ &nbsp;Show code' : '▼ &nbsp;Hide code' }}
@@ -213,7 +213,7 @@ export default {
                     <span>Edit Code</span>
                 </button>
             </div>
-            <div v-if="!isCollapsed" style="padding-left: 2.25rem;">
+            <div v-show="!isCollapsed" class="code-content" style="padding-left: 2.25rem;">
                 <div class="code-editor-container p-2 is-size-7"
                      @dblclick="enterEditModeAtPoint($event)">
                     <pre class="language-python"><code class="language-python" v-html="highlightedCode + '\\n'"></code></pre>

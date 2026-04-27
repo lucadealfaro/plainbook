@@ -226,6 +226,68 @@ createApp({
             await fetchNotebook();
         }
 
+        const buildIpynb = (srcNb) => {
+            const cells = [];
+            for (const c of (srcNb && srcNb.cells) || []) {
+                if (c.cell_type === 'test') continue;
+                if (c.cell_type === 'markdown') {
+                    cells.push({
+                        cell_type: 'markdown',
+                        metadata: {},
+                        source: c.source ?? '',
+                    });
+                    continue;
+                }
+                if (c.cell_type === 'code') {
+                    const explanation = (c.metadata && c.metadata.explanation) || '';
+                    if (explanation.trim()) {
+                        cells.push({
+                            cell_type: 'markdown',
+                            metadata: {},
+                            source: explanation,
+                        });
+                    }
+                    cells.push({
+                        cell_type: 'code',
+                        metadata: {},
+                        execution_count: c.execution_count ?? null,
+                        source: c.source ?? '',
+                        outputs: c.outputs || [],
+                    });
+                }
+            }
+            const srcMeta = (srcNb && srcNb.metadata) || {};
+            const metadata = {
+                kernelspec: srcMeta.kernelspec || {
+                    display_name: 'Python 3',
+                    language: 'python',
+                    name: 'python3',
+                },
+                language_info: srcMeta.language_info || { name: 'python' },
+            };
+            return {
+                cells,
+                metadata,
+                nbformat: (srcNb && srcNb.nbformat) || 4,
+                nbformat_minor: (srcNb && srcNb.nbformat_minor) || 5,
+            };
+        };
+
+        const downloadIpynb = () => {
+            if (!notebook.value) return;
+            const ipynb = buildIpynb(notebook.value);
+            const json = JSON.stringify(ipynb, null, 1);
+            const blob = new Blob([json], { type: 'application/x-ipynb+json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${notebook_name.value || 'notebook'}.ipynb`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+        };
+
         const bumpKey = (dictRef, idx) => {
             dictRef.value = { ...dictRef.value, [idx]: (dictRef.value[idx] || 0) + 1 };
         };
@@ -1369,7 +1431,7 @@ createApp({
         return { notebook, notebook_name, loading, error, isLocked, lockNotebook, shareOutputWithAi, aiTokens, toggleShareOutput,
             sendExplanationToServer, authToken,
             sendCodeToServer, clearCellCode, ui_saveExplanationAndRun, ui_saveCodeAndRun,
-            sendMarkdownToServer, generateCode, activeIndex, reloadNotebook,
+            sendMarkdownToServer, generateCode, activeIndex, reloadNotebook, downloadIpynb,
             validateCode, ui_validateCode, dismissValidation, ui_resetAndRunAllCells, ui_forceRegenerateCellCode,
             setActiveCell, ui_runCell, running, runningActivity, asRead,
             ui_interruptKernel, insertCell, markdownEditKey,

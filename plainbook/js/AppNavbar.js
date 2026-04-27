@@ -4,7 +4,7 @@ export default {
     emits: [
         'lock', 'refresh', 'interrupt', 'regenerate-all',
         'restart', 'reset-run-all', 'run-all', 'run-all-tests', 'clear-outputs', 'open-info', 'open-settings', 'debug-request',
-        'set-ai-provider', 'toggle-share-output', 'reset-tokens'
+        'set-ai-provider', 'toggle-share-output', 'reset-tokens', 'download-ipynb'
         ],
     data() {
         return { aiDropdownOpen: false };
@@ -99,6 +99,15 @@ export default {
                             <span class="icon"><i class="bx bx-history"></i></span>
                             <span>Log viewer</span>
                         </a>
+
+                        <button v-if="hasNotebook"
+                                :disabled="running"
+                                @click="$emit('download-ipynb')"
+                                title="Download as Jupyter notebook (.ipynb)"
+                                class="button is-light">
+                            <span class="icon"><i class="bx bx-arrow-to-bottom"></i></span>
+                            <span>Download .ipynb</span>
+                        </button>
 
                         <!-- <button v-if="!running && hasNotebook"
                             @click="$emit('refresh')"

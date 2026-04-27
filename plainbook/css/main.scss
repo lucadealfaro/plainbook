@@ -256,3 +256,135 @@ pre[class*="language-"] {
 .button.is-small .bx {
   font-size: 1rem; /* adjust as needed */
 }
+
+// ── Print styles ───────────────────────────────────────────────────────
+// Goal: produce a clean PDF of the whole notebook. Hide editing UI,
+// release the scroll-locked layout, force light theme, and try to keep
+// each cell on a single page.
+@media print {
+  // Force a light scheme on print regardless of dark-mode setting.
+  :root, html, body {
+    color-scheme: light !important;
+    background: #fff !important;
+    color: #000 !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+
+  // Release the scroll-locked main layout so the full notebook flows
+  // onto multiple printed pages instead of being clipped to viewport.
+  #app {
+    display: block !important;
+    height: auto !important;
+    overflow: visible !important;
+  }
+  .notebook-area {
+    overflow: visible !important;
+    height: auto !important;
+    flex-grow: unset !important;
+    padding-bottom: 0 !important;
+  }
+
+  // Hide application chrome.
+  .app-toolbar,
+  .navbar,
+  .panel-container,
+  .modal,
+  .ui-error,
+  .cell-insert-zone,
+  .cell-label {
+    display: none !important;
+  }
+
+  // Hide unit-test overlay and history-viewer chrome if those views are
+  // active when the user prints; they're not part of the notebook content.
+  .unit-test-view,
+  .log-view-navbar,
+  .log-timeline,
+  .log-entry-panel {
+    display: none !important;
+  }
+
+  // Inside cells: hide editing toolbars, buttons, and validation feedback.
+  .notebook-cell {
+    .explanation-toolbar,
+    .code-cell-toolbar,
+    button {
+      display: none !important;
+    }
+  }
+  .validation-cell { display: none !important; }
+
+  // Force code content visible (CodeCell uses v-show; CSS overrides
+  // the inline display:none from collapsed state).
+  .code-cell-wrapper .code-content {
+    display: block !important;
+    padding-left: 0 !important;
+  }
+  .code-editor-container {
+    background: #f7f7f7 !important;
+    border: 1px solid #ddd !important;
+    overflow: visible !important;
+    padding: 0.4rem !important;
+    > pre, > pre[class*="language-"], > pre code {
+      white-space: pre-wrap !important;
+      word-break: break-word;
+      overflow: visible !important;
+      color: #000 !important;
+    }
+  }
+
+  // Cell container styling: avoid splitting across pages, neutral border,
+  // no shadow.
+  .notebook-cell {
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+    border: 1px solid #bbb !important;
+    background: #fff !important;
+    box-shadow: none !important;
+    margin: 0 0 0.4rem 0 !important;
+    scroll-margin-top: 0 !important;
+  }
+  .notebook-cell.is-active-cell {
+    border: 1px solid #bbb !important;
+  }
+
+  // Outputs: light backgrounds, dark text, wrap long lines.
+  .output-zone, .output-container, .output-text,
+  pre.output-stream, .html-output {
+    background: transparent !important;
+    color: #000 !important;
+  }
+  pre, code {
+    white-space: pre-wrap !important;
+    word-break: break-word;
+  }
+
+  // Bulma adaptive backgrounds → flat white.
+  .bg-warning-adaptive,
+  .bg-scheme-bis,
+  .bg-scheme-ter,
+  .bg-scheme-main {
+    background-color: #fff !important;
+  }
+
+  // Tables (e.g. dataframes) keep readable on print.
+  .dataframe {
+    border-collapse: collapse;
+    th, td {
+      border: 1px solid #ccc !important;
+      padding: 2px 6px !important;
+    }
+  }
+
+  // Images don't overflow page width.
+  img, .output-image img {
+    max-width: 100% !important;
+    height: auto !important;
+  }
+
+  // Page margins and orphan/widow control for paragraphs.
+  @page { margin: 0.7in; }
+  p, li { orphans: 3; widows: 3; }
+  h1, h2, h3, h4 { page-break-after: avoid; break-after: avoid; }
+}
