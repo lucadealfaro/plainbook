@@ -1,4 +1,4 @@
-import { createApp, ref, computed, onMounted, onBeforeUnmount, nextTick, getCurrentInstance } from './vue.esm-browser.js';
+import { createApp, ref, computed, onMounted, onBeforeUnmount, nextTick, getCurrentInstance, watch } from './vue.esm-browser.js';
 
 import AppNavbar from './AppNavbar.js';
 import NotebookCell from './NotebookCell.js';
@@ -184,6 +184,71 @@ createApp({
             }
             return r;
         };
+
+        // Activity ping to mux via server-side forwarder; only enabled in user-study mode.
+        let _lastActivitySent = 0;
+        const ACTIVITY_THROTTLE_MS = 30 * 1000; // send at most once every 30s for passive events
+
+        const sendActivityPing = async () => {
+            if (!isUserStudy.value) return;
+            try {
+                const now = Date.now();
+                if (now - _lastActivitySent < ACTIVITY_THROTTLE_MS) return;
+                _lastActivitySent = now;
+                const url = `/report_activity?token=${encodeURIComponent(authToken)}`;
+                await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+            } catch (err) {
+                // best-effort
+            }
+        };
+
+        // Watch runningActivity: whenever activity becomes non-null, report it.
+        watch(runningActivity, (nv, ov) => {
+            try {
+                if (isUserStudy.value && nv && nv.type) sendActivityPing();
+            } catch (e) {}
+        }, { deep: true });
+
+        // Also attach passive user interaction listeners to infer real activity.
+        const _onUserEvent = () => {
+            if (!isUserStudy.value) return;
+            sendActivityPing();
+        };
+
+        let activityListenersAttached = false;
+        const attachActivityListeners = () => {
+            if (activityListenersAttached || !isUserStudy.value) return;
+            window.addEventListener('mousemove', _onUserEvent);
+            window.addEventListener('keydown', _onUserEvent);
+            window.addEventListener('click', _onUserEvent);
+            window.addEventListener('plainbook:flush-edits', _onUserEvent);
+            activityListenersAttached = true;
+        };
+
+        const detachActivityListeners = () => {
+            if (!activityListenersAttached) return;
+            window.removeEventListener('mousemove', _onUserEvent);
+            window.removeEventListener('keydown', _onUserEvent);
+            window.removeEventListener('click', _onUserEvent);
+            window.removeEventListener('plainbook:flush-edits', _onUserEvent);
+            activityListenersAttached = false;
+        };
+
+        onMounted(() => {
+            attachActivityListeners();
+        });
+
+        watch(isUserStudy, () => {
+            if (isUserStudy.value) {
+                attachActivityListeners();
+            } else {
+                detachActivityListeners();
+            }
+        });
+
+        onBeforeUnmount(() => {
+            detachActivityListeners();
+        });
 
         // Action logger: emits 'active_cell_change' events to the server when
         // --log is enabled. Sends only when log_enabled is returned by

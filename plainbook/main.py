@@ -313,6 +313,33 @@ def get_notebook():
         is_user_study=args.user_study,
     )
 
+
+@post('/report_activity')
+@require_token
+def report_activity():
+    """Endpoint for the frontend to report real user activity.
+
+    This forwards an authenticated ping to the mux activity endpoint so
+    mux can update `last_activity` for this instance. The mux URL and
+    container id are read from environment variables set by the launcher.
+    """
+    if not args.user_study:
+        raise HTTPError(404, 'Activity reporting is only available in user study mode')
+    mux_url = os.environ.get('PLAINBOOK_MUX_URL', '').strip()
+    container_id = os.environ.get('PLAINBOOK_CONTAINER_INSTANCE_ID', '').strip()
+    if not mux_url or not container_id:
+        return dict(status='error', message='Mux URL or container id not configured')
+    api_url = mux_url.rstrip('/') + f'/api/sessions/{container_id}/activity'
+    try:
+        from urllib.request import Request, urlopen
+        req = Request(api_url, method='POST')
+        req.add_header('Content-Type', 'application/json')
+        req.add_header('Authorization', f'Bearer {AUTH_TOKEN}')
+        urlopen(req, data=b'{}', timeout=5)
+        return dict(status='ok')
+    except Exception as e:
+        return dict(status='error', message=str(e))
+
 @post('/set_key')
 @action_log.logged('set_key')
 @require_token
