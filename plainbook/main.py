@@ -656,6 +656,37 @@ def set_validation_visibility():
     return dict(status='success')
 
 
+@post('/verify_notebook')
+@action_log.logged('verify_notebook')
+@stateful
+@require_token
+def verify_notebook():
+    api_key, ai_provider, model, error = _get_ai_config()
+    if error:
+        return dict(status='error', message=error)
+    try:
+        result = notebook.verify_notebook(api_key, ai_provider=ai_provider, model=model)
+    except Exception as e:
+        friendly = _check_billing_error(e)
+        if friendly:
+            return dict(status='error', message=friendly)
+        raise
+    if result is None:
+        return dict(status='cancelled')
+    return dict(status='success', verification=result)
+
+
+@post('/set_verification_visibility')
+@action_log.logged('set_verification_visibility')
+@stateful
+@require_token
+def set_verification_visibility():
+    data = request.json
+    is_hidden = data.get('is_hidden', True)
+    notebook.set_verification_visibility(is_hidden)
+    return dict(status='success')
+
+
 @post('/set_unit_test_validation_visibility')
 @action_log.logged('set_unit_test_validation_visibility')
 @stateful

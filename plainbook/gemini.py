@@ -7,6 +7,8 @@ from .ai_common import (
     UNIT_TEST_SYSTEM_INSTRUCTIONS,
     CHECKING_INSTRUCTIONS,
     NAME_GENERATION_INSTRUCTIONS,
+    NOTEBOOK_VERIFY_INSTRUCTIONS,
+    TEST_VERIFY_INSTRUCTIONS,
     add_tokens,
     build_context_prompt,
     build_unit_test_prompt,
@@ -14,6 +16,7 @@ from .ai_common import (
     dump_ai_request,
     log_ai_request_size,
     parse_validation_response,
+    parse_verify_response,
     strip_markdown_code_fences,
 )
 
@@ -264,6 +267,44 @@ Validation Result:
     if debug:
         print("Response:", response.text)
     return parse_validation_response(response.text)
+
+
+def _gemini_verify(api_key, system_instructions, payload, label, model=None,
+                   debug=False, dump_ai_requests=False):
+    client = genai.Client(api_key=api_key)
+    model = model or GEMINI_VALIDATE_MODEL
+    if debug:
+        log_ai_request_size(f"gemini {label}", system_instructions, payload)
+    if dump_ai_requests:
+        dump_ai_request(dump_ai_requests, f"gemini {label}", {
+            "model": model,
+            "contents": payload,
+            "system_instruction": system_instructions,
+        })
+    response = client.models.generate_content(
+        model=model,
+        contents=payload,
+        config=types.GenerateContentConfig(
+            system_instruction=system_instructions
+        )
+    )
+    if response.usage_metadata:
+        add_tokens(response.usage_metadata.prompt_token_count, response.usage_metadata.candidates_token_count)
+    if debug:
+        print("Response:", response.text)
+    return parse_verify_response(response.text)
+
+
+def gemini_verify_notebook(api_key, payload, model=None, debug=False, dump_ai_requests=False):
+    return _gemini_verify(api_key, NOTEBOOK_VERIFY_INSTRUCTIONS, payload,
+                          "verify_notebook", model=model, debug=debug,
+                          dump_ai_requests=dump_ai_requests)
+
+
+def gemini_verify_tests(api_key, payload, model=None, debug=False, dump_ai_requests=False):
+    return _gemini_verify(api_key, TEST_VERIFY_INSTRUCTIONS, payload,
+                          "verify_tests", model=model, debug=debug,
+                          dump_ai_requests=dump_ai_requests)
 
 
 def gemini_generate_cell_name(api_key, explanation, model=None, debug=False, dump_ai_requests=False):

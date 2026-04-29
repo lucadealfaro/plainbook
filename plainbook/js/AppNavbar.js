@@ -106,7 +106,7 @@ export default {
                                 title="Download as Jupyter notebook (.ipynb)"
                                 class="button is-light">
                             <span class="icon"><i class="bx bx-arrow-to-bottom"></i></span>
-                            <span>Download .ipynb</span>
+                            <span>.ipynb</span>
                         </button>
 
                         <!-- <button v-if="!running && hasNotebook"
@@ -127,6 +127,9 @@ export default {
                             </span>
                             <span v-else-if="runningActivity && runningActivity.type === 'validating'">
                                 Validating cell {{ runningActivity.cellIndex + 1 }}<template v-if="runningActivity.cellName">: {{ runningActivity.cellName }}</template>
+                            </span>
+                            <span v-else-if="runningActivity && runningActivity.type === 'verifying'">
+                                Verifying notebook&hellip;
                             </span>
                             <span v-else-if="runningActivity && runningActivity.type === 'running'">
                                 Running cell {{ runningActivity.cellIndex + 1 }}<template v-if="runningActivity.cellName">: {{ runningActivity.cellName }}</template>
@@ -191,6 +194,16 @@ export default {
                             class="button is-warning">
                             <span class="icon"><i class="bx bx-seal-check"></i></span>
                             <span>Run tests</span>
+                        </button>
+
+                        <button v-if="!running && hasNotebook"
+                            :disabled="cellCount === 0"
+                            @mousedown.prevent
+                            @click="$emit('verify-notebook')"
+                            title="Verify notebook (run + AI audit for correctness and dangerous operations)"
+                            class="button is-info">
+                            <span class="icon"><i class="bx bx-shield-quarter"></i></span>
+                            <span>Verify</span>
                         </button>
 
         </div>

@@ -1,10 +1,12 @@
 import { ref } from './vue.esm-browser.js';
 import InputFile from './InputFile.js';
 import InstructionsPanel from './InstructionsPanel.js';
+import VerificationBar from './VerificationBar.js';
 
 export default {
-    props: ['authToken'],
-    components: { InputFile, InstructionsPanel },
+    props: ['authToken', 'verification'],
+    emits: ['dismiss-verification'],
+    components: { InputFile, InstructionsPanel, VerificationBar },
     setup() {
         const activeTab = ref(null);
         const selectedCount = ref(0);
@@ -46,6 +48,10 @@ export default {
                     <span>Instructions</span>
                 </button>
             </div>
+            <verification-bar
+                v-if="verification && !verification.is_hidden"
+                :verification="verification"
+                @dismiss="$emit('dismiss-verification')" />
             <div v-show="activeTab === 'files'" class="panel-section">
                 <input-file :auth-token="authToken" @file-counts="onFileCounts" />
             </div>

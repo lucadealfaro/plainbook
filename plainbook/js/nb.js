@@ -797,6 +797,60 @@ createApp({
         };
 
 
+        const ui_verifyNotebook = async () => {
+            if (!activeAiProvider.value) {
+                uiError.value = 'No AI provider is active. Please set an API key in Settings.';
+                return;
+            }
+            if (running.value) return;
+            asRead.value = false;
+            flushActiveEdits();
+            await waitForPendingSaves();
+            running.value = true;
+            try {
+                // Run the whole notebook first so variables and outputs are fresh.
+                await ui_resetKernel();
+                try {
+                    await runCells(notebook.value.cells.length - 1);
+                } catch (err) {
+                    // Execution failed -- surface the error and abort verification
+                    // so we don't audit a notebook that didn't actually run.
+                    uiError.value = (err && err.message)
+                        ? `Verification aborted: ${err.message}`
+                        : 'Verification aborted: notebook failed to execute.';
+                    return;
+                }
+                if (!running.value) return; // user interrupted
+                runningActivity.value = { type: 'verifying' };
+                const r = await apiCall('/verify_notebook', 'POST', {});
+                if (r.status === 'cancelled') {
+                    console.log('Verification cancelled');
+                } else if (r.status === 'error') {
+                    uiError.value = r.message || 'Verification failed';
+                } else if (r.status === 'success') {
+                    if (notebook.value && notebook.value.metadata) {
+                        notebook.value.metadata.verification = r.verification;
+                    }
+                }
+            } finally {
+                running.value = false;
+                runningActivity.value = { type: null, cellIndex: null };
+            }
+        };
+
+
+        const dismissVerification = async () => {
+            try {
+                await apiCall('/set_verification_visibility', 'POST', { is_hidden: true });
+                if (notebook.value && notebook.value.metadata && notebook.value.metadata.verification) {
+                    notebook.value.metadata.verification.is_hidden = true;
+                }
+            } catch (err) {
+                throw new Error('Failed to dismiss verification', { cause: err });
+            }
+        };
+
+
         const ui_forceRegenerateCellCode = async (cellIndex) => {
             asRead.value = false;
             flushActiveEdits();
@@ -1432,7 +1486,7 @@ createApp({
             sendExplanationToServer, authToken,
             sendCodeToServer, clearCellCode, ui_saveExplanationAndRun, ui_saveCodeAndRun,
             sendMarkdownToServer, generateCode, activeIndex, reloadNotebook, downloadIpynb,
-            validateCode, ui_validateCode, dismissValidation, ui_resetAndRunAllCells, ui_forceRegenerateCellCode,
+            validateCode, ui_validateCode, dismissValidation, ui_verifyNotebook, dismissVerification, ui_resetAndRunAllCells, ui_forceRegenerateCellCode,
             setActiveCell, ui_runCell, running, runningActivity, asRead,
             ui_interruptKernel, insertCell, markdownEditKey,
             last_executed_cell_index, last_valid_code_cell_index, last_valid_output_cell_index,

@@ -78,7 +78,7 @@ pre[class*="language-"] {
 }
 
 // Hide button text on narrow screens, show only icons
-@media screen and (max-width: 1000px) {
+@media screen and (max-width: 1050px) {
   .app-toolbar .button span:not(.icon) {
     display: none !important;
   }

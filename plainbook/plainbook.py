@@ -16,12 +16,12 @@ import nbformat
 import requests
 
 from .ai_common import get_session_tokens
-from .gemini import gemini_generate_code, gemini_validate_code, gemini_generate_cell_name, gemini_generate_test_code, gemini_generate_unit_test_code
-from .claude import claude_generate_code, claude_validate_code, claude_generate_cell_name, claude_generate_test_code, claude_generate_unit_test_code
+from .gemini import gemini_generate_code, gemini_validate_code, gemini_generate_cell_name, gemini_generate_test_code, gemini_generate_unit_test_code, gemini_verify_notebook, gemini_verify_tests
+from .claude import claude_generate_code, claude_validate_code, claude_generate_cell_name, claude_generate_test_code, claude_generate_unit_test_code, claude_verify_notebook, claude_verify_tests
 
 AI_PROVIDERS = {
-    "gemini": {"generate": gemini_generate_code, "validate": gemini_validate_code, "name": gemini_generate_cell_name, "generate_test": gemini_generate_test_code, "generate_unit_test": gemini_generate_unit_test_code},
-    "claude": {"generate": claude_generate_code, "validate": claude_validate_code, "name": claude_generate_cell_name, "generate_test": claude_generate_test_code, "generate_unit_test": claude_generate_unit_test_code},
+    "gemini": {"generate": gemini_generate_code, "validate": gemini_validate_code, "name": gemini_generate_cell_name, "generate_test": gemini_generate_test_code, "generate_unit_test": gemini_generate_unit_test_code, "verify_notebook": gemini_verify_notebook, "verify_tests": gemini_verify_tests},
+    "claude": {"generate": claude_generate_code, "validate": claude_validate_code, "name": claude_generate_cell_name, "generate_test": claude_generate_test_code, "generate_unit_test": claude_generate_unit_test_code, "verify_notebook": claude_verify_notebook, "verify_tests": claude_verify_tests},
 }
 
 MAX_OUTPUT_CHARS_FOR_AI = 2000
@@ -609,6 +609,7 @@ class Plainbook:
         with self._lock:
             assert cell_type in ('markdown', 'code', 'test')
             assert 0 <= index <= len(self.nb.cells)
+            self._clear_verification()
             if cell_type == 'markdown':
                 new_cell = nbformat.v4.new_markdown_cell(source="")
             elif cell_type == 'test':
@@ -639,6 +640,7 @@ class Plainbook:
         with self._lock:
             if index < 0 or index >= len(self.nb.cells):
                 raise IndexError("Cell index out of range")
+            self._clear_verification()
             cell = self.nb.cells[index]
             # Update execution pointer: invalidate if code was executed, otherwise shift index
             if index <= self.last_executed_cell:
@@ -678,6 +680,7 @@ class Plainbook:
             n = len(self.nb.cells)
             assert 0 <= index < n, "Cell index out of range"
             assert 0 <= new_index <= n, "New index out of range"
+            self._clear_verification()
             cell = self.nb.cells.pop(index)
             self.nb.cells.insert(new_index, cell)
             if cell.cell_type == 'code':
@@ -739,6 +742,7 @@ class Plainbook:
             cell = self.nb.cells[index]
             cell.source = source
             self._clear_validation(cell)  # Clear any cached validation results
+            self._clear_verification()
             cell.metadata['code_timestamp'] = datetime.datetime.now().isoformat()
             if cell.cell_type == 'test':
                 cell.outputs = []
@@ -771,6 +775,7 @@ class Plainbook:
             assert cell.cell_type in ('code', 'test')
             cell.source = ''
             self._clear_validation(cell)  # Clear any cached validation results
+            self._clear_verification()
             cell.outputs = []
             if cell.cell_type == 'test':
                 self.last_valid_test_cell = min(self.last_valid_test_cell, index - 1)
@@ -794,6 +799,7 @@ class Plainbook:
             assert cell.cell_type in ('code', 'test')
             cell.metadata['explanation'] = explanation
             cell.metadata['explanation_timestamp'] = datetime.datetime.now().isoformat()
+            self._clear_verification()
             if cell.cell_type == 'test':
                 self.last_valid_test_cell = min(self.last_valid_test_cell, index - 1)
             else:
@@ -1322,6 +1328,7 @@ class Plainbook:
                 if self.ai_request_pending:
                     cell.source = new_code
                     self._clear_validation(cell)
+                    self._clear_verification()
                     cell.metadata['code_timestamp'] = datetime.datetime.now().isoformat()
                     cell.outputs = []
                     if is_test:
@@ -1626,6 +1633,149 @@ class Plainbook:
                 cell.metadata['validation'] = {}
             cell.metadata['validation']['is_hidden'] = is_hidden
             self._write()
+
+
+    def set_verification_visibility(self, is_hidden):
+        """Sets the visibility of the notebook-level verification verdict bar."""
+        with self._lock:
+            verification = self.nb.metadata.get('verification')
+            if verification:
+                verification['is_hidden'] = is_hidden
+                self._write()
+
+
+    def _clear_verification(self):
+        """Drop any stored notebook-level verification verdict.
+        Called from invalidation paths so a stale green/red bar does not linger
+        after cells are edited, added, removed, or moved."""
+        if 'verification' in self.nb.metadata:
+            self.nb.metadata.pop('verification', None)
+
+
+    def _format_test_cell_for_verify(self, cell):
+        """Like _get_cell_text_for_ai, but for test cells in the verify-tests path:
+        only the code is included (no description, no outputs). The post-execution
+        variables are appended by the caller."""
+        lines = cell.source.split("\n")
+        name = cell.metadata.get('name')
+        header = f"# Test cell {name}:\n" if name else "# Test cell:\n"
+        return header + "\n".join(lines) + "\n\n"
+
+
+    def _build_verify_notebook_payload(self):
+        """Builds the user-message payload for NOTEBOOK_VERIFY_INSTRUCTIONS.
+        Includes every non-test code cell with description, code, post-execution
+        variables, and (gated by share_output_with_ai) outputs."""
+        parts = []
+        for i, cell in enumerate(self.nb.cells):
+            if cell.cell_type != 'code':
+                continue
+            name = cell.metadata.get('name') or f"cell {i}"
+            explanation = cell.metadata.get('explanation', '') or ''
+            section = [f"=== {name} ==="]
+            section.append("DESCRIPTION:")
+            section.append(explanation.strip() or "(no description provided)")
+            section.append("")
+            section.append(self._get_cell_text_for_ai(cell).rstrip())
+            variables = cell.metadata.get('variables', {}) or {}
+            var_text = self._format_variables_for_ai(variables)
+            section.append("VARIABLES AFTER EXECUTION:")
+            section.append(var_text if var_text else "(none)")
+            section.append("")
+            parts.append("\n".join(section))
+        return "\n\n".join(parts)
+
+
+    def _build_verify_tests_payload(self):
+        """Builds the user-message payload for TEST_VERIFY_INSTRUCTIONS.
+        Includes every test cell with code and post-execution variables only."""
+        parts = []
+        for i, cell in enumerate(self.nb.cells):
+            if cell.cell_type != 'test':
+                continue
+            name = cell.metadata.get('name') or f"test cell {i}"
+            section = [f"=== {name} ==="]
+            section.append(self._format_test_cell_for_verify(cell).rstrip())
+            variables = cell.metadata.get('variables', {}) or {}
+            var_text = self._format_variables_for_ai(variables)
+            section.append("VARIABLES AT EXECUTION TIME:")
+            section.append(var_text if var_text else "(none)")
+            section.append("")
+            parts.append("\n".join(section))
+        return "\n\n".join(parts)
+
+
+    def verify_notebook(self, api_key, ai_provider="gemini", model=None):
+        """Audit the whole notebook with two batched AI calls.
+
+        Caller must have already executed the notebook (so cell variables and
+        outputs are fresh) -- this method does not run any cells itself.
+
+        Returns a combined verdict dict {is_valid, is_hidden, message,
+        notebook: {is_valid, message}, tests?: {is_valid, message}}, and stores
+        it on self.nb.metadata['verification'] so it survives reload."""
+        with self._lock:
+            if self.ai_request_pending:
+                raise RuntimeError("An AI request is already pending.")
+            self.ai_request_pending = True
+            provider = AI_PROVIDERS[ai_provider]
+            verify_notebook_fn = provider["verify_notebook"]
+            verify_tests_fn = provider["verify_tests"]
+
+            has_code_cells = any(c.cell_type == 'code' for c in self.nb.cells)
+            has_test_cells = any(c.cell_type == 'test' for c in self.nb.cells)
+            try:
+                notebook_result = None
+                if has_code_cells:
+                    payload = self._build_verify_notebook_payload()
+                    notebook_result = verify_notebook_fn(
+                        api_key, payload, model=model,
+                        debug=self.debug, dump_ai_requests=self.dump_ai_requests)
+                if not self.ai_request_pending:
+                    return None
+
+                tests_result = None
+                if has_test_cells:
+                    payload = self._build_verify_tests_payload()
+                    tests_result = verify_tests_fn(
+                        api_key, payload, model=model,
+                        debug=self.debug, dump_ai_requests=self.dump_ai_requests)
+                if not self.ai_request_pending:
+                    return None
+
+                # Compose a single markdown message with both sub-results so the
+                # client can render it directly.
+                pieces = []
+                if notebook_result is not None:
+                    pieces.append("### Notebook")
+                    if notebook_result['is_valid']:
+                        pieces.append("OK")
+                    else:
+                        pieces.append(notebook_result['message'] or "Violations were reported.")
+                if tests_result is not None:
+                    pieces.append("### Tests")
+                    if tests_result['is_valid']:
+                        pieces.append("OK")
+                    else:
+                        pieces.append(tests_result['message'] or "Violations were reported.")
+                combined_valid = (
+                    (notebook_result is None or notebook_result['is_valid']) and
+                    (tests_result is None or tests_result['is_valid'])
+                )
+                combined = {
+                    'is_valid': combined_valid,
+                    'is_hidden': False,
+                    'message': "\n\n".join(pieces).strip(),
+                }
+                if notebook_result is not None:
+                    combined['notebook'] = notebook_result
+                if tests_result is not None:
+                    combined['tests'] = tests_result
+                self.nb.metadata['verification'] = combined
+                self._write()
+                return combined
+            finally:
+                self.ai_request_pending = False
 
 
     def clear_outputs(self):

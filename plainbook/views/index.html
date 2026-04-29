@@ -68,10 +68,13 @@
         @set-ai-provider="setActiveAiProvider"
         @run-all-tests="ui_runAllTests"
         @download-ipynb="downloadIpynb"
-    />    
+        @verify-notebook="ui_verifyNotebook"
+    />
 
     <panel-bar
         :auth-token="authToken"
+        :verification="notebook?.metadata?.verification"
+        @dismiss-verification="dismissVerification"
     />
 
     <ui-error 

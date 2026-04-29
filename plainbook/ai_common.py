@@ -78,8 +78,58 @@ You should return the words YES (if the code meets the instructions) or NO (if i
 followed by a brief explanation.
 """
 
-VALIDATION_FEEDBACK_PREAMBLE = """The previous code for this cell does not seem to be correct. 
+VALIDATION_FEEDBACK_PREAMBLE = """The previous code for this cell does not seem to be correct.
 Here are comments on it given by an AI model:"""
+
+NOTEBOOK_VERIFY_INSTRUCTIONS = """
+You are auditing a Jupyter notebook on behalf of a user who needs assurance that the
+notebook is both correct and safe to run.
+You will receive every non-test code cell in order. For each cell you are given:
+  - the human-written description (the intended behavior),
+  - the Python code,
+  - the variables present after executing the cell,
+  - and possibly the cell's output.
+
+For every cell, verify BOTH of the following:
+  (a) The code implements what the description says (no missing steps, no extra steps
+      beyond what the description implies, no logic that contradicts it).
+  (b) The code performs no dangerous operations. Treat as dangerous, in particular:
+      deleting or overwriting files (os.remove, shutil.rmtree, Path.unlink, open(..., 'w')
+      on paths the description does not call out), modifying environment variables,
+      mutating system configuration or registry, executing shell commands
+      (os.system, subprocess.*, !shell, %%bash), installing packages,
+      and network calls to hosts the description does not mention.
+      Reading input files the description references is NOT dangerous.
+
+Reply on the very first line with EXACTLY one of these tokens:
+  OK            -- if every cell passes both (a) and (b).
+  VIOLATIONS    -- if any cell fails either check.
+
+If VIOLATIONS, follow on the next line with a markdown bullet list. Each bullet must
+name the offending cell (use its name if given, else "cell N") and describe the issue
+in one sentence. Do not include any other prose.
+"""
+
+TEST_VERIFY_INSTRUCTIONS = """
+You are auditing the test cells of a Jupyter notebook for safety only.
+You will receive every test cell in order. For each cell you are given the Python code
+and the variables present at the time of execution. You are NOT given a description and
+you should NOT verify whether the test logic is "correct" -- only whether it is safe.
+
+Verify that no test cell performs dangerous operations. Treat as dangerous, in particular:
+deleting or overwriting files (os.remove, shutil.rmtree, Path.unlink, open(..., 'w') on
+arbitrary paths), modifying environment variables, mutating system configuration,
+executing shell commands (os.system, subprocess.*, !shell, %%bash), installing packages,
+and network calls. Assertions, comparisons, and reads of in-memory variables are fine.
+
+Reply on the very first line with EXACTLY one of these tokens:
+  OK            -- if every test cell is safe.
+  VIOLATIONS    -- if any test cell performs a dangerous operation.
+
+If VIOLATIONS, follow on the next line with a markdown bullet list. Each bullet must
+name the offending test cell (use its name if given, else "test cell N") and describe
+the dangerous operation in one sentence. Do not include any other prose.
+"""
 
 VARIABLES_FOR_TARGET_DESCRIPTION = """In generating the test setup, the goal is to set the value of these variables, 
 possibly simplifying them if they are long or complex, so that a human can make sense of their values 
@@ -381,3 +431,21 @@ def parse_validation_response(text):
         return dict(is_valid=False, message=clean_start(r[2:]))
     else:
         return dict(is_valid=False, message=r)
+
+
+def parse_verify_response(text):
+    """Parse an OK / VIOLATIONS verification response into a result dict.
+    The first line carries the verdict; the rest is the (markdown) message body."""
+    r = text.strip()
+    first, _, rest = r.partition("\n")
+    head = first.strip().upper()
+    body = rest.strip()
+    if head.startswith("OK"):
+        return dict(is_valid=True, message=body)
+    if head.startswith("VIOLATIONS"):
+        # If the model did not include any body, surface a generic message so the
+        # red bar is never empty.
+        return dict(is_valid=False, message=body or "Violations were reported but no details were given.")
+    # Fallback: model did not follow the protocol -- treat as a violation and
+    # show the entire response so the user can see what happened.
+    return dict(is_valid=False, message=r)
