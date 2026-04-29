@@ -55,7 +55,7 @@ class TestNotebookLifecycle:
             'name', 'path', 'num_cells',
             'last_executed_cell', 'last_valid_code_cell',
             'last_valid_output_cell', 'last_valid_test_cell', 'is_locked',
-            'share_output_with_ai', 'ai_tokens',
+            'share_output_with_ai', 'ai_tokens', 'verification_status',
         }
         assert set(state.keys()) == expected_keys
         assert state['num_cells'] == 0

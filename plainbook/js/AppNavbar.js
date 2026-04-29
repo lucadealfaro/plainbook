@@ -1,9 +1,9 @@
 export default {
     props: ['isLocked', 'running', 'restarting', 'runningActivity', 'hasNotebook', 'upToDate', 'cellCount', 'hasApiKey', 'debug',
-            'activeAiProvider', 'availableAiProviders', 'shareOutputWithAi', 'aiTokens', 'logEnabled', 'logviewEnabled', 'authToken'],
+            'activeAiProvider', 'availableAiProviders', 'shareOutputWithAi', 'aiTokens', 'verification', 'verificationStatus', 'logEnabled', 'logviewEnabled', 'authToken'],
     emits: [
         'lock', 'refresh', 'interrupt', 'regenerate-all',
-        'restart', 'reset-run-all', 'run-all', 'run-all-tests', 'clear-outputs', 'open-info', 'open-settings', 'debug-request',
+        'restart', 'reset-run-all', 'run-all', 'run-all-tests', 'verify-notebook', 'clear-outputs', 'open-info', 'open-settings', 'debug-request',
         'set-ai-provider', 'toggle-share-output', 'reset-tokens', 'download-ipynb'
         ],
     data() {
@@ -27,6 +27,29 @@ export default {
         },
         canSwitchProvider() {
             return this.availableAiProviders && this.availableAiProviders.length >= 2;
+        },
+        verifyButtonClass() {
+            return this.verificationStatus === 'ok' ? 'is-success' : 'is-danger';
+        },
+        verifyButtonTitle() {
+            const ts = this.verification?.timestamp;
+            let when = '';
+            if (ts) {
+                const d = new Date(ts);
+                if (!isNaN(d.getTime())) {
+                    when = ' on ' + d.toLocaleString(undefined, {
+                        year: 'numeric', month: 'short', day: 'numeric',
+                        hour: '2-digit', minute: '2-digit',
+                    });
+                }
+            }
+            if (this.verificationStatus === 'ok') {
+                return 'Notebook last verified OK on this machine and path' + when;
+            }
+            if (this.verificationStatus === 'mismatch') {
+                return 'Stored verification was made on a different machine or path' + when + ' -- re-verify';
+            }
+            return 'Notebook not verified -- click to run + AI audit for correctness and dangerous operations';
         },
         groupedProviders() {
             if (!this.availableAiProviders) return [];
@@ -200,8 +223,8 @@ export default {
                             :disabled="cellCount === 0"
                             @mousedown.prevent
                             @click="$emit('verify-notebook')"
-                            title="Verify notebook (run + AI audit for correctness and dangerous operations)"
-                            class="button is-info">
+                            :title="verifyButtonTitle"
+                            :class="['button', verifyButtonClass]">
                             <span class="icon"><i class="bx bx-shield-quarter"></i></span>
                             <span>Verify</span>
                         </button>

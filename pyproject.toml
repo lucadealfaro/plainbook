@@ -21,6 +21,7 @@ dependencies = [
     "bottle",
     "cherrypy",
     "google-genai",
+    "py-machineid",
     "snapshot-kernel>=0.1.4",
     "nbformat",
     "pyyaml",

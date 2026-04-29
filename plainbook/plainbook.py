@@ -1,6 +1,7 @@
 import atexit
 import copy
 import datetime
+import hashlib
 import json
 import os
 import re
@@ -12,6 +13,7 @@ import threading
 import time
 import uuid
 
+import machineid
 import nbformat
 import requests
 
@@ -563,6 +565,7 @@ class Plainbook:
             'is_locked': self.nb.metadata.get('is_locked', False),
             'share_output_with_ai': self.nb.metadata.get('share_output_with_ai', True),
             'ai_tokens': get_session_tokens(),
+            'verification_status': self.get_verification_status(),
         }
         if self.debug:
             print("State: ", json.dumps(state, indent=2))
@@ -609,7 +612,6 @@ class Plainbook:
         with self._lock:
             assert cell_type in ('markdown', 'code', 'test')
             assert 0 <= index <= len(self.nb.cells)
-            self._clear_verification()
             if cell_type == 'markdown':
                 new_cell = nbformat.v4.new_markdown_cell(source="")
             elif cell_type == 'test':
@@ -640,7 +642,6 @@ class Plainbook:
         with self._lock:
             if index < 0 or index >= len(self.nb.cells):
                 raise IndexError("Cell index out of range")
-            self._clear_verification()
             cell = self.nb.cells[index]
             # Update execution pointer: invalidate if code was executed, otherwise shift index
             if index <= self.last_executed_cell:
@@ -680,7 +681,6 @@ class Plainbook:
             n = len(self.nb.cells)
             assert 0 <= index < n, "Cell index out of range"
             assert 0 <= new_index <= n, "New index out of range"
-            self._clear_verification()
             cell = self.nb.cells.pop(index)
             self.nb.cells.insert(new_index, cell)
             if cell.cell_type == 'code':
@@ -742,7 +742,6 @@ class Plainbook:
             cell = self.nb.cells[index]
             cell.source = source
             self._clear_validation(cell)  # Clear any cached validation results
-            self._clear_verification()
             cell.metadata['code_timestamp'] = datetime.datetime.now().isoformat()
             if cell.cell_type == 'test':
                 cell.outputs = []
@@ -775,7 +774,6 @@ class Plainbook:
             assert cell.cell_type in ('code', 'test')
             cell.source = ''
             self._clear_validation(cell)  # Clear any cached validation results
-            self._clear_verification()
             cell.outputs = []
             if cell.cell_type == 'test':
                 self.last_valid_test_cell = min(self.last_valid_test_cell, index - 1)
@@ -799,7 +797,6 @@ class Plainbook:
             assert cell.cell_type in ('code', 'test')
             cell.metadata['explanation'] = explanation
             cell.metadata['explanation_timestamp'] = datetime.datetime.now().isoformat()
-            self._clear_verification()
             if cell.cell_type == 'test':
                 self.last_valid_test_cell = min(self.last_valid_test_cell, index - 1)
             else:
@@ -1328,7 +1325,6 @@ class Plainbook:
                 if self.ai_request_pending:
                     cell.source = new_code
                     self._clear_validation(cell)
-                    self._clear_verification()
                     cell.metadata['code_timestamp'] = datetime.datetime.now().isoformat()
                     cell.outputs = []
                     if is_test:
@@ -1645,11 +1641,41 @@ class Plainbook:
 
 
     def _clear_verification(self):
-        """Drop any stored notebook-level verification verdict.
-        Called from invalidation paths so a stale green/red bar does not linger
-        after cells are edited, added, removed, or moved."""
-        if 'verification' in self.nb.metadata:
-            self.nb.metadata.pop('verification', None)
+        """Drop any stored notebook-level verification verdict and its host/path
+        binding. Not currently called from any invalidation path (we trust the
+        user's edits and let the host/path hash flag mismatches), but kept as a
+        primitive for callers that do want to invalidate a verdict."""
+        self.nb.metadata.pop('verification', None)
+        self.nb.metadata.pop('verified_hash', None)
+
+
+    def _compute_notebook_hash(self):
+        """Hash of (machine id, absolute notebook path). Stored alongside a
+        verification result so the verdict is only trusted when the notebook is
+        opened from the same path on the same machine where it was verified."""
+        try:
+            host_id = machineid.id()
+        except Exception:
+            host_id = ''
+        path = os.path.abspath(self.path) if self.path else ''
+        return hashlib.sha256(f"{host_id}:{path}".encode("utf-8")).hexdigest()
+
+
+    def get_verification_status(self):
+        """Returns one of:
+          'ok'        -- last verification passed AND it was performed on this
+                         host/path.
+          'mismatch'  -- a verified_hash is stored but no longer matches this
+                         host/path (notebook was moved or copied).
+          'none'      -- never verified, verification was cleared, or the last
+                         verification did not pass."""
+        verification = self.nb.metadata.get('verification') or {}
+        stored = self.nb.metadata.get('verified_hash')
+        if not stored:
+            return 'none'
+        if stored != self._compute_notebook_hash():
+            return 'mismatch'
+        return 'ok' if verification.get('is_valid') else 'none'
 
 
     def _format_test_cell_for_verify(self, cell):
@@ -1766,12 +1792,16 @@ class Plainbook:
                     'is_valid': combined_valid,
                     'is_hidden': False,
                     'message': "\n\n".join(pieces).strip(),
+                    'timestamp': datetime.datetime.now().isoformat(),
                 }
                 if notebook_result is not None:
                     combined['notebook'] = notebook_result
                 if tests_result is not None:
                     combined['tests'] = tests_result
                 self.nb.metadata['verification'] = combined
+                # Bind this verdict to the current host + path so a moved or
+                # copied notebook is shown as untrusted (mismatch state).
+                self.nb.metadata['verified_hash'] = self._compute_notebook_hash()
                 self._write()
                 return combined
             finally:

@@ -31,6 +31,7 @@ createApp({
         const isLocked = ref(false);
         const shareOutputWithAi = ref(true);
         const aiTokens = ref({input: 0, output: 0});
+        const verificationStatus = ref('none');
         const debug = ref(false);
         // For running a notebook.
         const running = ref(false);
@@ -141,6 +142,7 @@ createApp({
             if (state.ai_tokens) {
                 aiTokens.value = state.ai_tokens;
             }
+            verificationStatus.value = state.verification_status || 'none';
             if (notebook.value && notebook.value.metadata) {
                 notebook.value.metadata.is_locked = state.is_locked;
             }
@@ -1482,7 +1484,7 @@ createApp({
             window.removeEventListener('click', handleClickOutside);
         });
 
-        return { notebook, notebook_name, loading, error, isLocked, lockNotebook, shareOutputWithAi, aiTokens, toggleShareOutput,
+        return { notebook, notebook_name, loading, error, isLocked, lockNotebook, shareOutputWithAi, aiTokens, verificationStatus, toggleShareOutput,
             sendExplanationToServer, authToken,
             sendCodeToServer, clearCellCode, ui_saveExplanationAndRun, ui_saveCodeAndRun,
             sendMarkdownToServer, generateCode, activeIndex, reloadNotebook, downloadIpynb,
