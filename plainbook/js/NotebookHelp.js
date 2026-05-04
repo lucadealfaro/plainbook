@@ -2,17 +2,12 @@ const NotebookHelp = {
     template: /* html */ `
         <div class="help-container p-5">
             <div class="content">
-                <p>A Plainbook is a document that contains a series of cells. 
-                The cells describe in plain language what you want to do.  Your instructions are translated into code and executed.
-                <strong>You need at least one AI API key to use Plainbook</strong>, which you can set in the settings menu.</p>
-                <p>There are three types of cells:</p>
+                <p>A Plainbook consists in a sequence of cells:</p>
                 <ul>
-                    <li><strong>Comment cells:</strong> Used for comments and explanations; you can use markdown notation.</li>
-                    <li><strong>Action cells:</strong> Describe here in plain language what you want to do.  
-                    Your instructions will be translated into code and executed.</li>
-                    <li><strong>Test cells:</strong> Write properties that should hold at certain points of the notebook 
-                    to check that everything is working as expected.</li>
+                    <li><strong>Action cells:</strong> Describe what you want to do; Plainbook will generate and execute the code for you.</li>
+                    <li><strong>Comment cells:</strong> You can use markdown to write comments and explanations.</li>
                 </ul>
+                <p><strong>You need at least one AI API key to use Plainbook</strong>, which you can set in the settings menu.</p>
 
                 <h2 class="title is-4">Working with Action Cells</h2>
                 <ul>
@@ -21,8 +16,7 @@ const NotebookHelp = {
                     <li><strong>Regenerate Code:</strong> Ask AI to generate or fix code based on your description.</li>
                     <li><strong>Validate Code:</strong> Check if the generated code matches your description. You can use one AI
                     to check on the work of another.</li>
-                    <li><strong>Move:</strong> Use arrow buttons to reorder cells.</li>
-                    <li><strong>Delete:</strong> Click the trash button to remove a cell</li>
+                    <li><strong>Move and Delete:</strong> Use arrow buttons to reorder cells, and tehhe trash icon to delete them.</li>
                 </ul>
                 <p><strong>Execution order:</strong> Unlike in Jupyter Notebooks, cells are always guaranteed to be executed in order, starting from the beginning.
                 If you click "Run" on a cell, all preceding cells will be executed first to ensure that the notebook 
