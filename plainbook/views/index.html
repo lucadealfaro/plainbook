@@ -200,7 +200,7 @@
                     @insert="(celltype) => insertCell(notebook.cells.length, celltype)"
                 />
 
-                <div class="box mt-6" v-if="notebook.cells.length === 0 && !loading">
+                <div class="box" style="margin-top: 6rem;" v-if="notebook.cells.length === 0 && !loading">
                     <h1 class="title is-4 has-text-centered">Getting Started</h1>
                     <notebook-help />
                 </div>

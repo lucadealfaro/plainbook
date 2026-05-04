@@ -7,13 +7,13 @@ export default {
             <div class="cell-insert-buttons">
                 <button
                     class="button insert-cell is-info is-small py-0 px-3"
-                    @click.stop="$emit('insert', 'markdown')">
-                    Insert Comment
+                    @click.stop="$emit('insert', 'code')">
+                    Insert Action
                 </button>
                 <button
                     class="button insert-cell is-info is-small py-0 px-3"
-                    @click.stop="$emit('insert', 'code')">
-                    Insert Action
+                    @click.stop="$emit('insert', 'markdown')">
+                    Insert Comment
                 </button>
                 <button
                     v-if="cellCount > 0"
