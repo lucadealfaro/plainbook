@@ -78,6 +78,11 @@ _saved_settings = dict(settings)
 for env_var, setting_key in [('CLAUDE_API_KEY', 'claude_api_key'), ('GEMINI_API_KEY', 'gemini_api_key')]:
     if not settings.get(setting_key) and os.environ.get(env_var):
         settings[setting_key] = os.environ[env_var]
+    # In user-study mode, hide the keys from the rest of the process
+    # (and any subprocess we spawn, e.g. the snapshot kernel) so user
+    # code in the notebook cannot read them via os.environ.
+    if args.user_study:
+        os.environ.pop(env_var, None)
 
 # Bedrock support: when enabled, Claude is available without an API key
 CLAUDE_VIA_BEDROCK = os.environ.get("CLAUDE_CODE_USE_BEDROCK") == "1"
