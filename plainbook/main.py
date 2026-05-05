@@ -814,7 +814,7 @@ def _submit_study_upload() -> str:
     client = storage.Client()
     bucket = client.bucket(bucket_name)
     blob = bucket.blob(object_path)
-    blob.upload_from_string(data, content_type="application/json")
+    blob.upload_from_string(data, content_type="application/octet-stream")
 
     if args.debug:
         print(f"Submitted study notebook to gs://{bucket_name}/{object_path}")
