@@ -273,19 +273,8 @@ pre[class*="language-"] {
 
   // Shrink the base font so the layout prints at desktop-equivalent
   // proportions. ~75% of the screen size lets ~1100px-of-content fit
-  // the printable page width and avoids triggering the narrow-screen
-  // button-collapse rules below.
+  // the printable page width.
   html, body { font-size: 0.75rem !important; }
-
-  // Print as if the viewport were ~1100px wide: keep icon+label on
-  // explanation-toolbar buttons rather than collapsing to icons only.
-  .explanation-toolbar .toolbar-right .button span:not(.icon):not(.unit-test-counter),
-  .explanation-toolbar .toolbar-left  .run-button span:not(.icon) {
-    display: inline !important;
-  }
-  .explanation-toolbar .button .icon {
-    margin-right: 0.25em !important;
-  }
 
   // Release the scroll-locked main layout so the full notebook flows
   // onto multiple printed pages instead of being clipped to viewport.
@@ -331,9 +320,9 @@ pre[class*="language-"] {
   }
 
   // Inside cells: hide editing toolbars, buttons, and validation feedback.
-  // Scoped to non-active cells so the active cell prints with its full
-  // on-screen appearance (button bar, toolbars, etc.) preserved.
-  .notebook-cell:not(.is-active-cell) {
+  // Applies to all cells, including the active one, so the active cell
+  // prints exactly like an inactive cell.
+  .notebook-cell {
     .explanation-toolbar,
     .code-cell-toolbar,
     button {
@@ -372,10 +361,6 @@ pre[class*="language-"] {
     box-shadow: none !important;
     margin: 0 0 0.4rem 0 !important;
     scroll-margin-top: 0 !important;
-  }
-  // Preserve the on-screen active-cell highlight in print.
-  .notebook-cell.is-active-cell {
-    border: 2px solid var(--bulma-primary) !important;
   }
 
   // Outputs: light backgrounds, dark text, wrap long lines.
