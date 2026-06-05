@@ -76,6 +76,7 @@ createApp({
         const claudeViaBedrock = ref(false);
         const logEnabled = ref(false);
         const logviewEnabled = ref(false);
+        const printAllEnabled = ref(false);
 
         const availableAiProviders = computed(() => {
             const apiKeys = {
@@ -213,6 +214,8 @@ createApp({
                 claudeViaBedrock.value = r.claude_via_bedrock || false;
                 logEnabled.value = !!r.log_enabled;
                 logviewEnabled.value = !!r.logview_enabled;
+                printAllEnabled.value = !!r.print_all_enabled;
+                document.body.classList.toggle('print-all', printAllEnabled.value);
                 if (logviewEnabled.value) isLocked.value = true;
                 ActionLogger.init(r.log_enabled);
             } catch (err) {
@@ -1395,17 +1398,22 @@ createApp({
 
             if (e.key === 'Enter' && e.shiftKey) {
                 if (isEditingField(e.target)) return;
-                if (!notebook.value || activeIndex.value < 0) return;
-                e.preventDefault();
+                if (!notebook.value) return;
                 if (unitTestTargetIndex.value !== null) {
                     // Unit test mode: run the active sub-cell and advance.
+                    // Note: activeIndex is unrelated here — the open-unit-test
+                    // button uses @click.stop, so entering unit-test mode does
+                    // not necessarily set activeIndex. Drive off the unit-test
+                    // state instead.
                     const testName = unitTestActiveTestName.value;
-                    if (testName) {
-                        ui_runUnitTestSubcell(unitTestTargetIndex.value, testName, unitTestActiveSubcell.value);
-                        if (unitTestActiveSubcell.value === 'setup') unitTestActiveSubcell.value = 'target';
-                        else if (unitTestActiveSubcell.value === 'target') unitTestActiveSubcell.value = 'test';
-                    }
+                    if (!testName) return;
+                    e.preventDefault();
+                    ui_runUnitTestSubcell(unitTestTargetIndex.value, testName, unitTestActiveSubcell.value);
+                    if (unitTestActiveSubcell.value === 'setup') unitTestActiveSubcell.value = 'target';
+                    else if (unitTestActiveSubcell.value === 'target') unitTestActiveSubcell.value = 'test';
                 } else {
+                    if (activeIndex.value < 0) return;
+                    e.preventDefault();
                     const cell = notebook.value.cells[activeIndex.value];
                     if (cell && (cell.cell_type === 'code' || cell.cell_type === 'test')) {
                         ui_runCell(activeIndex.value);
@@ -1496,7 +1504,7 @@ createApp({
             saveSettings, showSettings, showInfo, showTestHelp,
             genError, uiError, closeUiError, debug, sendDebugRequest, resetTokens,
             explanationEditKey, deleteCell, moveCell,
-            clearOutputs, activeAiProvider, availableAiProviders, setActiveAiProvider, isCodespace, hasGeminiKey, hasClaudeKey, claudeViaBedrock, logEnabled, logviewEnabled, authToken,
+            clearOutputs, activeAiProvider, availableAiProviders, setActiveAiProvider, isCodespace, hasGeminiKey, hasClaudeKey, claudeViaBedrock, logEnabled, logviewEnabled, printAllEnabled, authToken,
             restarting, ui_restart,
             ui_runTestCell, ui_runAllTests, ui_saveExplanationAndRunTest, ui_saveCodeAndRunTest, ui_forceRegenerateTestCode,
             unitTestTargetIndex, unitTestActiveSubcell, unitTestActiveTestName, enterUnitTestMode, exitUnitTestMode,

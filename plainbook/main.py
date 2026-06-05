@@ -57,6 +57,9 @@ parser.add_argument('--log', action='store_true', default=False,
                     help='Log all user actions to notebook.metadata["log"] for user studies. See Log.md.')
 parser.add_argument('--logview', action='store_true', default=False,
                     help='Open the notebook in read-only log-view mode. Enables the /log_view replay UI and rejects all mutations. Does not write new log entries.')
+parser.add_argument('--print-all', '--print_all', dest='print_all',
+                    action='store_true', default=False,
+                    help='Include the navbar and files/instructions panel in the browser print/PDF output.')
 args = parser.parse_args()
 
 try:
@@ -306,6 +309,7 @@ def get_notebook():
         is_codespace=_in_codespace,
         log_enabled=args.log and not args.logview,
         logview_enabled=args.logview,
+        print_all_enabled=args.print_all,
     )
 
 @post('/set_key')
