@@ -1,4 +1,4 @@
-import { ref, computed } from './vue.esm-browser.js';
+import { ref, computed, watch } from './vue.esm-browser.js';
 
 // NotebookCell.js
 import MarkdownCell from './MarkdownCell.js';
@@ -6,10 +6,11 @@ import CodeCell from './CodeCell.js';
 import ExplanationEditor from './ExplanationEditor.js';
 import ValidationCell from './ValidationCell.js';
 import OutputRenderer from './OutputRenderer.js';
+import MissingModuleBar from './MissingModuleBar.js';
 export default {
-    components: { MarkdownCell, CodeCell, ExplanationEditor, ValidationCell, OutputRenderer },
+    components: { MarkdownCell, CodeCell, ExplanationEditor, ValidationCell, OutputRenderer, MissingModuleBar },
     props: ['cell', 'isActive', 'isLocked', 'running', 'codeValid', 'outputValid', 'executed',
-        'asRead', 'markdownEditKey', 'explanationEditKey', 'testCodeValid'],
+        'asRead', 'markdownEditKey', 'explanationEditKey', 'testCodeValid', 'moduleInstall'],
     emits: [
         'save-markdown', 'save-explanation', 'save-code',
         'run-cell', 'save-and-run', 'save-code-and-run', 'generate-code', 'clear-code',
@@ -17,7 +18,8 @@ export default {
         'delete', 'move-up', 'move-down',
         'activate', 'interrupt',
         'run-test', 'save-and-run-test', 'save-code-and-run-test', 'generate-test-code', 'open-test-help',
-        'open-unit-test'
+        'open-unit-test',
+        'install-module', 'dismiss-module-install'
     ],
     setup(props, { emit }) {
         const hasError = computed(() => {
@@ -28,7 +30,35 @@ export default {
 
         const outputVisible = ref(true);
 
-        return { hasError, outputVisible };
+        // Missing-module bar: shown when execution failed with a
+        // ModuleNotFoundError. The module name is parsed from the error
+        // value, e.g. "No module named 'plotly'".
+        const missingModule = computed(() => {
+            if (!['code', 'test'].includes(props.cell.cell_type)) return null;
+            const errOut = (props.cell.outputs || []).find(
+                out => out.output_type === 'error' && out.ename === 'ModuleNotFoundError');
+            if (!errOut) return null;
+            const parts = (errOut.evalue || '').split("'");
+            return parts.length > 1 ? parts[1].split('.')[0] : null;
+        });
+
+        const moduleBarDismissed = ref(false);
+        // A re-run replaces the outputs array: show the bar again.
+        watch(() => props.cell.outputs, () => { moduleBarDismissed.value = false; });
+
+        const onModuleRewrite = () => {
+            moduleBarDismissed.value = true;
+            emit('dismiss-module-install');
+            emit(props.cell.cell_type === 'test' ? 'generate-test-code' : 'generate-code');
+        };
+
+        const onModuleDismiss = () => {
+            moduleBarDismissed.value = true;
+            emit('dismiss-module-install');
+        };
+
+        return { hasError, outputVisible, missingModule, moduleBarDismissed,
+            onModuleRewrite, onModuleDismiss };
     },
     template: /* html */ `
         <div class="notebook-cell box p-0 mb-2 is-clipped shadow-sm"
@@ -97,6 +127,15 @@ export default {
                     @activate="$emit('activate')" />
                 
                 <div v-if="outputVisible && cell.outputs?.length" class="p-2 border-top bg-scheme-main">
+                    <missing-module-bar
+                        v-if="missingModule && !moduleBarDismissed"
+                        :module-name="missingModule"
+                        :install="moduleInstall"
+                        :running="running"
+                        :is-locked="isLocked"
+                        @install="$emit('install-module', missingModule)"
+                        @rewrite="onModuleRewrite"
+                        @dismiss="onModuleDismiss" />
                     <output-renderer v-for="(out, oIdx) in cell.outputs" :key="oIdx" :output="out" />
                 </div>
             </div>
@@ -151,6 +190,15 @@ export default {
                     @activate="$emit('activate')" />
 
                 <div v-if="outputVisible && cell.outputs?.length" class="p-2 border-top bg-scheme-main">
+                    <missing-module-bar
+                        v-if="missingModule && !moduleBarDismissed"
+                        :module-name="missingModule"
+                        :install="moduleInstall"
+                        :running="running"
+                        :is-locked="isLocked"
+                        @install="$emit('install-module', missingModule)"
+                        @rewrite="onModuleRewrite"
+                        @dismiss="onModuleDismiss" />
                     <output-renderer v-for="(out, oIdx) in cell.outputs" :key="oIdx" :output="out" />
                 </div>
             </div>

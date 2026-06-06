@@ -18,6 +18,7 @@ import nbformat
 import requests
 
 from .ai_common import get_session_tokens
+from .utilities import PIP_INSTALL_CODE, parse_pip_install_result, resolve_package_name
 from .gemini import gemini_generate_code, gemini_validate_code, gemini_generate_cell_name, gemini_generate_test_code, gemini_generate_unit_test_code, gemini_verify_notebook, gemini_verify_tests
 from .claude import claude_generate_code, claude_validate_code, claude_generate_cell_name, claude_generate_test_code, claude_generate_unit_test_code, claude_verify_notebook, claude_verify_tests
 
@@ -428,6 +429,32 @@ class Plainbook:
             if cell.metadata.get('unit_tests'):
                 self._invalidate_all_unit_tests(i, 'setup_code')
         self.last_executed_cell = min(self.last_executed_cell, index - 1)
+
+    def install_package(self, module_name):
+        """Installs the pip package providing `module_name` by executing pip
+        in the kernel (against the initial state, via a throwaway snapshot:
+        pip changes the environment on disk, not the in-memory state).
+        Returns (success, output_text)."""
+        package = resolve_package_name(module_name)
+        with self._lock:
+            temp_state = uuid.uuid4().hex
+            try:
+                result = self._sk_request("POST", "/execute", {
+                    "code": PIP_INSTALL_CODE % json.dumps(package),
+                    "exec_id": uuid.uuid4().hex,
+                    "state_name": "initial",
+                    "new_state_name": temp_state,
+                })
+            finally:
+                try:
+                    self._sk_request("DELETE", f"/states/{temp_state}")
+                except Exception:
+                    pass
+        stdout_text = ""
+        for out in result.get("output", []):
+            if out.get("output_type") == "stream" and out.get("name") == "stdout":
+                stdout_text += tostring(out.get("text", ""))
+        return parse_pip_install_result(stdout_text)
 
     def interrupt_kernel(self):
         """Interrupt the currently running execution."""

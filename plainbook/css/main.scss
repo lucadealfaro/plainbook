@@ -249,6 +249,13 @@ pre[class*="language-"] {
   z-index: 1;
 }
 
+// Missing-module bar: soften the <code> background (Bulma's default is
+// near-black in dark mode, too stark). scheme-main-ter is a soft gray in
+// both light and dark mode.
+.missing-module-bar code {
+  background-color: var(--bulma-scheme-main-ter);
+}
+
 .button .bx {
   font-size: 1.05rem; /* adjust as needed */
 }
@@ -295,7 +302,8 @@ pre[class*="language-"] {
   .modal,
   .ui-error,
   .cell-insert-zone,
-  .cell-label {
+  .cell-label,
+  .missing-module-bar {
     display: none !important;
   }
 

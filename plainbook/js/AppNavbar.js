@@ -157,6 +157,9 @@ export default {
                             <span v-else-if="runningActivity && runningActivity.type === 'running'">
                                 Running cell {{ runningActivity.cellIndex + 1 }}<template v-if="runningActivity.cellName">: {{ runningActivity.cellName }}</template>
                             </span>
+                            <span v-else-if="runningActivity && runningActivity.type === 'installing'">
+                                Installing module<template v-if="runningActivity.moduleName"> {{ runningActivity.moduleName }}</template>&hellip;
+                            </span>
                             <span v-else-if="runningActivity && runningActivity.type === 'unit-test-gen-setup'">
                                 Generating setup code<template v-if="runningActivity.testName"> ({{ runningActivity.testName }})</template>
                             </span>

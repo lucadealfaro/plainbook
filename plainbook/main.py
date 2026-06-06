@@ -506,6 +506,21 @@ def interrupt_kernel():
         return dict(status='success')
     except Exception as e:
         return dict(status='error', message=str(e))
+
+@post('/install_package')
+@action_log.logged('install_package')
+@stateful
+@require_token
+def install_package():
+    data = request.json
+    module = data.get('module')
+    if args.debug:
+        print(f"Installing package for module {module}")
+    try:
+        success, output = notebook.install_package(module)
+        return dict(status='success', success=success, output=output)
+    except Exception as e:
+        return dict(status='error', message=str(e))
     
     
 def _get_ai_config():

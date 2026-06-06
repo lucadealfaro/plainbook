@@ -714,7 +714,7 @@ createApp({
                     // cells from executing.
                     let err;
                     if(r.outputs[0].ename === 'ModuleNotFoundError') {
-                        err = new Error('A package is required by this code cell. Please install the necessary packages via this command on your local environment: pip install ' + r.outputs[0].evalue.split("'")[1]);
+                        err = new Error('The code uses the Python module ' + r.outputs[0].evalue.split("'")[1] + ', which is not installed. Use the options shown in the cell output to install it or rewrite the code.');
                     } else if (r.outputs[0].ename === 'FileNotFoundError') {
                         err = new Error('The notebook cannot find a file it needs. Please select all the required input files using the selector at the top, so that the AI knows where to find them, and re-generate the code. If the files are already selected, you might want to refer to them in a more precise way, for instance citing their full name.');
                     } else {
@@ -876,6 +876,38 @@ createApp({
             }
         };
 
+
+        // Missing-module installation state, keyed by cell index:
+        // undefined | { status: 'installing' } | { status: 'done', success, output }.
+        // Displayed by the MissingModuleBar of the corresponding cell.
+        const moduleInstall = ref({});
+
+        const ui_installModule = async (cellIndex, moduleName) => {
+            if (running.value) return;
+            running.value = true;
+            runningActivity.value = { type: 'installing', cellIndex, moduleName };
+            moduleInstall.value = { ...moduleInstall.value, [cellIndex]: { status: 'installing' } };
+            try {
+                const r = await apiCall('/install_package', 'POST', { module: moduleName });
+                if (r.status === 'error') throw new Error(r.message || 'Package installation failed');
+                moduleInstall.value = { ...moduleInstall.value,
+                    [cellIndex]: { status: 'done', success: !!r.success, output: r.output || '' } };
+                console.log('Package installed for module:', moduleName, 'success:', r.success);
+            } catch (err) {
+                // Back to the question state; the error bar reports the failure.
+                dismissModuleInstall(cellIndex);
+                throw new Error('Failed to install package for module ' + moduleName, { cause: err });
+            } finally {
+                running.value = false;
+                runningActivity.value = { type: null, cellIndex: null };
+            }
+        };
+
+        const dismissModuleInstall = (cellIndex) => {
+            const next = { ...moduleInstall.value };
+            delete next[cellIndex];
+            moduleInstall.value = next;
+        };
 
         const ui_interruptKernel = async () => {
             try {
@@ -1499,6 +1531,7 @@ createApp({
             validateCode, ui_validateCode, dismissValidation, ui_verifyNotebook, dismissVerification, ui_resetAndRunAllCells, ui_forceRegenerateCellCode,
             setActiveCell, ui_runCell, running, runningActivity, asRead,
             ui_interruptKernel, insertCell, markdownEditKey,
+            moduleInstall, ui_installModule, dismissModuleInstall,
             last_executed_cell_index, last_valid_code_cell_index, last_valid_output_cell_index,
             last_valid_test_cell_index,
             saveSettings, showSettings, showInfo, showTestHelp,
