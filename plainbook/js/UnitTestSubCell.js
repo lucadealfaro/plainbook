@@ -3,6 +3,7 @@ import ExplanationEditor from './ExplanationEditor.js';
 import CodeCell from './CodeCell.js';
 import ValidationCell from './ValidationCell.js';
 import OutputRenderer from './OutputRenderer.js';
+import { outputsHaveError } from './errorUtils.js';
 
 export default {
     components: { ExplanationEditor, CodeCell, ValidationCell, OutputRenderer },
@@ -10,10 +11,7 @@ export default {
     emits: ['save-explanation', 'save-code', 'save-and-run', 'save-code-and-run', 'gencode', 'clearcode', 'validate', 'dismiss-validation', 'run', 'interrupt', 'activate'],
     setup(props) {
         const mode = computed(() => props.role === 'setup' ? 'unit_setup' : 'unit_test');
-        const hasError = computed(() => {
-            if (!props.cell || !props.cell.outputs) return false;
-            return props.cell.outputs.some(out => out.output_type === 'error');
-        });
+        const hasError = computed(() => outputsHaveError(props.cell && props.cell.outputs));
         const hasCode = computed(() => (props.cell.source || '').trim().length > 0);
         const explanation = computed(() => props.cell.metadata?.explanation || '');
         const outputVisible = ref(true);

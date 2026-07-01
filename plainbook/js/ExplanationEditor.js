@@ -237,7 +237,7 @@ const ExplanationRenderer = {
                     <span>{{ stopGenerateLabel }}</span>
                 </button>
                 <button v-else class="button is-small"
-                        :class="isTestCell ? 'is-warning' : 'is-success'"
+                        :class="(hasError || isTestCell) ? 'is-warning' : 'is-success'"
                         title="Generate or regenerate the code"
                         :disabled="running || localIsLocked || !localSource.trim()" @click.stop="onGenCode">
                     <span class="icon"><i class="bx bx-cognition"></i></span>

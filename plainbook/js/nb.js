@@ -11,6 +11,7 @@ import UiError from './UiError.js';
 import PanelBar from './PanelBar.js';
 import NotebookHelp from './NotebookHelp.js';
 import UnitTestView from './UnitTestView.js';
+import { outputsHaveError, getErrorInfo } from './errorUtils.js';
 
 createApp({
     components: { AppNavbar, NotebookCell, CellInsertionZone, CellLabel, SettingsModal, InfoModal, TestHelpModal, UiError, PanelBar, NotebookHelp, UnitTestView },
@@ -709,16 +710,20 @@ createApp({
                 } 
                 cell.outputs = r.outputs;
                 console.log('Cell executed:', cellIndex, r.details);
-                if (r.details === 'CellExecutionError') {
-                    // The cell executed, but we have to stop other further
-                    // cells from executing.
+                // Stop the run when the cell raised (CellExecutionError) or when
+                // its output contains an error-like stderr stream (e.g. an
+                // uncaught traceback or a pandas warning printed to stderr).
+                if (r.details === 'CellExecutionError' || outputsHaveError(r.outputs)) {
+                    // Locate the actual error across all outputs (it may follow
+                    // normal output), rather than assuming outputs[0].
+                    const info = getErrorInfo(r.outputs) || {};
                     let err;
-                    if(r.outputs[0].ename === 'ModuleNotFoundError') {
-                        err = new Error('The code uses the Python module ' + r.outputs[0].evalue.split("'")[1] + ', which is not installed. Use the options shown in the cell output to install it or rewrite the code.');
-                    } else if (r.outputs[0].ename === 'FileNotFoundError') {
+                    if (info.ename === 'ModuleNotFoundError') {
+                        err = new Error('The code uses the Python module ' + (info.evalue || '').split("'")[1] + ', which is not installed. Use the options shown in the cell output to install it or rewrite the code.');
+                    } else if (info.ename === 'FileNotFoundError') {
                         err = new Error('The notebook cannot find a file it needs. Please select all the required input files using the selector at the top, so that the AI knows where to find them, and re-generate the code. If the files are already selected, you might want to refer to them in a more precise way, for instance citing their full name.');
                     } else {
-                        err = new Error("Execution error: " + r.outputs[0].ename);
+                        err = new Error("Execution error: " + (info.ename || 'Error') + (info.evalue ? ': ' + info.evalue : ''));
                     }
                     err.cellIndex = cellIndex;
                     throw err;

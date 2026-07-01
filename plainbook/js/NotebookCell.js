@@ -7,6 +7,7 @@ import ExplanationEditor from './ExplanationEditor.js';
 import ValidationCell from './ValidationCell.js';
 import OutputRenderer from './OutputRenderer.js';
 import MissingModuleBar from './MissingModuleBar.js';
+import { outputsHaveError } from './errorUtils.js';
 export default {
     components: { MarkdownCell, CodeCell, ExplanationEditor, ValidationCell, OutputRenderer, MissingModuleBar },
     props: ['cell', 'isActive', 'isLocked', 'running', 'codeValid', 'outputValid', 'executed',
@@ -24,8 +25,7 @@ export default {
     setup(props, { emit }) {
         const hasError = computed(() => {
             if (!['code', 'test'].includes(props.cell.cell_type)) return false;
-            if (!props.cell.outputs) return false;
-            return props.cell.outputs.some(out => out.output_type === 'error');
+            return outputsHaveError(props.cell.outputs);
         });
 
         const outputVisible = ref(true);
