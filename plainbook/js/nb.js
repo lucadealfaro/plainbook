@@ -11,10 +11,11 @@ import UiError from './UiError.js';
 import PanelBar from './PanelBar.js';
 import NotebookHelp from './NotebookHelp.js';
 import UnitTestView from './UnitTestView.js';
+import NotebookTitle from './NotebookTitle.js';
 import { outputsHaveError, getErrorInfo } from './errorUtils.js';
 
 createApp({
-    components: { AppNavbar, NotebookCell, CellInsertionZone, CellLabel, SettingsModal, InfoModal, TestHelpModal, UiError, PanelBar, NotebookHelp, UnitTestView },
+    components: { AppNavbar, NotebookCell, CellInsertionZone, CellLabel, SettingsModal, InfoModal, TestHelpModal, UiError, PanelBar, NotebookHelp, UnitTestView, NotebookTitle },
     setup() {
         // Extract token from URL
         const urlParams = new URLSearchParams(window.location.search);
@@ -1508,6 +1509,21 @@ createApp({
             uiError.value = null;
         };
 
+        // Rename the notebook: the server saves a copy under the new name and
+        // switches all future saves to it. On success the @stateful response
+        // carries the new name, which updateState() applies to notebook_name.
+        const renameNotebook = async (newName) => {
+            if (!newName) return;
+            try {
+                const r = await apiCall('/rename_notebook', 'POST', { name: newName });
+                if (r.status === 'error') {
+                    uiError.value = r.message || 'Could not rename the notebook.';
+                }
+            } catch (err) {
+                uiError.value = (err && err.message) || 'Could not rename the notebook.';
+            }
+        };
+
         const handleClickOutside = (event) => {
             if (event.target.closest('.modal')) return;
             const container = document.querySelector('.notebook-container');
@@ -1540,7 +1556,7 @@ createApp({
             last_executed_cell_index, last_valid_code_cell_index, last_valid_output_cell_index,
             last_valid_test_cell_index,
             saveSettings, showSettings, showInfo, showTestHelp,
-            genError, uiError, closeUiError, debug, sendDebugRequest, resetTokens,
+            genError, uiError, closeUiError, renameNotebook, debug, sendDebugRequest, resetTokens,
             explanationEditKey, deleteCell, moveCell,
             clearOutputs, activeAiProvider, availableAiProviders, setActiveAiProvider, isCodespace, hasGeminiKey, hasClaudeKey, claudeViaBedrock, logEnabled, logviewEnabled, printAllEnabled, authToken,
             restarting, ui_restart,

@@ -264,6 +264,26 @@ pre[class*="language-"] {
   font-size: 1rem; /* adjust as needed */
 }
 
+// ── Notebook title (rename) ────────────────────────────────────────────
+// Hover shows an outline (hinting interactivity); click edits.
+.notebook-title-text {
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 0.1em 0.25em;
+  outline: none;
+  &:hover {
+    outline: 2px solid var(--bulma-link, #485fc7);
+    outline-offset: 2px;
+  }
+}
+
+.notebook-title-input {
+  font-size: inherit;
+  font-weight: inherit;
+  height: auto;
+  padding: 0.1em 0.25em;
+}
+
 // ── Print styles ───────────────────────────────────────────────────────
 // Goal: produce a clean PDF of the whole notebook. Hide editing UI,
 // release the scroll-locked layout, force light theme, and try to keep

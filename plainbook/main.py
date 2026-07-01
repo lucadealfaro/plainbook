@@ -469,6 +469,20 @@ def move_cell():
 def get_notebook_state():
     return {}
 
+@post('/rename_notebook')
+@stateful
+@require_token
+def rename_notebook():
+    """Save the notebook as a copy under a new name; all future edits then
+    happen on the new copy. The refreshed state (with the new name) is added
+    by the @stateful decorator."""
+    data = request.json or {}
+    try:
+        notebook.rename(data.get('name'))
+        return dict(status='success')
+    except ValueError as e:
+        return dict(status='error', message=str(e))
+
 @post('/execute_cell')
 @action_log.logged('execute_cell')
 @stateful

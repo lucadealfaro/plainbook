@@ -562,6 +562,36 @@ class Plainbook:
         with open(self.path, "w") as f:
             nbformat.write(self.nb, f)
 
+    def rename(self, new_name):
+        """Rename the notebook by saving a *copy* under a new name (with a
+        .plnb extension) in the same directory, and switching all future saves
+        to it. The original file is left untouched. Because the notebook is
+        saved continuously, simply changing the name/path and writing once is
+        enough for it to continue naturally under the new name.
+
+        Raises ValueError on an empty or conflicting name.
+        """
+        with self._lock:
+            name = os.path.basename((new_name or '').strip())
+            # Drop a trailing notebook extension if the user typed one.
+            for ext in ('.plnb', '.ipynb'):
+                if name.lower().endswith(ext):
+                    name = name[:-len(ext)]
+                    break
+            name = name.strip()
+            if not name:
+                raise ValueError("Please provide a name for the notebook.")
+            if name == self.name:
+                return
+            parent = os.path.dirname(self.path) or "."
+            new_path = os.path.join(parent, name + ".plnb")
+            if os.path.exists(new_path):
+                raise ValueError(
+                    f"A notebook named '{name}.plnb' already exists in this folder.")
+            self.name = name
+            self.path = new_path
+            self._write()
+
     def append_log_entry(self, entry):
         """Append an action-log entry to nb.metadata['log'] and persist.
         Used by the --log user-study logging feature. See Log.md for schema."""
