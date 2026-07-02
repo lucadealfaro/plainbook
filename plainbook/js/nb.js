@@ -1534,15 +1534,23 @@ createApp({
             }
         };
 
+        // Changing the input files (Files tab) can mark all cells stale on the
+        // server; InputFile.js dispatches the fresh state so we can update.
+        const onFilesChanged = (e) => {
+            if (e.detail) updateState(e.detail);
+        };
+
         onMounted(() => {
             fetchNotebook();
             window.addEventListener('keydown', handleKeydown);
             window.addEventListener('click', handleClickOutside);
+            window.addEventListener('plainbook:files-changed', onFilesChanged);
         });
 
         onBeforeUnmount(() => {
             window.removeEventListener('keydown', handleKeydown);
             window.removeEventListener('click', handleClickOutside);
+            window.removeEventListener('plainbook:files-changed', onFilesChanged);
         });
 
         return { notebook, notebook_name, loading, error, isLocked, lockNotebook, shareOutputWithAi, aiTokens, verificationStatus, toggleShareOutput,

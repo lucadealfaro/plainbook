@@ -540,6 +540,15 @@ class Plainbook:
                     else:
                         ut['validity'] = validity
 
+    def _mark_all_stale(self):
+        """Mark all code, outputs and tests stale (watermarks to -1) so the
+        code is regenerated to match a changed input-file set. Caller holds
+        self._lock and persists via _write(). Outputs are kept, just flagged.
+        last_executed_cell is intentionally left alone (kernel snapshots stay)."""
+        self.last_valid_code_cell = -1
+        self.last_valid_output_cell = -1
+        self.last_valid_test_cell = -1
+
     def _filter_input_files(self):
         """Filters the input files from notebook metadata."""
         if 'input_files' in self.nb.metadata:
@@ -554,6 +563,10 @@ class Plainbook:
                     missing_input_files.append(f)
             self.nb.metadata['input_files'] = present_input_files
             self.nb.metadata['missing_input_files'] = missing_input_files
+            # Condition-1: files listed by the notebook are missing on disk, so
+            # the code refers to files that aren't there -- mark everything stale.
+            if missing_input_files:
+                self._mark_all_stale()
 
     def _write(self):
         self.nb.metadata['last_valid_code_cell'] = self.last_valid_code_cell
@@ -1882,10 +1895,19 @@ class Plainbook:
             self._write()
 
     def set_input_files(self, files, missing_files=[]):
-        """Sets the input files for the notebook."""
+        """Sets the input files for the notebook. Condition-2: if the set of
+        files actually changed, mark all code/outputs stale so the code is
+        regenerated to refer to the new files. (This is also called on every
+        Files-tab mount with the unchanged selection, so we compare first.)"""
         with self._lock:
+            paths = lambda lst: {f.get('path') for f in (lst or [])}
+            old = (paths(self.nb.metadata.get('input_files'))
+                   | paths(self.nb.metadata.get('missing_input_files')))
+            new = paths(files) | paths(missing_files)
             self.nb.metadata['input_files'] = files
             self.nb.metadata['missing_input_files'] = missing_files
+            if new != old:
+                self._mark_all_stale()
             self._write()
 
 

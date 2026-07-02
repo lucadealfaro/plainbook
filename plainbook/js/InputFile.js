@@ -87,14 +87,21 @@ export default {
         const syncSelectedFiles = async () => {
             // Convert Map values to a plain array of file objects
             try {
-                await fetch(`/set_files?token=${props.authToken}`, {
+                const res = await fetch(`/set_files?token=${props.authToken}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ 
+                    body: JSON.stringify({
                         files: Array.from(selectedFiles.values()),
                         missing_files: Array.from(missingFiles.values())
                     })
                 });
+                // Changing the file set can mark all cells stale server-side.
+                // Propagate the fresh state so the notebook view updates.
+                const data = await res.json().catch(() => null);
+                if (data && data.state) {
+                    window.dispatchEvent(new CustomEvent(
+                        'plainbook:files-changed', { detail: data.state }));
+                }
             } catch (err) {
                 throw new Error("Failed to sync files with notebook", { cause: err });
             }

@@ -780,8 +780,9 @@ def set_share_output():
 @get('/current_dir')
 @require_token
 def get_current_dir():
-    """Returns the absolute path of the working directory where plainbook was launched."""
-    return {"path": str(Path.cwd())}
+    """Returns the folder where the notebook lives (not the working directory
+    where plainbook was launched)."""
+    return {"path": os.path.dirname(os.path.abspath(notebook.path))}
 
 @get('/home_dir')
 @require_token
