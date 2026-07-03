@@ -10,7 +10,10 @@ export default {
         const missingFiles = reactive(new Map()); // Path -> File object mapping for missing files
         const isLoading = ref(false);
         const filterQuery = ref(''); // Search state
-        
+        // When set, the browser is in "replace mode" for a specific file:
+        // { kind: 'selected' | 'missing', path, name }. Null = normal add mode.
+        const replaceTarget = ref(null);
+
         const filteredFiles = computed(() => {
             const query = filterQuery.value.toLowerCase();
             return fileList.value.filter(f => f.name.toLowerCase().includes(query));
@@ -84,6 +87,36 @@ export default {
             missingFiles.delete(path);
         }
 
+        // Replace / Find flow -------------------------------------------------
+        const startReplaceSelected = (path, file) => {
+            replaceTarget.value = { kind: 'selected', path, name: file.name };
+        };
+        const startReplaceMissing = (path, file) => {
+            replaceTarget.value = { kind: 'missing', path, name: file.name };
+        };
+        const cancelReplace = () => { replaceTarget.value = null; };
+
+        // Mode-dependent description line shown under the title.
+        const browserHeader = computed(() => {
+            const t = replaceTarget.value;
+            if (!t) return 'Select files for notebook access, so AI knows where to find them.';
+            if (t.kind === 'missing') return `Let AI know where it can find file ${t.name}`;
+            return `Replace ${t.name} with another file for AI to use`;
+        });
+
+        // Pick `newFile` (from the left browser) as the replacement.
+        const pickReplacement = (newFile) => {
+            const t = replaceTarget.value;
+            if (!t) return;
+            selectedFiles.set(newFile.path, newFile);      // add the new file
+            if (t.kind === 'missing') {
+                missingFiles.delete(t.path);               // clear the missing entry
+            } else if (t.path !== newFile.path) {
+                selectedFiles.delete(t.path);              // drop the replaced file
+            }
+            replaceTarget.value = null;                    // back to "Add files"
+        };
+
         const syncSelectedFiles = async () => {
             // Convert Map values to a plain array of file objects
             try {
@@ -154,13 +187,22 @@ export default {
         return {
             currentPath, fileList, isLoading,
             selectedFiles, missingFiles, filterQuery, filteredFiles,
-            openFolder, goUp, goHome, goCurrent, toggleSelection, removeSelected, removeMissing
+            openFolder, goUp, goHome, goCurrent, toggleSelection, removeSelected, removeMissing,
+            replaceTarget, browserHeader, startReplaceSelected, startReplaceMissing,
+            cancelReplace, pickReplacement
         };
     },
     template: /* html */ `
             <div style="display: flex; height: 400px;" class="file-browser">
                 <div style="flex: 1; border-right: 1px solid var(--bulma-border); display: flex; flex-direction: column;">
-                    <div class="file-browser-header">Select files for notebook access, so AI knows where to find them.</div>
+                    <div class="file-browser-title">
+                        <span v-if="replaceTarget">Replace file <strong>{{ replaceTarget.name }}</strong></span>
+                        <span v-else>Add files</span>
+                        <button v-if="replaceTarget" @click="cancelReplace" class="button is-small is-light" title="Cancel">
+                            <span class="icon is-small"><i class="bx bx-x"></i></span><span>Cancel</span>
+                        </button>
+                    </div>
+                    <div class="file-browser-header">{{ browserHeader }}</div>
                     <div class="file-browser-filter">
                         <input type="text" v-model="filterQuery" placeholder="Filter files..."
                             style="flex: 1; padding: 4px;">
@@ -186,7 +228,7 @@ export default {
                             <li v-for="item in filteredFiles" :key="item.path" class="file-item">
 
                                 <span style="width: 1rem; min-width: 1rem; display: flex; justify-content: center; align-items: center; flex-shrink: 0;">
-                                    <input type="checkbox" v-if="item.type === 'file'"
+                                    <input type="checkbox" v-if="item.type === 'file' && !replaceTarget"
                                            :checked="selectedFiles.has(item.path)"
                                            @change="toggleSelection(item)"
                                            style="width: 0.8rem; height: 0.8rem; margin: 0; cursor: pointer;">
@@ -200,6 +242,12 @@ export default {
                                       @click="openFolder(item)"
                                       class="file-name-link is-size-7">
                                     {{ item.name }}/
+                                </span>
+                                <span v-else-if="replaceTarget"
+                                      @click="pickReplacement(item)"
+                                      class="file-name-link is-size-7"
+                                      title="Use this file as the replacement">
+                                    {{ item.name }}
                                 </span>
                                 <span v-else class="is-size-7">{{ item.name }}</span>
                             </li>
@@ -215,7 +263,7 @@ export default {
                             <li v-for="[path, file] in selectedFiles" :key="path" class="selected-file-card">
                                 <button @click="removeSelected(path)" class="delete has-background-danger is-small" style="margin-top: 4px;">
                                 </button>
-                                <div style="display: flex; flex-direction: column; min-width: 0;">
+                                <div style="display: flex; flex-direction: column; min-width: 0; flex: 1;">
                                     <div class="selected-file-name" :title="path">
                                         {{ file.name }}
                                     </div>
@@ -223,6 +271,9 @@ export default {
                                         {{ path }}
                                     </div>
                                 </div>
+                                <button @click="startReplaceSelected(path, file)" class="button is-small is-light" title="Replace this file">
+                                    <span class="icon is-small"><i class="bx bx-search"></i></span><span>Replace</span>
+                                </button>
                             </li>
                         </ul>
                     </div>
@@ -232,9 +283,12 @@ export default {
                             <li v-for="[path, file] in missingFiles" :key="path" class="selected-file-card" style="padding: 4px; border-radius: 3px; margin-bottom: 4px; font-size: 0.85rem;">
                                 <button @click="removeMissing(path)" class="delete has-background-danger is-small mr-2">
                                 </button>
-                                <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;" :title="path">
+                                <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1;" :title="path">
                                     {{ file.name }}
                                 </span>
+                                <button @click="startReplaceMissing(path, file)" class="button is-small is-light" title="Find this file">
+                                    <span class="icon is-small"><i class="bx bx-search"></i></span><span>Find</span>
+                                </button>
                             </li>
                         </ul>
                     </div>

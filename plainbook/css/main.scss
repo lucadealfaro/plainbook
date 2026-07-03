@@ -197,6 +197,7 @@ pre[class*="language-"] {
 
 // ── Input file browser (InputFile.js) ──
 .file-browser { background: var(--bulma-scheme-main); }
+.file-browser-title { padding: 0.4rem 0.5rem; background: var(--bulma-scheme-main-ter); font-weight: bold; display: flex; align-items: center; justify-content: space-between; gap: 6px; }
 .file-browser-header { padding: 0.4rem 0.5rem; background: var(--bulma-scheme-main-ter); font-size: 0.85rem; color: var(--bulma-text-weak); }
 .file-browser-filter { padding: 8px; background: var(--bulma-scheme-main-ter); display: flex; gap: 8px; }
 .file-browser-filter input { border: 1px solid var(--bulma-border); }
