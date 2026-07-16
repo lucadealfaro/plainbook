@@ -649,6 +649,11 @@ createApp({
             if (r.status == 'success') {
                 if (notebook.value && notebook.value.cells[cellIndex]) {
                     cell.source = r.code;
+                    // Regenerated code invalidates the old outputs; the server
+                    // clears them (plainbook.py generate_code_cell), so mirror
+                    // that here. This also drops any prior error output, so a
+                    // single "Fix Code" reverts the button to "Regenerate code".
+                    cell.outputs = [];
                     delete cell.metadata.validation;
                     console.log('Code generated for cell:', cellIndex);
                 }

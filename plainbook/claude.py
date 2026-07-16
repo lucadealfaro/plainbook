@@ -21,10 +21,39 @@ from .ai_common import (
     strip_markdown_code_fences,
 )
 
-# CLAUDE_MODEL = "claude-sonnet-4-5-20250929"
-CLAUDE_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001")
+# Default to Sonnet: it supports adaptive thinking, so it self-scales thinking
+# depth to cell complexity (trivial cells get ~none, hard cells get it) — which
+# suits the mixed difficulty of code-generation tasks. Override with ANTHROPIC_MODEL.
+CLAUDE_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-5")
 
 USE_BEDROCK = os.environ.get("CLAUDE_CODE_USE_BEDROCK") == "1"
+
+
+def _response_text(message):
+    """Return the concatenated text of a Claude message.
+
+    ``message.content`` is a list of typed blocks (TextBlock, ThinkingBlock,
+    ToolUseBlock, ...). We can't assume ``content[0]`` is text: when thinking is
+    enabled the first block is a ThinkingBlock, which has no ``.text``. Select
+    the text blocks by type and join them."""
+    return "".join(
+        block.text for block in message.content if block.type == "text"
+    )
+
+
+def _create_without_thinking(client, **kwargs):
+    """Issue a messages.create request with thinking turned off.
+
+    Used for cell-name generation, a trivial summarization where thinking would
+    only add latency and cost. The reasoning-heavy calls (code generation,
+    validation, verification) deliberately use the model default instead, since
+    thinking can improve their output. Not every model accepts an explicit
+    ``{"type": "disabled"}`` (e.g. Fable 5 rejects it), so fall back to a plain
+    request if the model refuses the parameter."""
+    try:
+        return client.messages.create(thinking={"type": "disabled"}, **kwargs)
+    except anthropic.BadRequestError:
+        return client.messages.create(**kwargs)
 
 
 def _get_client(api_key=None):
@@ -110,7 +139,7 @@ Code:
         messages=[{"role": "user", "content": prompt}],
     )
     add_tokens(message.usage.input_tokens, message.usage.output_tokens)
-    response_text = message.content[0].text
+    response_text = _response_text(message)
     if debug:
         print("Response:", response_text)
     code = strip_markdown_code_fences(response_text)
@@ -166,7 +195,7 @@ Code:
         messages=[{"role": "user", "content": prompt}],
     )
     add_tokens(message.usage.input_tokens, message.usage.output_tokens)
-    response_text = message.content[0].text
+    response_text = _response_text(message)
     if debug:
         print("Response:", response_text)
     code = strip_markdown_code_fences(response_text)
@@ -227,7 +256,7 @@ def claude_generate_unit_test_code(
         messages=[{"role": "user", "content": prompt}],
     )
     add_tokens(message.usage.input_tokens, message.usage.output_tokens)
-    response_text = message.content[0].text
+    response_text = _response_text(message)
     if debug:
         print("Response:", response_text)
     code = strip_markdown_code_fences(response_text)
@@ -271,7 +300,7 @@ Validation Result:
         messages=[{"role": "user", "content": prompt}],
     )
     add_tokens(message.usage.input_tokens, message.usage.output_tokens)
-    response_text = message.content[0].text
+    response_text = _response_text(message)
     if debug:
         print("Response:", response_text)
     return parse_validation_response(response_text)
@@ -296,7 +325,7 @@ def _claude_verify(api_key, system_instructions, payload, label, model=None,
         messages=[{"role": "user", "content": payload}],
     )
     add_tokens(message.usage.input_tokens, message.usage.output_tokens)
-    response_text = message.content[0].text
+    response_text = _response_text(message)
     if debug:
         print("Response:", response_text)
     return parse_verify_response(response_text)
@@ -326,14 +355,15 @@ def claude_generate_cell_name(api_key, explanation, model=None, debug=False, dum
             "system": NAME_GENERATION_INSTRUCTIONS,
             "messages": [{"role": "user", "content": prompt}],
         })
-    message = client.messages.create(
+    message = _create_without_thinking(
+        client,
         model=model,
         max_tokens=50,
         system=NAME_GENERATION_INSTRUCTIONS,
         messages=[{"role": "user", "content": prompt}],
     )
     add_tokens(message.usage.input_tokens, message.usage.output_tokens)
-    response_text = message.content[0].text
+    response_text = _response_text(message)
     if debug:
         print("Response to name generation:", response_text)
     return response_text

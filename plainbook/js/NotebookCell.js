@@ -20,7 +20,8 @@ export default {
         'activate', 'interrupt',
         'run-test', 'save-and-run-test', 'save-code-and-run-test', 'generate-test-code', 'open-test-help',
         'open-unit-test',
-        'install-module', 'dismiss-module-install'
+        'install-module', 'dismiss-module-install',
+        'dismiss-error'
     ],
     setup(props, { emit }) {
         const hasError = computed(() => {
@@ -104,6 +105,7 @@ export default {
                         @delete="$emit('delete')"
                         @moveUp="$emit('move-up')"
                         @moveDown="$emit('move-down')"
+                        @dismiss-error="$emit('dismiss-error')"
                         @open-unit-test="$emit('open-unit-test')" />
                 </div>
 
@@ -167,7 +169,8 @@ export default {
                         @open-test-help="$emit('open-test-help')"
                         @delete="$emit('delete')"
                         @moveUp="$emit('move-up')"
-                        @moveDown="$emit('move-down')" />
+                        @moveDown="$emit('move-down')"
+                        @dismiss-error="$emit('dismiss-error')" />
                 </div>
 
                 <validation-cell
