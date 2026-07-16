@@ -121,7 +121,9 @@ const ExplanationRenderer = {
         const generating = ref(false);
         const onGenCode = () => {
             generating.value = true;
-            emit('gencode');
+            // hasError is true exactly when the button reads "Fix Code": signal
+            // the parent to also amend the description, not just regenerate code.
+            emit('gencode', props.hasError);
         };
         const validating = ref(false);
         const onValidate = () => {

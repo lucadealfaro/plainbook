@@ -19,12 +19,12 @@ import requests
 
 from .ai_common import get_session_tokens
 from .utilities import PIP_INSTALL_CODE, parse_pip_install_result, resolve_package_name
-from .gemini import gemini_generate_code, gemini_validate_code, gemini_generate_cell_name, gemini_generate_test_code, gemini_generate_unit_test_code, gemini_verify_notebook, gemini_verify_tests
-from .claude import claude_generate_code, claude_validate_code, claude_generate_cell_name, claude_generate_test_code, claude_generate_unit_test_code, claude_verify_notebook, claude_verify_tests
+from .gemini import gemini_generate_code, gemini_validate_code, gemini_generate_cell_name, gemini_generate_test_code, gemini_generate_unit_test_code, gemini_verify_notebook, gemini_verify_tests, gemini_amend_explanation
+from .claude import claude_generate_code, claude_validate_code, claude_generate_cell_name, claude_generate_test_code, claude_generate_unit_test_code, claude_verify_notebook, claude_verify_tests, claude_amend_explanation
 
 AI_PROVIDERS = {
-    "gemini": {"generate": gemini_generate_code, "validate": gemini_validate_code, "name": gemini_generate_cell_name, "generate_test": gemini_generate_test_code, "generate_unit_test": gemini_generate_unit_test_code, "verify_notebook": gemini_verify_notebook, "verify_tests": gemini_verify_tests},
-    "claude": {"generate": claude_generate_code, "validate": claude_validate_code, "name": claude_generate_cell_name, "generate_test": claude_generate_test_code, "generate_unit_test": claude_generate_unit_test_code, "verify_notebook": claude_verify_notebook, "verify_tests": claude_verify_tests},
+    "gemini": {"generate": gemini_generate_code, "validate": gemini_validate_code, "name": gemini_generate_cell_name, "generate_test": gemini_generate_test_code, "generate_unit_test": gemini_generate_unit_test_code, "verify_notebook": gemini_verify_notebook, "verify_tests": gemini_verify_tests, "amend_explanation": gemini_amend_explanation},
+    "claude": {"generate": claude_generate_code, "validate": claude_validate_code, "name": claude_generate_cell_name, "generate_test": claude_generate_test_code, "generate_unit_test": claude_generate_unit_test_code, "verify_notebook": claude_verify_notebook, "verify_tests": claude_verify_tests, "amend_explanation": claude_amend_explanation},
 }
 
 MAX_OUTPUT_CHARS_FOR_AI = 2000
@@ -1356,8 +1356,15 @@ class Plainbook:
         return None
 
 
-    def generate_code_cell(self, api_key, index, ai_provider="gemini", model=None, validation_feedback=None):
-        """Generates code for a code or test cell at index using the specified AI provider."""
+    def generate_code_cell(self, api_key, index, ai_provider="gemini", model=None, validation_feedback=None, amend_description=False):
+        """Generates code for a code or test cell at index using the specified AI provider.
+
+        Returns a 3-tuple ``(new_code, success, amended_explanation)``. When the caller
+        requests it (``amend_description``) and the cell had an error that is now fixed,
+        the cell's plain-language description is also amended so that regenerating from
+        it on a clean slate would avoid the error; the amended text is returned as the
+        third element (``None`` otherwise). Amendment is best-effort and never blocks the
+        code fix."""
         with self._lock:
             assert 0 <= index < len(self.nb.cells)
             cell = self.nb.cells[index]
@@ -1373,6 +1380,9 @@ class Plainbook:
             variable_context = self._get_variables_for_ai(previous_code_cell) if previous_code_cell else ""
             preceding_code = self._get_preceding_code_for_ai(index)
             previous_code = self._get_cell_w_change_noted(cell)
+            # Raw buggy source, captured before it is overwritten with new_code;
+            # needed as context if we amend the description below.
+            buggy_code = cell.source
             # Mark that an AI request is pending
             if self.ai_request_pending:
                 raise RuntimeError("An AI request is already pending.")
@@ -1412,11 +1422,42 @@ class Plainbook:
                             if self.nb.cells[j].metadata.get('unit_tests'):
                                 self._invalidate_all_unit_tests(j, 'setup_code')
                         self.last_valid_code_cell = index
+                    # Persist the code fix durably before the (best-effort) amend
+                    # call below, so a slow or failing amend never loses the fix.
                     self._write()
-                    return new_code, True
+
+                    # Amend the description so a clean-slate regeneration would
+                    # avoid the error just fixed. Best-effort, action cells only.
+                    amended = None
+                    if amend_description and error_context and not is_test:
+                        try:
+                            amend_fn = AI_PROVIDERS[ai_provider]["amend_explanation"]
+                            amended = amend_fn(
+                                api_key,
+                                cell.metadata.get('explanation'),
+                                error_context,
+                                buggy_code,
+                                new_code,
+                                model=model,
+                                debug=self.debug,
+                                dump_ai_requests=self.dump_ai_requests)
+                            if amended and amended.strip():
+                                amended = amended.strip()
+                                cell.metadata['explanation'] = amended
+                                # In sync with the just-generated code. Do NOT lower
+                                # last_valid_code_cell/output (that would re-invalidate
+                                # the fix we just made).
+                                cell.metadata['explanation_timestamp'] = cell.metadata['code_timestamp']
+                                self._write()
+                            else:
+                                amended = None
+                        except Exception as e:
+                            print(f"Warning: failed to amend explanation for cell {index}: {e}")
+                            amended = None
+                    return new_code, True, amended
                 else:
                     # The request was cancelled, return the current code.
-                    return None, False
+                    return None, False, None
             finally:
                 self.ai_request_pending = False
 

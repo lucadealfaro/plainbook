@@ -568,20 +568,25 @@ def generate_code_cell():
     data = request.json
     cell_index = data.get('cell_index')
     validation_feedback = data.get('validation_feedback')
+    amend_description = data.get('amend_description', False)
     api_key, ai_provider, model, error = _get_ai_config()
     if error:
         return dict(status='error', message=error)
     try:
-        new_code, success = notebook.generate_code_cell(
+        new_code, success, amended = notebook.generate_code_cell(
             api_key, cell_index, ai_provider=ai_provider,
-            model=model, validation_feedback=validation_feedback)
+            model=model, validation_feedback=validation_feedback,
+            amend_description=amend_description)
     except Exception as e:
         friendly = _check_billing_error(e)
         if friendly:
             return dict(status='error', message=friendly)
         raise
     if success:
-        return dict(status='success', code=new_code)
+        result = dict(status='success', code=new_code)
+        if amended:
+            result['explanation'] = amended
+        return result
     else:
         # The request was cancelled, we need to avoid updating the code.
         return dict(status='cancelled', code=None)
@@ -599,7 +604,7 @@ def generate_test_code():
     if error:
         return dict(status='error', message=error)
     try:
-        new_code, success = notebook.generate_code_cell(
+        new_code, success, _amended = notebook.generate_code_cell(
             api_key, cell_index, ai_provider=ai_provider,
             model=model, validation_feedback=validation_feedback)
     except Exception as e:

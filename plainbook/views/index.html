@@ -172,7 +172,7 @@
 
                         @interrupt="ui_interruptKernel"
                         @run-cell="ui_runCell(index)"
-                        @generate-code="ui_forceRegenerateCellCode(index)"
+                        @generate-code="ui_forceRegenerateCellCode(index, $event)"
                         @clear-code="clearCellCode(index)"
                         @validate-code="ui_validateCode(index)"
                         @dismiss-validation="dismissValidation(index)"

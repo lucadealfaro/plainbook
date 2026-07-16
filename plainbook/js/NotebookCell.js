@@ -96,7 +96,7 @@ export default {
                         :unit-test-count="Object.keys(cell.metadata.unit_tests || {}).length"
                         @save="$emit('save-explanation', $event)"
                         @toggle-output="outputVisible = !outputVisible"
-                        @gencode="$emit('generate-code')"
+                        @gencode="$emit('generate-code', $event)"
                         @clearcode="$emit('clear-code')"
                         @validate="$emit('validate-code')"
                         @run="$emit('run-cell')"

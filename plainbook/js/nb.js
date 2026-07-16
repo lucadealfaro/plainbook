@@ -629,7 +629,7 @@ createApp({
         
         
         // Function in charge of generating code for one cell.
-        const generateCodeOneCell = async (cellIndex, force = false, validationFeedback = null) => {
+        const generateCodeOneCell = async (cellIndex, force = false, validationFeedback = null, amend = false) => {
             const cell = notebook.value.cells[cellIndex];
             if (cell.cell_type !== 'code') return; // Only code cells
             if (!force && last_valid_code_cell_index.value >= cellIndex) return; // Already valid code
@@ -645,6 +645,10 @@ createApp({
             if (validationFeedback) {
                 body.validation_feedback = validationFeedback;
             }
+            // "Fix Code" also asks the server to amend the description.
+            if (amend) {
+                body.amend_description = true;
+            }
             const r = await apiCall('/generate_code', 'POST', body);
             if (r.status == 'success') {
                 if (notebook.value && notebook.value.cells[cellIndex]) {
@@ -655,6 +659,10 @@ createApp({
                     // single "Fix Code" reverts the button to "Regenerate code".
                     cell.outputs = [];
                     delete cell.metadata.validation;
+                    // The server amended the description (Fix Code only); reflect it.
+                    if (r.explanation) {
+                        cell.metadata.explanation = r.explanation;
+                    }
                     console.log('Code generated for cell:', cellIndex);
                 }
             } else if (r.status == 'cancelled') {
@@ -867,7 +875,7 @@ createApp({
         };
 
 
-        const ui_forceRegenerateCellCode = async (cellIndex) => {
+        const ui_forceRegenerateCellCode = async (cellIndex, amend = false) => {
             asRead.value = false;
             flushActiveEdits();
             await waitForPendingSaves();
@@ -881,7 +889,9 @@ createApp({
                     validationFeedback = v.message;
                     dismissValidation(cellIndex);
                 }
-                await generateCodeOneCell(cellIndex, true, validationFeedback);
+                // amend is true when triggered from the "Fix Code" button: also
+                // amend the description so a clean-slate regeneration avoids the error.
+                await generateCodeOneCell(cellIndex, true, validationFeedback, amend);
                 running.value = false;
                 runningActivity.value = { type: null, cellIndex: null };
             }

@@ -8,12 +8,14 @@ from .ai_common import (
     UNIT_TEST_SYSTEM_INSTRUCTIONS,
     CHECKING_INSTRUCTIONS,
     NAME_GENERATION_INSTRUCTIONS,
+    AMEND_EXPLANATION_INSTRUCTIONS,
     NOTEBOOK_VERIFY_INSTRUCTIONS,
     TEST_VERIFY_INSTRUCTIONS,
     add_tokens,
     build_context_prompt,
     build_unit_test_prompt,
     build_name_prompt,
+    build_amend_explanation_prompt,
     dump_ai_request,
     log_ai_request_size,
     parse_validation_response,
@@ -144,6 +146,47 @@ Code:
         print("Response:", response_text)
     code = strip_markdown_code_fences(response_text)
     return code
+
+
+def claude_amend_explanation(
+    api_key,
+    explanation,
+    error_context,
+    previous_code,
+    new_code,
+    model=None,
+    debug=False,
+    dump_ai_requests=False):
+    """Revise a cell's plain-language description so that regenerating code from it
+    would avoid the error that was just fixed. Returns the amended description text.
+    Uses the model default (thinking on where supported), since encoding a fix into
+    the description is a reasoning task."""
+    client = _get_client(api_key)
+    model = model or CLAUDE_MODEL
+
+    prompt = build_amend_explanation_prompt(
+        explanation, error_context, previous_code, new_code)
+
+    if debug:
+        log_ai_request_size("claude amend_explanation", AMEND_EXPLANATION_INSTRUCTIONS, prompt)
+    if dump_ai_requests:
+        dump_ai_request(dump_ai_requests, "claude amend_explanation", {
+            "model": model, "max_tokens": 1024,
+            "system": AMEND_EXPLANATION_INSTRUCTIONS,
+            "messages": [{"role": "user", "content": prompt}],
+        })
+
+    message = client.messages.create(
+        model=model,
+        max_tokens=1024,
+        system=AMEND_EXPLANATION_INSTRUCTIONS,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    add_tokens(message.usage.input_tokens, message.usage.output_tokens)
+    response_text = _response_text(message)
+    if debug:
+        print("Response to explanation amendment:", response_text)
+    return response_text.strip()
 
 
 def claude_generate_test_code(
