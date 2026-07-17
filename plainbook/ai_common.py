@@ -1,3 +1,4 @@
+import ast
 import json
 import os
 import re
@@ -22,6 +23,54 @@ that are present after executing those cells.
 Return ONLY the code, no markdown formatting or explanations.
 To display Pandas dataframes, you can simply return the dataframe variable name,
 and the notebook will render it appropriately.
+"""
+
+# Marks a response that asks questions instead of returning code.
+CLARIFY_SENTINEL = "NEEDS_CLARIFICATION"
+
+# Appended to SYSTEM_INSTRUCTIONS when ask_questions mode is on.
+CLARIFY_INSTRUCTIONS = f"""
+
+CLARIFYING-QUESTIONS MODE IS ENABLED.
+When the instructions for this cell leave a genuinely consequential choice open — one
+where different reasonable interpretations would produce meaningfully different code or
+results — ASK the user before writing code instead of silently guessing. This mode exists
+precisely so the user can steer ambiguous requests, so prefer asking over guessing
+whenever the choice actually matters.
+
+ASK when, for example:
+- The task has multiple plausible interpretations that would lead to different outputs
+  (e.g. "summarize the data" — grouped by what? which metric? aggregated how?).
+- A required input is unclear and the provided context does not settle it (e.g. several
+  data files or columns could each plausibly be the intended one).
+- The desired output, return value, or edge-case behavior materially changes the code
+  (e.g. how to handle missing values, what a function should return, which rows to keep).
+- The instruction names a file, column, model, threshold, etc. that does not appear
+  anywhere in the provided context.
+
+Do NOT ask about:
+- Mere stylistic or formatting choices, variable names, or optional refinements — just
+  pick a sensible default and write the code.
+- Anything the surrounding context already answers. The notebook's preceding code, FILE
+  CONTEXT, and VARIABLE CONTEXT are available to you; if they make the intended file,
+  column, or value clear, use it and write the code.
+- Anything the user has already addressed. If the instructions (including any appended
+  guidance, "Clarifications:" notes, or previously answered questions) give you enough to
+  proceed, you MUST write the code and MUST NOT ask again.
+
+When clarification is genuinely needed, respond with EXACTLY this format and NOTHING else
+(no code, no explanations, no preamble):
+{CLARIFY_SENTINEL}
+- <your first question>
+- <your second question>
+
+Rules:
+- One question per line, each line starting with "- ".
+- Ask at most 3 questions, and only about things that genuinely change what the code
+  should do.
+- Make each question specific and easy to answer (offer the likely options when you can).
+- If nothing is genuinely ambiguous, ignore all of the above and simply return the code
+  as usual.
 """
 
 TEST_SYSTEM_INSTRUCTIONS = """
@@ -155,6 +204,39 @@ def build_name_prompt(explanation):
 {explanation}
 
 Summarize what this cell does in 2-3 words:"""
+
+
+FOLD_SYSTEM_INSTRUCTIONS = """
+You are consolidating the plain-language description of a single notebook cell.
+You are given an ORIGINAL description, followed by a list of ADDITIONAL GUIDANCE
+items that were appended incrementally to refine what the cell should do.
+
+Rewrite the ORIGINAL description so that it fully incorporates every item of
+ADDITIONAL GUIDANCE, as if the whole thing had been written that way from the
+start. The result must read as one coherent, natural description authored by a
+single person for another reader.
+
+Rules:
+- Do NOT add, remove, or infer any behavior beyond what is stated in the
+  original description and the guidance items.
+- Where a guidance item conflicts with the original (or with an earlier
+  guidance item), the LATER instruction wins; drop the superseded wording.
+- Preserve the original voice and level of detail. Do not add commentary,
+  headings, preambles, or explanations of your changes.
+- Return ONLY the rewritten description text, nothing else.
+"""
+
+
+def build_fold_prompt(explanation, additions):
+    """Builds the prompt to fold `additions` (oldest first) into the explanation."""
+    guidance = "\n".join(f"- {a}" for a in additions)
+    return f"""ORIGINAL description:
+{explanation}
+
+ADDITIONAL GUIDANCE (in the order it was added, oldest first; later items win on conflict):
+{guidance}
+
+Rewritten description:"""
 
 
 # Session-level token accumulator
@@ -420,6 +502,44 @@ def strip_markdown_code_fences(code):
     if code.endswith("```"):
         code = code[:-3].strip()
     return code
+
+
+def parse_generate_response(text):
+    """Parse a generation response into (code, None), or (None, questions) if it
+    asked for clarification."""
+    r = (text or "").strip()
+    lines = r.splitlines()
+
+    # Scan all lines: the sentinel is sometimes preceded by a preamble.
+    sentinel_idx = None
+    for i, line in enumerate(lines):
+        if line.strip().upper().startswith(CLARIFY_SENTINEL):
+            sentinel_idx = i
+            break
+    if sentinel_idx is not None:
+        questions = []
+        for line in lines[sentinel_idx + 1:]:
+            line = line.strip()
+            if not line:
+                continue
+            # Strip a leading bullet or numbered-list marker, if present.
+            line = re.sub(r'^([-*•]|\d+[.)])\s*', '', line).strip()
+            if line:
+                questions.append(line)
+        if questions:
+            return None, questions
+        # Sentinel but no questions: ask for detail rather than store it as code.
+        return None, ["Could you provide more detail about what this cell should do?"]
+
+    code = strip_markdown_code_fences(text)
+    # A non-code reply would be a SyntaxError on run; surface it as a question.
+    try:
+        ast.parse(code)
+    except SyntaxError:
+        msg = code.strip()
+        if msg:
+            return None, [msg]
+    return code, None
 
 
 def parse_validation_response(text):

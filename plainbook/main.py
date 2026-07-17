@@ -21,7 +21,7 @@ from bottle import run, default_app, request, response, redirect, TEMPLATE_PATH
 # print(f"DEBUGGER PYTHON: {sys.executable}")
 
 # Plainbook imports
-from .plainbook import ExecutionError
+from .plainbook import ExecutionError, ClarificationNeeded
 from .claude import get_claude_models
 from .gemini import get_gemini_models
 
@@ -398,6 +398,72 @@ def edit_explanation():
                 print(f"Warning: failed to generate cell name: {e}")
     return dict(status='success', cell_name=cell_name)
 
+@post('/add_addition')
+@action_log.logged('add_addition')
+@stateful
+@require_token
+def add_addition():
+    data = request.json
+    cell_index = data.get('cell_index')
+    text = data.get('text')
+    addition = notebook.add_cell_addition(cell_index, text)
+    return dict(status='success', addition=addition)
+
+@post('/delete_addition')
+@action_log.logged('delete_addition')
+@stateful
+@require_token
+def delete_addition():
+    data = request.json
+    cell_index = data.get('cell_index')
+    addition_id = data.get('addition_id')
+    notebook.delete_cell_addition(cell_index, addition_id)
+    return dict(status='success')
+
+@post('/fold_additions')
+@action_log.logged('fold_additions')
+@stateful
+@require_token
+def fold_additions():
+    data = request.json
+    cell_index = data.get('cell_index')
+    api_key, ai_provider, model, error = _get_ai_config()
+    if error:
+        return dict(status='error', message=error)
+    try:
+        folded = notebook.fold_additions(
+            api_key, cell_index, ai_provider=ai_provider, model=model)
+    except Exception as e:
+        friendly = _check_billing_error(e)
+        if friendly:
+            return dict(status='error', message=friendly)
+        raise
+    return dict(status='success', folded_explanation=folded)
+
+@post('/commit_fold')
+@action_log.logged('commit_fold')
+@stateful
+@require_token
+def commit_fold():
+    data = request.json
+    cell_index = data.get('cell_index')
+    explanation = data.get('explanation')
+    notebook.commit_fold(cell_index, explanation)
+    return dict(status='success')
+
+@post('/unfold')
+@action_log.logged('unfold')
+@stateful
+@require_token
+def unfold():
+    data = request.json
+    cell_index = data.get('cell_index')
+    result = notebook.unfold(cell_index)
+    if result is None:
+        return dict(status='error', message='Nothing to unfold.')
+    return dict(status='success', explanation=result['explanation'],
+                additions=result['additions'])
+
 @post('/edit_code')
 @action_log.logged('edit_code')
 @stateful
@@ -561,6 +627,9 @@ def generate_code_cell():
         new_code, success = notebook.generate_code_cell(
             api_key, cell_index, ai_provider=ai_provider,
             model=model, validation_feedback=validation_feedback)
+    except ClarificationNeeded as e:
+        # The AI asked questions; the cell source is untouched.
+        return dict(status='needs_clarification', questions=e.questions)
     except Exception as e:
         friendly = _check_billing_error(e)
         if friendly:
@@ -760,6 +829,17 @@ def set_share_output():
     data = request.json
     share = data.get('share', True)
     notebook.set_share_output_with_ai(share)
+    return {}
+
+
+@post('/set_ask_questions')
+@action_log.logged('set_ask_questions')
+@stateful
+@require_token
+def set_ask_questions():
+    data = request.json
+    value = data.get('value', False)
+    notebook.set_ask_questions(value)
     return {}
 
 

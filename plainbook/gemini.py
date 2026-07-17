@@ -9,12 +9,16 @@ from .ai_common import (
     NAME_GENERATION_INSTRUCTIONS,
     NOTEBOOK_VERIFY_INSTRUCTIONS,
     TEST_VERIFY_INSTRUCTIONS,
+    FOLD_SYSTEM_INSTRUCTIONS,
+    CLARIFY_INSTRUCTIONS,
     add_tokens,
     build_context_prompt,
     build_unit_test_prompt,
     build_name_prompt,
+    build_fold_prompt,
     dump_ai_request,
     log_ai_request_size,
+    parse_generate_response,
     parse_validation_response,
     parse_verify_response,
     strip_markdown_code_fences,
@@ -56,10 +60,16 @@ def gemini_generate_code(
     validation_context=None,
     model=None,
     debug=False,
-    dump_ai_requests=False):
+    dump_ai_requests=False,
+    ask_questions=False):
     # 1. Initialize the Gemini client
     client = genai.Client(api_key=api_key)
     model = model or GEMINI_GENERATE_MODEL
+
+    # In ask_questions mode, the model may ask questions instead of writing code.
+    system_instructions = SYSTEM_INSTRUCTIONS
+    if ask_questions:
+        system_instructions += CLARIFY_INSTRUCTIONS
 
     # 2. Create the prompt
     prompt = build_context_prompt(
@@ -77,7 +87,7 @@ Code:
 """
 
     if debug:
-        log_ai_request_size("gemini generate_code", SYSTEM_INSTRUCTIONS, prompt,
+        log_ai_request_size("gemini generate_code", system_instructions, prompt,
                             preceding=preceding_code, instructions=instructions,
                             previous=previous_code, file_context=file_context,
                             error_context=error_context, variable_context=variable_context,
@@ -86,7 +96,7 @@ Code:
         dump_ai_request(dump_ai_requests, "gemini generate_code", {
             "model": model,
             "contents": prompt,
-            "system_instruction": SYSTEM_INSTRUCTIONS,
+            "system_instruction": system_instructions,
         })
 
     # 3. Generate content
@@ -94,7 +104,7 @@ Code:
         model=model,
         contents=prompt,
         config=types.GenerateContentConfig(
-            system_instruction=SYSTEM_INSTRUCTIONS
+            system_instruction=system_instructions
         )
     )
     if response.usage_metadata:
@@ -102,6 +112,9 @@ Code:
     if debug:
         print("Response:", response.text)
     # 4. Process the response
+    if ask_questions:
+        # Returns (code, questions); questions is set only if it asked.
+        return parse_generate_response(response.text)
     code = strip_markdown_code_fences(response.text)
     return code
 
@@ -305,6 +318,37 @@ def gemini_verify_tests(api_key, payload, model=None, debug=False, dump_ai_reque
     return _gemini_verify(api_key, TEST_VERIFY_INSTRUCTIONS, payload,
                           "verify_tests", model=model, debug=debug,
                           dump_ai_requests=dump_ai_requests)
+
+
+def gemini_fold_additions(api_key, explanation=None, additions=None, model=None,
+                          debug=False, dump_ai_requests=False):
+    """Rewrites `explanation` to absorb `additions`. Returns the rewritten text."""
+    client = genai.Client(api_key=api_key)
+    model = model or GEMINI_GENERATE_MODEL
+    prompt = build_fold_prompt(explanation or '', additions or [])
+    if debug:
+        log_ai_request_size("gemini fold_additions", FOLD_SYSTEM_INSTRUCTIONS, prompt,
+                            instructions=explanation)
+    if dump_ai_requests:
+        dump_ai_request(dump_ai_requests, "gemini fold_additions", {
+            "model": model,
+            "contents": prompt,
+            "system_instruction": FOLD_SYSTEM_INSTRUCTIONS,
+            "max_output_tokens": 2048,
+        })
+    response = client.models.generate_content(
+        model=model,
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            system_instruction=FOLD_SYSTEM_INSTRUCTIONS,
+            max_output_tokens=2048,
+        ),
+    )
+    if response.usage_metadata:
+        add_tokens(response.usage_metadata.prompt_token_count, response.usage_metadata.candidates_token_count)
+    if debug:
+        print("Response to fold_additions:", response.text)
+    return (response.text or '').strip()
 
 
 def gemini_generate_cell_name(api_key, explanation, model=None, debug=False, dump_ai_requests=False):

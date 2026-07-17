@@ -128,6 +128,46 @@ pre[class*="language-"] {
   } 
 }
 
+// Appended-guidance chips
+.additions-stack .addition-chip {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.4rem;
+  padding: 0.3rem 0.5rem;
+  border: 1px dashed var(--bulma-link);
+  border-radius: 5px;
+  background: var(--bulma-scheme-main-bis);
+  font-size: 0.85rem;
+  line-height: 1.35;
+}
+
+.additions-stack .addition-chip .addition-text {
+  flex: 1;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.additions-stack .addition-chip .addition-del {
+  margin-top: 0.1rem;
+  flex-shrink: 0;
+}
+
+// Fold review panel
+.fold-review {
+  border: 1px solid var(--bulma-link);
+  border-radius: 6px;
+  background: var(--bulma-scheme-main-bis);
+}
+
+.fold-review .fold-original {
+  border: 1px solid var(--bulma-border);
+  border-radius: 4px;
+  background: var(--bulma-scheme-main);
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--bulma-text-weak);
+}
+
 // Muted utility for subtle buttons
 .is-muted {
   opacity: 0.6;

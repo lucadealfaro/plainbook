@@ -10,7 +10,8 @@ import MissingModuleBar from './MissingModuleBar.js';
 export default {
     components: { MarkdownCell, CodeCell, ExplanationEditor, ValidationCell, OutputRenderer, MissingModuleBar },
     props: ['cell', 'isActive', 'isLocked', 'running', 'codeValid', 'outputValid', 'executed',
-        'asRead', 'markdownEditKey', 'explanationEditKey', 'testCodeValid', 'moduleInstall'],
+        'asRead', 'markdownEditKey', 'explanationEditKey', 'testCodeValid', 'moduleInstall',
+        'foldState', 'clarifyState'],
     emits: [
         'save-markdown', 'save-explanation', 'save-code',
         'run-cell', 'save-and-run', 'save-code-and-run', 'generate-code', 'clear-code',
@@ -19,7 +20,9 @@ export default {
         'activate', 'interrupt',
         'run-test', 'save-and-run-test', 'save-code-and-run-test', 'generate-test-code', 'open-test-help',
         'open-unit-test',
-        'install-module', 'dismiss-module-install'
+        'install-module', 'dismiss-module-install',
+        'append-addition', 'delete-addition', 'open-fold', 'commit-fold', 'dismiss-fold', 'unfold',
+        'submit-clarification', 'dismiss-clarification'
     ],
     setup(props, { emit }) {
         const hasError = computed(() => {
@@ -93,6 +96,10 @@ export default {
                         :outputVisible="outputVisible"
                         :start-edit-key="explanationEditKey"
                         :unit-test-count="Object.keys(cell.metadata.unit_tests || {}).length"
+                        :additions="cell.metadata.additions || []"
+                        :fold-state="foldState"
+                        :clarify-state="clarifyState"
+                        :has-prefold="!!cell.metadata.explanation_prefold"
                         @save="$emit('save-explanation', $event)"
                         @toggle-output="outputVisible = !outputVisible"
                         @gencode="$emit('generate-code')"
@@ -104,12 +111,20 @@ export default {
                         @delete="$emit('delete')"
                         @moveUp="$emit('move-up')"
                         @moveDown="$emit('move-down')"
-                        @open-unit-test="$emit('open-unit-test')" />
+                        @open-unit-test="$emit('open-unit-test')"
+                        @append-addition="(text) => $emit('append-addition', text)"
+                        @delete-addition="(id) => $emit('delete-addition', id)"
+                        @open-fold="$emit('open-fold')"
+                        @commit-fold="(text) => $emit('commit-fold', text)"
+                        @dismiss-fold="$emit('dismiss-fold')"
+                        @unfold="$emit('unfold')"
+                        @submit-clarification="(answers) => $emit('submit-clarification', answers)"
+                        @dismiss-clarification="$emit('dismiss-clarification')" />
                 </div>
 
                 <validation-cell
                     v-if="cell.metadata?.validation && !cell.metadata?.validation.is_hidden"
-                    :validation="cell.metadata.validation" 
+                    :validation="cell.metadata.validation"
                     @dismiss_validation="$emit('dismiss-validation')" />
 
                 <code-cell
