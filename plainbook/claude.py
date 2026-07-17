@@ -83,7 +83,6 @@ def claude_generate_code(
     client = _get_client(api_key)
     model = model or CLAUDE_MODEL
 
-    # In ask_questions mode, the model may ask questions instead of writing code.
     system_instructions = SYSTEM_INSTRUCTIONS
     if ask_questions:
         system_instructions += CLARIFY_INSTRUCTIONS
@@ -335,7 +334,6 @@ def claude_fold_additions(api_key, explanation=None, additions=None, model=None,
     client = _get_client(api_key)
     model = model or CLAUDE_MODEL
 
-    # In ask_questions mode, the model may ask questions instead of folding.
     system_instructions = FOLD_SYSTEM_INSTRUCTIONS
     if ask_questions:
         system_instructions += FOLD_CLARIFY_INSTRUCTIONS

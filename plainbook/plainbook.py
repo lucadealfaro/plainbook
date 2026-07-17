@@ -527,8 +527,7 @@ class Plainbook:
         self.last_valid_output_cell = self.nb.metadata.get('last_valid_output', -1)
         self.last_valid_test_cell = self.nb.metadata.get('last_valid_test_cell', -1)
 
-        # Migrate cells written before amend: fold leftover additions into the
-        # explanation, so their guidance is not silently dropped.
+        # Migrate cells written before amend: keep their additions as guidance.
         for cell in self.nb.cells:
             additions = cell.metadata.pop('additions', None)
             if additions:

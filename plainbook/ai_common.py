@@ -63,8 +63,7 @@ Rules:
 CLARIFY_INSTRUCTIONS = _clarify_instructions(
     "what this cell should do", "simply return the code as usual")
 
-# Appended to FOLD_SYSTEM_INSTRUCTIONS when ask_questions mode is on. A fold
-# returns a description, not code.
+# Separate from CLARIFY_INSTRUCTIONS: a fold returns a description, not code.
 FOLD_CLARIFY_INSTRUCTIONS = _clarify_instructions(
     "how the amendment should change the description",
     "simply return the rewritten description as usual")
@@ -516,7 +515,6 @@ def _extract_questions(text):
         line = line.strip()
         if not line:
             continue
-        # Strip a leading bullet or numbered-list marker, if present.
         line = re.sub(r'^([-*•]|\d+[.)])\s*', '', line).strip()
         if line:
             questions.append(line)
