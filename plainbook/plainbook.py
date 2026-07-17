@@ -857,7 +857,7 @@ class Plainbook:
             self._write()
 
 
-    # Incremental additions (prompt folding)
+    # Amend and fold
 
     @staticmethod
     def _normalize_explanation(explanation):
@@ -865,19 +865,6 @@ class Plainbook:
         if isinstance(explanation, list):
             return ''.join(explanation)
         return explanation or ''
-
-    def _explanation_with_additions(self, cell):
-        """Returns the explanation with the additions appended as a guidance
-        section, for the code generator."""
-        base = self._normalize_explanation(cell.metadata.get('explanation'))
-        additions = cell.metadata.get('additions') or []
-        if not additions:
-            return base
-        guidance = "\n".join(f"- {a.get('text', '')}" for a in additions)
-        return (base +
-                "\n\nADDITIONAL GUIDANCE (incremental refinements, oldest first; "
-                "apply all of them, and where they conflict the later ones win):\n"
-                + guidance)
 
     def _mark_code_stale(self, index):
         """Invalidates a cell and everything downstream, as an explanation edit does."""
@@ -890,86 +877,49 @@ class Plainbook:
             if self.nb.cells[j].metadata.get('unit_tests'):
                 self._invalidate_all_unit_tests(j, 'setup_code')
 
-    def add_cell_addition(self, index, text):
-        """Appends a guidance addition to a cell and marks its code stale.
-        Returns the addition {id, text, created}."""
-        with self._lock:
-            assert 0 <= index < len(self.nb.cells)
-            cell = self.nb.cells[index]
-            assert cell.cell_type in ('code', 'test')
-            addition = {
-                'id': uuid.uuid4().hex[:12],
-                'text': text,
-                'created': datetime.datetime.now().isoformat(),
-            }
-            additions = cell.metadata.get('additions')
-            if not isinstance(additions, list):
-                additions = []
-            additions.append(addition)
-            cell.metadata['additions'] = additions
-            if cell.cell_type == 'test':
-                self.last_valid_test_cell = min(self.last_valid_test_cell, index - 1)
-            else:
-                self._mark_code_stale(index)
-            self._write()
-            return addition
-
-    def delete_cell_addition(self, index, addition_id):
-        """Removes an addition by id from a cell and marks its code stale."""
-        with self._lock:
-            assert 0 <= index < len(self.nb.cells)
-            cell = self.nb.cells[index]
-            assert cell.cell_type in ('code', 'test')
-            additions = cell.metadata.get('additions') or []
-            cell.metadata['additions'] = [a for a in additions if a.get('id') != addition_id]
-            if cell.cell_type == 'test':
-                self.last_valid_test_cell = min(self.last_valid_test_cell, index - 1)
-            else:
-                self._mark_code_stale(index)
-            self._write()
-
-    def fold_additions(self, api_key, index, ai_provider="gemini", model=None):
-        """Returns an explanation rewritten to incorporate the additions. Does not
-        modify the cell; the caller reviews it and calls commit_fold."""
+    def propose_amend(self, api_key, index, text, ai_provider="gemini", model=None):
+        """Returns the explanation rewritten to incorporate `text`. Does not modify
+        the cell; the caller reviews the result and calls commit_amend."""
         with self._lock:
             assert 0 <= index < len(self.nb.cells)
             cell = self.nb.cells[index]
             assert cell.cell_type in ('code', 'test')
             base = self._normalize_explanation(cell.metadata.get('explanation'))
-            additions = [a.get('text', '') for a in (cell.metadata.get('additions') or [])]
-            if not additions:
+            if not (text or '').strip():
                 return base
             if self.ai_request_pending:
                 raise RuntimeError("An AI request is already pending.")
             try:
                 self.ai_request_pending = True
                 fold_fn = AI_PROVIDERS[ai_provider]["fold"]
-                return fold_fn(api_key, explanation=base, additions=additions,
+                return fold_fn(api_key, explanation=base, additions=[text],
                                model=model, debug=self.debug,
                                dump_ai_requests=self.dump_ai_requests)
             finally:
                 self.ai_request_pending = False
 
-    def commit_fold(self, index, folded_explanation):
-        """Replaces the explanation with the folded one and clears the additions,
-        snapshotting the previous state in 'explanation_prefold' so it can be
-        undone. The code stays valid: a fold does not change the meaning."""
+    def commit_amend(self, index, folded_explanation):
+        """Installs a folded explanation, snapshotting the explanation and code it
+        replaces so it can be undone. Marks the code stale: the folded text has not
+        generated code yet, and the caller regenerates from it."""
         with self._lock:
             assert 0 <= index < len(self.nb.cells)
             cell = self.nb.cells[index]
             assert cell.cell_type in ('code', 'test')
             cell.metadata['explanation_prefold'] = {
                 'explanation': self._normalize_explanation(cell.metadata.get('explanation')),
-                'additions': cell.metadata.get('additions') or [],
+                'source': tostring(cell.source),
             }
             cell.metadata['explanation'] = folded_explanation
-            cell.metadata['additions'] = []
             cell.metadata['explanation_timestamp'] = datetime.datetime.now().isoformat()
+            self._mark_code_stale(index)
             self._write()
 
     def unfold(self, index):
-        """Restores the explanation and additions saved by commit_fold.
-        Returns {explanation, additions}, or None if there is no snapshot."""
+        """Restores the explanation and code saved by commit_amend, returning both,
+        or None if there is no snapshot. A restored pair already ran together, so
+        only the output is stale. Snapshots from before the amend redesign have no
+        code to restore, and leave the code stale instead."""
         with self._lock:
             assert 0 <= index < len(self.nb.cells)
             cell = self.nb.cells[index]
@@ -977,15 +927,20 @@ class Plainbook:
             snapshot = cell.metadata.get('explanation_prefold')
             if not snapshot:
                 return None
+            source = snapshot.get('source')
             cell.metadata['explanation'] = snapshot.get('explanation', '')
-            cell.metadata['additions'] = snapshot.get('additions', [])
             cell.metadata['explanation_timestamp'] = datetime.datetime.now().isoformat()
             del cell.metadata['explanation_prefold']
+            if source is None:
+                self._mark_code_stale(index)
+            else:
+                cell.source = source
+                self._invalidate_execution(index)
+                self.last_valid_code_cell = min(self.last_valid_code_cell, index)
+                self.last_valid_output_cell = min(self.last_valid_output_cell, index - 1)
+                self.last_valid_test_cell = min(self.last_valid_test_cell, index - 1)
             self._write()
-            return {
-                'explanation': cell.metadata['explanation'],
-                'additions': cell.metadata['additions'],
-            }
+            return {'explanation': cell.metadata['explanation'], 'source': source}
 
 
     # Unit test metadata methods (stubs for Phase 1)
@@ -1468,7 +1423,7 @@ class Plainbook:
                 raise RuntimeError("Cannot generate code: previous output must be valid.")
             # Gets code context.
             is_test = (cell.cell_type == 'test')
-            instructions = self._get_instructions(self._explanation_with_additions(cell))
+            instructions = self._get_instructions(cell.metadata.get('explanation'))
             files_context = self._get_files_context()
             previous_code_cell = self._get_preceding_code_cell(index)
             error_context = self._get_error_context(index)
