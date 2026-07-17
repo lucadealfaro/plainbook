@@ -50,7 +50,6 @@ class TestProposeAmend:
         cell = notebook.nb.cells[idx]
         assert cell.metadata['explanation'] == "Plot revenue."
         assert 'explanation_prefold' not in cell.metadata
-        # Proposing is non-committal: the code is untouched.
         assert notebook.last_valid_code_cell == idx
 
     def test_empty_text_returns_base_without_calling_ai(self, notebook, monkeypatch):
@@ -114,8 +113,7 @@ class TestUnfold:
         notebook.last_valid_code_cell = idx
         notebook.last_valid_output_cell = idx
         notebook.unfold(idx)
-        # The restored pair already ran together: the code is valid where it
-        # sits, only its output needs re-running.
+        # The restored pair already ran together, so only the output is stale.
         assert notebook.last_valid_code_cell == idx
         assert notebook.last_valid_output_cell == idx - 1
 
@@ -125,8 +123,7 @@ class TestUnfold:
 
     def test_legacy_snapshot_without_source_marks_code_stale(self, notebook):
         idx = _add_action_cell(notebook, "Folded text.", source="plot(df)")
-        # A snapshot written by the previous version: no source, so a true
-        # undo is impossible.
+        # Written by the previous version: no source, so no true undo.
         notebook.nb.cells[idx].metadata['explanation_prefold'] = {
             'explanation': "Plot revenue.",
             'additions': [{'id': 'a1', 'text': "log scale"}],
@@ -199,7 +196,6 @@ class TestProposeAmendAsksQuestions:
         monkeypatch.setitem(pb.AI_PROVIDERS['gemini'], 'fold', fake_fold)
         result = notebook.propose_amend("key", idx, "use net revenue", ai_provider='gemini')
         assert captured['ask_questions'] is True
-        # A fold that asks nothing still yields the description, not a tuple.
         assert result == "Plot net revenue."
 
     def test_does_not_ask_when_disabled(self, notebook, monkeypatch):
@@ -244,7 +240,6 @@ class TestLegacyMigration:
         try:
             cell = reloaded.nb.cells[idx]
             explanation = cell.metadata['explanation']
-            # The guidance must survive, and the key must be gone.
             assert "Plot revenue." in explanation
             assert "Color the bars blue." in explanation
             assert "Drop null rows first." in explanation

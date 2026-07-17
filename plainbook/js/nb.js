@@ -929,8 +929,7 @@ createApp({
             foldState.value = next;
         };
 
-        // Asks the AI to fold the instruction into the explanation and opens the
-        // review. Nothing is stored until the user accepts.
+        // Nothing is stored until the user accepts the review.
         const ui_amendAndFold = async (cellIndex, text) => {
             if (!text || !text.trim() || running.value) return;
             const cell = notebook.value?.cells?.[cellIndex];
@@ -943,8 +942,7 @@ createApp({
                 const r = await apiCall('/propose_amend', 'POST', {
                     cell_index: cellIndex, text: text.trim() });
                 if (r.status === 'needs_clarification') {
-                    // The fold asked instead of folding. Keep the amendment so the
-                    // answers are added to it, rather than replacing it.
+                    // Keep the amendment: the answers refine it, not replace it.
                     clarifyState.value = { ...clarifyState.value,
                         [cellIndex]: { questions: r.questions || [],
                             pendingAmend: text.trim() } };
@@ -962,8 +960,8 @@ createApp({
             }
         };
 
-        // Installs the reviewed explanation, then regenerates and runs through the
-        // normal pipeline, so the stored code is code this explanation produced.
+        // Regenerates through the normal pipeline, so the stored code is always
+        // code this explanation produced.
         const ui_acceptAmend = async (cellIndex, editedText) => {
             if (running.value) return;
             const r = await apiCall('/commit_amend', 'POST', {
@@ -990,8 +988,7 @@ createApp({
             }
         };
 
-        // Restores the explanation and the code saved with it, then re-runs. The
-        // pair already ran together, so this needs no AI call.
+        // Restores a pair that already ran together, so it needs no AI call.
         const ui_unfold = async (cellIndex) => {
             if (running.value) return;
             const r = await apiCall('/unfold', 'POST', { cell_index: cellIndex });
@@ -1021,10 +1018,8 @@ createApp({
             clarifyState.value = next;
         };
 
-        // Answers are folded into the explanation through the amend path, so they
-        // persist and a later regeneration does not ask again. When the questions
-        // came from a fold, the amendment that prompted them is carried along, so
-        // the answers refine it instead of replacing it.
+        // Answers go through the amend path, so they persist in the explanation
+        // and a later regeneration does not ask again.
         const ui_submitClarification = async (cellIndex, answers) => {
             if (running.value) return;
             const cs = clarifyState.value[cellIndex];

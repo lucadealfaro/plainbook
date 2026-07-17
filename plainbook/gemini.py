@@ -70,7 +70,6 @@ def gemini_generate_code(
     client = genai.Client(api_key=api_key)
     model = model or GEMINI_GENERATE_MODEL
 
-    # In ask_questions mode, the model may ask questions instead of writing code.
     system_instructions = SYSTEM_INSTRUCTIONS
     if ask_questions:
         system_instructions += CLARIFY_INSTRUCTIONS
@@ -372,7 +371,6 @@ def gemini_fold_additions(api_key, explanation=None, additions=None, model=None,
     client = genai.Client(api_key=api_key)
     model = model or GEMINI_GENERATE_MODEL
 
-    # In ask_questions mode, the model may ask questions instead of folding.
     system_instructions = FOLD_SYSTEM_INSTRUCTIONS
     if ask_questions:
         system_instructions += FOLD_CLARIFY_INSTRUCTIONS
