@@ -28,50 +28,46 @@ and the notebook will render it appropriately.
 # Marks a response that asks questions instead of returning code.
 CLARIFY_SENTINEL = "NEEDS_CLARIFICATION"
 
-# Appended to SYSTEM_INSTRUCTIONS when ask_questions mode is on.
-CLARIFY_INSTRUCTIONS = f"""
+def _clarify_instructions(task, produce):
+    """Builds the clarifying-questions addendum for a system prompt. `task` names
+    what is being decided, `produce` what to return when nothing is unclear."""
+    return f"""
 
 CLARIFYING-QUESTIONS MODE IS ENABLED.
-When the instructions for this cell leave a genuinely consequential choice open — one
-where different reasonable interpretations would produce meaningfully different code or
-results — ASK the user before writing code instead of silently guessing. This mode exists
-precisely so the user can steer ambiguous requests, so prefer asking over guessing
-whenever the choice actually matters.
-
-ASK when, for example:
-- The task has multiple plausible interpretations that would lead to different outputs
-  (e.g. "summarize the data" — grouped by what? which metric? aggregated how?).
-- A required input is unclear and the provided context does not settle it (e.g. several
-  data files or columns could each plausibly be the intended one).
-- The desired output, return value, or edge-case behavior materially changes the code
-  (e.g. how to handle missing values, what a function should return, which rows to keep).
-- The instruction names a file, column, model, threshold, etc. that does not appear
-  anywhere in the provided context.
+If anything about {task} is unclear, ASK the user instead of guessing. This mode
+exists so the user can steer, so when in doubt, prefer asking over guessing.
 
 Do NOT ask about:
-- Mere stylistic or formatting choices, variable names, or optional refinements — just
-  pick a sensible default and write the code.
-- Anything the surrounding context already answers. The notebook's preceding code, FILE
-  CONTEXT, and VARIABLE CONTEXT are available to you; if they make the intended file,
-  column, or value clear, use it and write the code.
-- Anything the user has already addressed. If the instructions (including any appended
-  guidance, "Clarifications:" notes, or previously answered questions) give you enough to
-  proceed, you MUST write the code and MUST NOT ask again.
+- Anything the context already answers. The preceding code, FILE CONTEXT, and
+  VARIABLE CONTEXT are available to you; if they settle the point, use them.
+- Anything the user has already addressed. If the instructions (including any
+  "Clarifications:" notes or previously answered questions) give you enough to
+  proceed, you MUST NOT ask again.
 
-When clarification is genuinely needed, respond with EXACTLY this format and NOTHING else
-(no code, no explanations, no preamble):
+When something is unclear, respond with EXACTLY this format and NOTHING else (no
+preamble, no explanations):
 {CLARIFY_SENTINEL}
 - <your first question>
 - <your second question>
 
 Rules:
 - One question per line, each line starting with "- ".
-- Ask at most 3 questions, and only about things that genuinely change what the code
-  should do.
-- Make each question specific and easy to answer (offer the likely options when you can).
-- If nothing is genuinely ambiguous, ignore all of the above and simply return the code
-  as usual.
+- Ask at most 3 questions.
+- Make each question specific and easy to answer (offer the likely options when
+  you can).
+- If nothing is unclear, ignore all of the above and {produce}.
 """
+
+
+# Appended to SYSTEM_INSTRUCTIONS when ask_questions mode is on.
+CLARIFY_INSTRUCTIONS = _clarify_instructions(
+    "what this cell should do", "simply return the code as usual")
+
+# Appended to FOLD_SYSTEM_INSTRUCTIONS when ask_questions mode is on. A fold
+# returns a description, not code.
+FOLD_CLARIFY_INSTRUCTIONS = _clarify_instructions(
+    "how the amendment should change the description",
+    "simply return the rewritten description as usual")
 
 TEST_SYSTEM_INSTRUCTIONS = """
 You are an assistant that writes Python test code for Jupyter notebook test cells.
@@ -548,32 +544,45 @@ def strip_markdown_code_fences(code):
     return code
 
 
-def parse_generate_response(text):
-    """Parse a generation response into (code, None), or (None, questions) if it
-    asked for clarification."""
-    r = (text or "").strip()
-    lines = r.splitlines()
-
+def _extract_questions(text):
+    """Returns the questions in a clarification response, or None if it is not one."""
+    lines = (text or "").strip().splitlines()
     # Scan all lines: the sentinel is sometimes preceded by a preamble.
     sentinel_idx = None
     for i, line in enumerate(lines):
         if line.strip().upper().startswith(CLARIFY_SENTINEL):
             sentinel_idx = i
             break
-    if sentinel_idx is not None:
-        questions = []
-        for line in lines[sentinel_idx + 1:]:
-            line = line.strip()
-            if not line:
-                continue
-            # Strip a leading bullet or numbered-list marker, if present.
-            line = re.sub(r'^([-*•]|\d+[.)])\s*', '', line).strip()
-            if line:
-                questions.append(line)
-        if questions:
-            return None, questions
-        # Sentinel but no questions: ask for detail rather than store it as code.
-        return None, ["Could you provide more detail about what this cell should do?"]
+    if sentinel_idx is None:
+        return None
+    questions = []
+    for line in lines[sentinel_idx + 1:]:
+        line = line.strip()
+        if not line:
+            continue
+        # Strip a leading bullet or numbered-list marker, if present.
+        line = re.sub(r'^([-*•]|\d+[.)])\s*', '', line).strip()
+        if line:
+            questions.append(line)
+    return questions or ["Could you provide more detail about what this cell should do?"]
+
+
+def parse_fold_response(text):
+    """Parse a fold response into (description, None), or (None, questions) if it
+    asked for clarification. A fold returns prose, so unlike a generation response
+    it is never checked for Python syntax."""
+    questions = _extract_questions(text)
+    if questions is not None:
+        return None, questions
+    return (text or "").strip(), None
+
+
+def parse_generate_response(text):
+    """Parse a generation response into (code, None), or (None, questions) if it
+    asked for clarification."""
+    questions = _extract_questions(text)
+    if questions is not None:
+        return None, questions
 
     code = strip_markdown_code_fences(text)
     # A non-code reply would be a SyntaxError on run; surface it as a question.

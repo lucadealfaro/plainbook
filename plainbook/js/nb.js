@@ -942,6 +942,14 @@ createApp({
             try {
                 const r = await apiCall('/propose_amend', 'POST', {
                     cell_index: cellIndex, text: text.trim() });
+                if (r.status === 'needs_clarification') {
+                    // The fold asked instead of folding. Keep the amendment so the
+                    // answers are added to it, rather than replacing it.
+                    clarifyState.value = { ...clarifyState.value,
+                        [cellIndex]: { questions: r.questions || [],
+                            pendingAmend: text.trim() } };
+                    return;
+                }
                 if (r.status !== 'success') throw new Error(r.message || 'Amend failed');
                 const original = Array.isArray(cell.metadata.explanation)
                     ? cell.metadata.explanation.join('')
@@ -1014,7 +1022,9 @@ createApp({
         };
 
         // Answers are folded into the explanation through the amend path, so they
-        // persist and a later regeneration does not ask again.
+        // persist and a later regeneration does not ask again. When the questions
+        // came from a fold, the amendment that prompted them is carried along, so
+        // the answers refine it instead of replacing it.
         const ui_submitClarification = async (cellIndex, answers) => {
             if (running.value) return;
             const cs = clarifyState.value[cellIndex];
@@ -1024,8 +1034,12 @@ createApp({
                 return a ? `Q: ${q}\nA: ${a}` : null;
             }).filter(Boolean);
             if (!lines.length) return;
+            const clarifications = 'Clarifications:\n' + lines.join('\n');
+            const text = cs.pendingAmend
+                ? `${cs.pendingAmend}\n\n${clarifications}`
+                : clarifications;
             dismissClarify(cellIndex);
-            await ui_amendAndFold(cellIndex, 'Clarifications:\n' + lines.join('\n'));
+            await ui_amendAndFold(cellIndex, text);
         };
 
 

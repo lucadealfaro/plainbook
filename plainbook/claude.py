@@ -13,6 +13,7 @@ from .ai_common import (
     TEST_VERIFY_INSTRUCTIONS,
     FOLD_SYSTEM_INSTRUCTIONS,
     CLARIFY_INSTRUCTIONS,
+    FOLD_CLARIFY_INSTRUCTIONS,
     add_tokens,
     build_context_prompt,
     build_unit_test_prompt,
@@ -21,6 +22,7 @@ from .ai_common import (
     build_fold_prompt,
     dump_ai_request,
     log_ai_request_size,
+    parse_fold_response,
     parse_generate_response,
     parse_validation_response,
     parse_verify_response,
@@ -400,30 +402,39 @@ def claude_verify_tests(api_key, payload, model=None, debug=False, dump_ai_reque
 
 
 def claude_fold_additions(api_key, explanation=None, additions=None, model=None,
-                          debug=False, dump_ai_requests=False):
+                          debug=False, dump_ai_requests=False, ask_questions=False):
     """Rewrites `explanation` to absorb `additions`. Returns the rewritten text."""
     client = _get_client(api_key)
     model = model or CLAUDE_MODEL
+
+    # In ask_questions mode, the model may ask questions instead of folding.
+    system_instructions = FOLD_SYSTEM_INSTRUCTIONS
+    if ask_questions:
+        system_instructions += FOLD_CLARIFY_INSTRUCTIONS
+
     prompt = build_fold_prompt(explanation or '', additions or [])
     if debug:
-        log_ai_request_size("claude fold_additions", FOLD_SYSTEM_INSTRUCTIONS, prompt,
+        log_ai_request_size("claude fold_additions", system_instructions, prompt,
                             instructions=explanation)
     if dump_ai_requests:
         dump_ai_request(dump_ai_requests, "claude fold_additions", {
             "model": model, "max_tokens": 2048,
-            "system": FOLD_SYSTEM_INSTRUCTIONS,
+            "system": system_instructions,
             "messages": [{"role": "user", "content": prompt}],
         })
     message = client.messages.create(
         model=model,
         max_tokens=2048,
-        system=FOLD_SYSTEM_INSTRUCTIONS,
+        system=system_instructions,
         messages=[{"role": "user", "content": prompt}],
     )
     add_tokens(message.usage.input_tokens, message.usage.output_tokens)
     response_text = message.content[0].text
     if debug:
         print("Response to fold_additions:", response_text)
+    if ask_questions:
+        # Returns (description, questions); questions is set only if it asked.
+        return parse_fold_response(response_text)
     return response_text.strip()
 
 
