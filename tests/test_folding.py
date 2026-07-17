@@ -1,7 +1,8 @@
 import pytest
 
 import plainbook.plainbook as pb
-from plainbook.plainbook import Plainbook
+from plainbook.ai_common import parse_fold_response
+from plainbook.plainbook import ClarificationNeeded, Plainbook
 
 
 @pytest.fixture
@@ -146,6 +147,85 @@ class TestGeneratorReadsExplanationDirectly:
         assert not hasattr(notebook, 'add_cell_addition')
         assert not hasattr(notebook, 'delete_cell_addition')
         assert not hasattr(notebook, '_explanation_with_additions')
+
+
+class TestParseFoldResponse:
+
+    def test_prose_is_not_mistaken_for_questions(self):
+        # A fold returns prose, which never parses as Python. It must not go
+        # through the code parser, which treats unparsable text as a question.
+        text = "Plot revenue on log axes, dropping rows with null revenue."
+        assert parse_fold_response(text) == (text, None)
+
+    def test_sentinel_yields_questions(self):
+        text = "NEEDS_CLARIFICATION\n- Which revenue column, gross or net?\n- Log base?"
+        folded, questions = parse_fold_response(text)
+        assert folded is None
+        assert questions == ["Which revenue column, gross or net?", "Log base?"]
+
+    def test_sentinel_after_a_preamble_is_still_found(self):
+        text = "I need a bit more detail.\n\nNEEDS_CLARIFICATION\n- Which column?"
+        folded, questions = parse_fold_response(text)
+        assert folded is None
+        assert questions == ["Which column?"]
+
+
+class TestProposeAmendAsksQuestions:
+
+    def _cell(self, notebook, ask):
+        idx = _add_action_cell(notebook, "Plot revenue.")
+        notebook.set_ask_questions(ask)
+        return idx
+
+    def test_raises_clarification_when_the_fold_asks(self, notebook, monkeypatch):
+        idx = self._cell(notebook, True)
+        # With ask_questions on, a provider fold returns (description, questions).
+        monkeypatch.setitem(
+            pb.AI_PROVIDERS['gemini'], 'fold',
+            lambda *a, **k: parse_fold_response("NEEDS_CLARIFICATION\n- Gross or net revenue?"))
+        with pytest.raises(ClarificationNeeded) as e:
+            notebook.propose_amend("key", idx, "use the right revenue", ai_provider='gemini')
+        assert e.value.questions == ["Gross or net revenue?"]
+
+    def test_passes_ask_questions_to_the_provider_when_enabled(self, notebook, monkeypatch):
+        idx = self._cell(notebook, True)
+        captured = {}
+
+        def fake_fold(api_key, explanation=None, additions=None, model=None,
+                      debug=False, dump_ai_requests=False, ask_questions=False):
+            captured['ask_questions'] = ask_questions
+            return parse_fold_response("Plot net revenue.")
+
+        monkeypatch.setitem(pb.AI_PROVIDERS['gemini'], 'fold', fake_fold)
+        result = notebook.propose_amend("key", idx, "use net revenue", ai_provider='gemini')
+        assert captured['ask_questions'] is True
+        # A fold that asks nothing still yields the description, not a tuple.
+        assert result == "Plot net revenue."
+
+    def test_does_not_ask_when_disabled(self, notebook, monkeypatch):
+        idx = self._cell(notebook, False)
+        captured = {}
+
+        def fake_fold(api_key, explanation=None, additions=None, model=None,
+                      debug=False, dump_ai_requests=False, ask_questions=False):
+            captured['ask_questions'] = ask_questions
+            return "Plot net revenue."
+
+        monkeypatch.setitem(pb.AI_PROVIDERS['gemini'], 'fold', fake_fold)
+        result = notebook.propose_amend("key", idx, "use net revenue", ai_provider='gemini')
+        assert captured['ask_questions'] is False
+        assert result == "Plot net revenue."
+
+    def test_a_cell_is_untouched_when_the_fold_asks(self, notebook, monkeypatch):
+        idx = self._cell(notebook, True)
+        monkeypatch.setitem(
+            pb.AI_PROVIDERS['gemini'], 'fold',
+            lambda *a, **k: parse_fold_response("NEEDS_CLARIFICATION\n- Which one?"))
+        with pytest.raises(ClarificationNeeded):
+            notebook.propose_amend("key", idx, "fix it", ai_provider='gemini')
+        cell = notebook.nb.cells[idx]
+        assert cell.metadata['explanation'] == "Plot revenue."
+        assert 'explanation_prefold' not in cell.metadata
 
 
 class TestLegacyMigration:

@@ -11,6 +11,7 @@ from .ai_common import (
     TEST_VERIFY_INSTRUCTIONS,
     FOLD_SYSTEM_INSTRUCTIONS,
     CLARIFY_INSTRUCTIONS,
+    FOLD_CLARIFY_INSTRUCTIONS,
     add_tokens,
     build_context_prompt,
     build_unit_test_prompt,
@@ -18,6 +19,7 @@ from .ai_common import (
     build_fold_prompt,
     dump_ai_request,
     log_ai_request_size,
+    parse_fold_response,
     parse_generate_response,
     parse_validation_response,
     parse_verify_response,
@@ -321,26 +323,32 @@ def gemini_verify_tests(api_key, payload, model=None, debug=False, dump_ai_reque
 
 
 def gemini_fold_additions(api_key, explanation=None, additions=None, model=None,
-                          debug=False, dump_ai_requests=False):
+                          debug=False, dump_ai_requests=False, ask_questions=False):
     """Rewrites `explanation` to absorb `additions`. Returns the rewritten text."""
     client = genai.Client(api_key=api_key)
     model = model or GEMINI_GENERATE_MODEL
+
+    # In ask_questions mode, the model may ask questions instead of folding.
+    system_instructions = FOLD_SYSTEM_INSTRUCTIONS
+    if ask_questions:
+        system_instructions += FOLD_CLARIFY_INSTRUCTIONS
+
     prompt = build_fold_prompt(explanation or '', additions or [])
     if debug:
-        log_ai_request_size("gemini fold_additions", FOLD_SYSTEM_INSTRUCTIONS, prompt,
+        log_ai_request_size("gemini fold_additions", system_instructions, prompt,
                             instructions=explanation)
     if dump_ai_requests:
         dump_ai_request(dump_ai_requests, "gemini fold_additions", {
             "model": model,
             "contents": prompt,
-            "system_instruction": FOLD_SYSTEM_INSTRUCTIONS,
+            "system_instruction": system_instructions,
             "max_output_tokens": 2048,
         })
     response = client.models.generate_content(
         model=model,
         contents=prompt,
         config=types.GenerateContentConfig(
-            system_instruction=FOLD_SYSTEM_INSTRUCTIONS,
+            system_instruction=system_instructions,
             max_output_tokens=2048,
         ),
     )
@@ -348,6 +356,9 @@ def gemini_fold_additions(api_key, explanation=None, additions=None, model=None,
         add_tokens(response.usage_metadata.prompt_token_count, response.usage_metadata.candidates_token_count)
     if debug:
         print("Response to fold_additions:", response.text)
+    if ask_questions:
+        # Returns (description, questions); questions is set only if it asked.
+        return parse_fold_response(response.text)
     return (response.text or '').strip()
 
 

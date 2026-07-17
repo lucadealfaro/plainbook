@@ -412,6 +412,9 @@ def propose_amend():
     try:
         proposed = notebook.propose_amend(
             api_key, cell_index, text, ai_provider=ai_provider, model=model)
+    except ClarificationNeeded as e:
+        # The AI asked questions; nothing was folded.
+        return dict(status='needs_clarification', questions=e.questions)
     except Exception as e:
         friendly = _check_billing_error(e)
         if friendly:

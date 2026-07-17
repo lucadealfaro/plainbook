@@ -898,12 +898,20 @@ class Plainbook:
                 return base
             if self.ai_request_pending:
                 raise RuntimeError("An AI request is already pending.")
+            ask_questions = self.nb.metadata.get('ask_questions', False)
             try:
                 self.ai_request_pending = True
                 fold_fn = AI_PROVIDERS[ai_provider]["fold"]
-                return fold_fn(api_key, explanation=base, additions=[text],
-                               model=model, debug=self.debug,
-                               dump_ai_requests=self.dump_ai_requests)
+                kwargs = dict(explanation=base, additions=[text], model=model,
+                              debug=self.debug,
+                              dump_ai_requests=self.dump_ai_requests)
+                if not ask_questions:
+                    return fold_fn(api_key, **kwargs)
+                folded, questions = fold_fn(api_key, ask_questions=True, **kwargs)
+                # A cancelled request must not raise.
+                if questions and self.ai_request_pending:
+                    raise ClarificationNeeded(questions)
+                return folded
             finally:
                 self.ai_request_pending = False
 
