@@ -21,7 +21,7 @@ export default {
         'run-test', 'save-and-run-test', 'save-code-and-run-test', 'generate-test-code', 'open-test-help',
         'open-unit-test',
         'install-module', 'dismiss-module-install',
-        'append-addition', 'delete-addition', 'open-fold', 'commit-fold', 'dismiss-fold', 'unfold',
+        'amend-and-fold', 'accept-amend', 'dismiss-fold', 'unfold',
         'submit-clarification', 'dismiss-clarification'
     ],
     setup(props, { emit }) {
@@ -96,7 +96,6 @@ export default {
                         :outputVisible="outputVisible"
                         :start-edit-key="explanationEditKey"
                         :unit-test-count="Object.keys(cell.metadata.unit_tests || {}).length"
-                        :additions="cell.metadata.additions || []"
                         :fold-state="foldState"
                         :clarify-state="clarifyState"
                         :has-prefold="!!cell.metadata.explanation_prefold"
@@ -112,10 +111,8 @@ export default {
                         @moveUp="$emit('move-up')"
                         @moveDown="$emit('move-down')"
                         @open-unit-test="$emit('open-unit-test')"
-                        @append-addition="(text) => $emit('append-addition', text)"
-                        @delete-addition="(id) => $emit('delete-addition', id)"
-                        @open-fold="$emit('open-fold')"
-                        @commit-fold="(text) => $emit('commit-fold', text)"
+                        @amend-and-fold="(text) => $emit('amend-and-fold', text)"
+                        @accept-amend="(text) => $emit('accept-amend', text)"
                         @dismiss-fold="$emit('dismiss-fold')"
                         @unfold="$emit('unfold')"
                         @submit-clarification="(answers) => $emit('submit-clarification', answers)"

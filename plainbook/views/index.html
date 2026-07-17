@@ -182,10 +182,8 @@
                         @install-module="(module) => ui_installModule(index, module)"
                         @dismiss-module-install="dismissModuleInstall(index)"
 
-                        @append-addition="(text) => ui_appendAddition(index, text)"
-                        @delete-addition="(id) => deleteAddition(index, id)"
-                        @open-fold="ui_openFold(index)"
-                        @commit-fold="(text) => ui_commitFold(index, text)"
+                        @amend-and-fold="(text) => ui_amendAndFold(index, text)"
+                        @accept-amend="(text) => ui_acceptAmend(index, text)"
                         @dismiss-fold="dismissFold(index)"
                         @unfold="ui_unfold(index)"
 
