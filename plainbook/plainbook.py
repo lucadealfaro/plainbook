@@ -19,12 +19,12 @@ import requests
 
 from .ai_common import get_session_tokens
 from .utilities import PIP_INSTALL_CODE, parse_pip_install_result, resolve_package_name
-from .gemini import gemini_generate_code, gemini_validate_code, gemini_generate_cell_name, gemini_generate_test_code, gemini_generate_unit_test_code, gemini_verify_notebook, gemini_verify_tests, gemini_amend_explanation
-from .claude import claude_generate_code, claude_validate_code, claude_generate_cell_name, claude_generate_test_code, claude_generate_unit_test_code, claude_verify_notebook, claude_verify_tests, claude_amend_explanation
+from .gemini import gemini_generate_code, gemini_validate_code, gemini_generate_cell_name, gemini_generate_test_code, gemini_generate_unit_test_code, gemini_verify_notebook, gemini_verify_tests, gemini_fold_additions, gemini_amend_explanation
+from .claude import claude_generate_code, claude_validate_code, claude_generate_cell_name, claude_generate_test_code, claude_generate_unit_test_code, claude_verify_notebook, claude_verify_tests, claude_fold_additions, claude_amend_explanation
 
 AI_PROVIDERS = {
-    "gemini": {"generate": gemini_generate_code, "validate": gemini_validate_code, "name": gemini_generate_cell_name, "generate_test": gemini_generate_test_code, "generate_unit_test": gemini_generate_unit_test_code, "verify_notebook": gemini_verify_notebook, "verify_tests": gemini_verify_tests, "amend_explanation": gemini_amend_explanation},
-    "claude": {"generate": claude_generate_code, "validate": claude_validate_code, "name": claude_generate_cell_name, "generate_test": claude_generate_test_code, "generate_unit_test": claude_generate_unit_test_code, "verify_notebook": claude_verify_notebook, "verify_tests": claude_verify_tests, "amend_explanation": claude_amend_explanation},
+    "gemini": {"generate": gemini_generate_code, "validate": gemini_validate_code, "name": gemini_generate_cell_name, "generate_test": gemini_generate_test_code, "generate_unit_test": gemini_generate_unit_test_code, "verify_notebook": gemini_verify_notebook, "verify_tests": gemini_verify_tests, "fold": gemini_fold_additions, "amend_explanation": gemini_amend_explanation},
+    "claude": {"generate": claude_generate_code, "validate": claude_validate_code, "name": claude_generate_cell_name, "generate_test": claude_generate_test_code, "generate_unit_test": claude_generate_unit_test_code, "verify_notebook": claude_verify_notebook, "verify_tests": claude_verify_tests, "fold": claude_fold_additions, "amend_explanation": claude_amend_explanation},
 }
 
 MAX_OUTPUT_CHARS_FOR_AI = 2000
@@ -41,6 +41,13 @@ class CellExecutionError(Exception):
         self.ename = ename
         self.evalue = evalue
         super().__init__(f"{ename}: {evalue}")
+
+class ClarificationNeeded(Exception):
+    """Raised when the AI asks questions instead of generating code. The cell is
+    left unchanged."""
+    def __init__(self, questions):
+        self.questions = questions
+        super().__init__("The AI needs clarification before generating code.")
 
 def getlist(value):
     """Utility to ensure a value is a list."""
@@ -634,6 +641,7 @@ class Plainbook:
             'last_valid_test_cell': self.last_valid_test_cell,
             'is_locked': self.nb.metadata.get('is_locked', False),
             'share_output_with_ai': self.nb.metadata.get('share_output_with_ai', True),
+            'ask_questions': self.nb.metadata.get('ask_questions', False),
             'ai_tokens': get_session_tokens(),
             'verification_status': self.get_verification_status(),
         }
@@ -675,6 +683,12 @@ class Plainbook:
         """Sets whether cell outputs are shared with AI."""
         with self._lock:
             self.nb.metadata['share_output_with_ai'] = share
+            self._write()
+
+    def set_ask_questions(self, value):
+        """Sets whether the AI may ask questions instead of guessing."""
+        with self._lock:
+            self.nb.metadata['ask_questions'] = bool(value)
             self._write()
 
     def insert_cell(self, index, cell_type):
@@ -884,6 +898,137 @@ class Plainbook:
                     if self.nb.cells[j].metadata.get('unit_tests'):
                         self._invalidate_all_unit_tests(j, 'setup_code')
             self._write()
+
+
+    # Incremental additions (prompt folding)
+
+    @staticmethod
+    def _normalize_explanation(explanation):
+        """Coerces an explanation to a string (new cells store [] initially)."""
+        if isinstance(explanation, list):
+            return ''.join(explanation)
+        return explanation or ''
+
+    def _explanation_with_additions(self, cell):
+        """Returns the explanation with the additions appended as a guidance
+        section, for the code generator."""
+        base = self._normalize_explanation(cell.metadata.get('explanation'))
+        additions = cell.metadata.get('additions') or []
+        if not additions:
+            return base
+        guidance = "\n".join(f"- {a.get('text', '')}" for a in additions)
+        return (base +
+                "\n\nADDITIONAL GUIDANCE (incremental refinements, oldest first; "
+                "apply all of them, and where they conflict the later ones win):\n"
+                + guidance)
+
+    def _mark_code_stale(self, index):
+        """Invalidates a cell and everything downstream, as an explanation edit does."""
+        self.last_valid_code_cell = min(self.last_valid_code_cell, index - 1)
+        self.last_valid_output_cell = min(self.last_valid_output_cell, index - 1)
+        self.last_valid_test_cell = min(self.last_valid_test_cell, index - 1)
+        if self.nb.cells[index].metadata.get('unit_tests'):
+            self._invalidate_all_unit_tests(index, 'setup_code')
+        for j in range(index + 1, len(self.nb.cells)):
+            if self.nb.cells[j].metadata.get('unit_tests'):
+                self._invalidate_all_unit_tests(j, 'setup_code')
+
+    def add_cell_addition(self, index, text):
+        """Appends a guidance addition to a cell and marks its code stale.
+        Returns the addition {id, text, created}."""
+        with self._lock:
+            assert 0 <= index < len(self.nb.cells)
+            cell = self.nb.cells[index]
+            assert cell.cell_type in ('code', 'test')
+            addition = {
+                'id': uuid.uuid4().hex[:12],
+                'text': text,
+                'created': datetime.datetime.now().isoformat(),
+            }
+            additions = cell.metadata.get('additions')
+            if not isinstance(additions, list):
+                additions = []
+            additions.append(addition)
+            cell.metadata['additions'] = additions
+            if cell.cell_type == 'test':
+                self.last_valid_test_cell = min(self.last_valid_test_cell, index - 1)
+            else:
+                self._mark_code_stale(index)
+            self._write()
+            return addition
+
+    def delete_cell_addition(self, index, addition_id):
+        """Removes an addition by id from a cell and marks its code stale."""
+        with self._lock:
+            assert 0 <= index < len(self.nb.cells)
+            cell = self.nb.cells[index]
+            assert cell.cell_type in ('code', 'test')
+            additions = cell.metadata.get('additions') or []
+            cell.metadata['additions'] = [a for a in additions if a.get('id') != addition_id]
+            if cell.cell_type == 'test':
+                self.last_valid_test_cell = min(self.last_valid_test_cell, index - 1)
+            else:
+                self._mark_code_stale(index)
+            self._write()
+
+    def fold_additions(self, api_key, index, ai_provider="gemini", model=None):
+        """Returns an explanation rewritten to incorporate the additions. Does not
+        modify the cell; the caller reviews it and calls commit_fold."""
+        with self._lock:
+            assert 0 <= index < len(self.nb.cells)
+            cell = self.nb.cells[index]
+            assert cell.cell_type in ('code', 'test')
+            base = self._normalize_explanation(cell.metadata.get('explanation'))
+            additions = [a.get('text', '') for a in (cell.metadata.get('additions') or [])]
+            if not additions:
+                return base
+            if self.ai_request_pending:
+                raise RuntimeError("An AI request is already pending.")
+            try:
+                self.ai_request_pending = True
+                fold_fn = AI_PROVIDERS[ai_provider]["fold"]
+                return fold_fn(api_key, explanation=base, additions=additions,
+                               model=model, debug=self.debug,
+                               dump_ai_requests=self.dump_ai_requests)
+            finally:
+                self.ai_request_pending = False
+
+    def commit_fold(self, index, folded_explanation):
+        """Replaces the explanation with the folded one and clears the additions,
+        snapshotting the previous state in 'explanation_prefold' so it can be
+        undone. The code stays valid: a fold does not change the meaning."""
+        with self._lock:
+            assert 0 <= index < len(self.nb.cells)
+            cell = self.nb.cells[index]
+            assert cell.cell_type in ('code', 'test')
+            cell.metadata['explanation_prefold'] = {
+                'explanation': self._normalize_explanation(cell.metadata.get('explanation')),
+                'additions': cell.metadata.get('additions') or [],
+            }
+            cell.metadata['explanation'] = folded_explanation
+            cell.metadata['additions'] = []
+            cell.metadata['explanation_timestamp'] = datetime.datetime.now().isoformat()
+            self._write()
+
+    def unfold(self, index):
+        """Restores the explanation and additions saved by commit_fold.
+        Returns {explanation, additions}, or None if there is no snapshot."""
+        with self._lock:
+            assert 0 <= index < len(self.nb.cells)
+            cell = self.nb.cells[index]
+            assert cell.cell_type in ('code', 'test')
+            snapshot = cell.metadata.get('explanation_prefold')
+            if not snapshot:
+                return None
+            cell.metadata['explanation'] = snapshot.get('explanation', '')
+            cell.metadata['additions'] = snapshot.get('additions', [])
+            cell.metadata['explanation_timestamp'] = datetime.datetime.now().isoformat()
+            del cell.metadata['explanation_prefold']
+            self._write()
+            return {
+                'explanation': cell.metadata['explanation'],
+                'additions': cell.metadata['additions'],
+            }
 
 
     # Unit test metadata methods (stubs for Phase 1)
@@ -1373,7 +1518,7 @@ class Plainbook:
                 raise RuntimeError("Cannot generate code: previous output must be valid.")
             # Gets code context.
             is_test = (cell.cell_type == 'test')
-            instructions = self._get_instructions(cell.metadata.get('explanation'))
+            instructions = self._get_instructions(self._explanation_with_additions(cell))
             files_context = self._get_files_context()
             previous_code_cell = self._get_preceding_code_cell(index)
             error_context = self._get_error_context(index)
@@ -1386,12 +1531,13 @@ class Plainbook:
             # Mark that an AI request is pending
             if self.ai_request_pending:
                 raise RuntimeError("An AI request is already pending.")
+            # Only action cells can ask questions; test cells always generate.
+            ask_questions = (not is_test) and self.nb.metadata.get('ask_questions', False)
             try:
                 self.ai_request_pending = True
                 ai_fn_key = "generate_test" if is_test else "generate"
                 generate_fn = AI_PROVIDERS[ai_provider][ai_fn_key]
-                new_code = generate_fn(
-                    api_key,
+                gen_kwargs = dict(
                     preceding_code=preceding_code,
                     previous_code=previous_code,
                     instructions=instructions,
@@ -1401,6 +1547,14 @@ class Plainbook:
                     model=model,
                     debug=self.debug,
                     dump_ai_requests=self.dump_ai_requests)
+                if ask_questions:
+                    gen_kwargs['ask_questions'] = True
+                    new_code, questions = generate_fn(api_key, **gen_kwargs)
+                    # A cancelled request must not raise.
+                    if questions and self.ai_request_pending:
+                        raise ClarificationNeeded(questions)
+                else:
+                    new_code = generate_fn(api_key, **gen_kwargs)
                 # If we are still in a request, update the cell.
                 if self.ai_request_pending:
                     cell.source = new_code

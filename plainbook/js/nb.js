@@ -32,6 +32,10 @@ createApp({
         const explanationEditKey = ref({});
         const isLocked = ref(false);
         const shareOutputWithAi = ref(true);
+        // When true, the AI may ask questions instead of guessing.
+        const askQuestions = ref(false);
+        // Questions awaiting answers: clarifyState[index] = { questions: [...] }.
+        const clarifyState = ref({});
         const aiTokens = ref({input: 0, output: 0});
         const verificationStatus = ref('none');
         const debug = ref(false);
@@ -142,6 +146,7 @@ createApp({
             last_valid_test_cell_index.value = state.last_valid_test_cell;
             isLocked.value = state.is_locked || logviewEnabled.value;
             shareOutputWithAi.value = state.share_output_with_ai;
+            askQuestions.value = !!state.ask_questions;
             if (state.ai_tokens) {
                 aiTokens.value = state.ai_tokens;
             }
@@ -379,6 +384,16 @@ createApp({
                 await apiCall('/set_share_output', 'POST', { share: newVal });
             } catch (err) {
                 throw new Error('Failed to toggle output sharing', { cause: err });
+            }
+        };
+
+        const toggleAskQuestions = async () => {
+            try {
+                const newVal = !askQuestions.value;
+                // apiCall applies the returned state, which updates askQuestions.
+                await apiCall('/set_ask_questions', 'POST', { value: newVal });
+            } catch (err) {
+                throw new Error('Failed to toggle agent questions', { cause: err });
             }
         };
 
@@ -659,12 +674,19 @@ createApp({
                     // single "Fix Code" reverts the button to "Regenerate code".
                     cell.outputs = [];
                     delete cell.metadata.validation;
+                    // A successful generation supersedes any pending questions.
+                    dismissClarify(cellIndex);
                     // The server amended the description (Fix Code only); reflect it.
                     if (r.explanation) {
                         cell.metadata.explanation = r.explanation;
                     }
                     console.log('Code generated for cell:', cellIndex);
                 }
+            } else if (r.status == 'needs_clarification') {
+                // The AI asked questions; show them and leave the source as-is.
+                clarifyState.value = { ...clarifyState.value,
+                    [cellIndex]: { questions: r.questions || [] } };
+                console.log('Clarification requested for cell:', cellIndex, r.questions);
             } else if (r.status == 'cancelled') {
                 console.log('Code generation cancelled for cell:', cellIndex);
             } else {
@@ -894,6 +916,148 @@ createApp({
                 await generateCodeOneCell(cellIndex, true, validationFeedback, amend);
                 running.value = false;
                 runningActivity.value = { type: null, cellIndex: null };
+            }
+        };
+
+
+        // Folds awaiting review: foldState[index] = { status, original, proposed }.
+        const foldState = ref({});
+
+        const addAddition = async (cellIndex, text) => {
+            const r = await apiCall('/add_addition', 'POST', {
+                cell_index: cellIndex, text });
+            const cell = notebook.value?.cells?.[cellIndex];
+            if (cell && r.addition) {
+                if (!Array.isArray(cell.metadata.additions)) cell.metadata.additions = [];
+                cell.metadata.additions.push(r.addition);
+            }
+            return r;
+        };
+
+        // Appends guidance, regenerates, and re-runs, so the output shown is not
+        // the stale one from before the addition.
+        const ui_appendAddition = async (cellIndex, text) => {
+            if (!text || !text.trim() || running.value) return;
+            asRead.value = false;
+            flushActiveEdits();
+            await waitForPendingSaves();
+            await addAddition(cellIndex, text.trim());
+            running.value = true;
+            try {
+                await generateCodeOneCell(cellIndex, true, null);
+                await runCells(cellIndex);
+            } finally {
+                running.value = false;
+                runningActivity.value = { type: null, cellIndex: null };
+            }
+        };
+
+        const dismissClarify = (cellIndex) => {
+            if (!clarifyState.value[cellIndex]) return;
+            const next = { ...clarifyState.value };
+            delete next[cellIndex];
+            clarifyState.value = next;
+        };
+
+        // Adds the answers as an addition, so they are visible and persist, then
+        // regenerates.
+        const ui_submitClarification = async (cellIndex, answers) => {
+            if (running.value) return;
+            const cs = clarifyState.value[cellIndex];
+            if (!cs) return;
+            const lines = cs.questions.map((q, i) => {
+                const a = (answers[i] || '').trim();
+                return a ? `Q: ${q}\nA: ${a}` : null;
+            }).filter(Boolean);
+            if (!lines.length) return; // nothing answered
+            const text = 'Clarifications:\n' + lines.join('\n');
+            asRead.value = false;
+            flushActiveEdits();
+            await waitForPendingSaves();
+            dismissClarify(cellIndex);
+            await addAddition(cellIndex, text);
+            running.value = true;
+            try {
+                await generateCodeOneCell(cellIndex, true, null);
+                // Only run if it produced code, rather than more questions.
+                if (!clarifyState.value[cellIndex]) {
+                    await runCells(cellIndex);
+                }
+            } finally {
+                running.value = false;
+                runningActivity.value = { type: null, cellIndex: null };
+            }
+        };
+
+        const deleteAddition = async (cellIndex, additionId) => {
+            await apiCall('/delete_addition', 'POST', {
+                cell_index: cellIndex, addition_id: additionId });
+            const cell = notebook.value?.cells?.[cellIndex];
+            if (cell && Array.isArray(cell.metadata.additions)) {
+                cell.metadata.additions = cell.metadata.additions.filter(
+                    a => a.id !== additionId);
+            }
+        };
+
+        const dismissFold = (cellIndex) => {
+            const next = { ...foldState.value };
+            delete next[cellIndex];
+            foldState.value = next;
+        };
+
+        // Opens the review panel with the proposed fold; does not commit it.
+        const ui_openFold = async (cellIndex) => {
+            if (running.value) return;
+            const cell = notebook.value?.cells?.[cellIndex];
+            const additions = cell?.metadata?.additions || [];
+            if (!additions.length) return;
+            flushActiveEdits();
+            await waitForPendingSaves();
+            running.value = true;
+            runningActivity.value = { type: 'folding', cellIndex,
+                cellName: cell?.metadata?.name || null };
+            try {
+                const r = await apiCall('/fold_additions', 'POST', { cell_index: cellIndex });
+                if (r.status === 'success') {
+                    const original = Array.isArray(cell.metadata.explanation)
+                        ? cell.metadata.explanation.join('')
+                        : (cell.metadata.explanation || '');
+                    foldState.value = { ...foldState.value,
+                        [cellIndex]: { status: 'review', original,
+                            proposed: r.folded_explanation } };
+                } else {
+                    throw new Error(r.message || 'Fold failed');
+                }
+            } finally {
+                running.value = false;
+                runningActivity.value = { type: null, cellIndex: null };
+            }
+        };
+
+        const ui_commitFold = async (cellIndex, editedText) => {
+            const r = await apiCall('/commit_fold', 'POST', {
+                cell_index: cellIndex, explanation: editedText });
+            if (r.status === 'success') {
+                const cell = notebook.value?.cells?.[cellIndex];
+                if (cell) {
+                    cell.metadata.explanation = editedText;
+                    cell.metadata.additions = [];
+                    // Marker so Unfold appears; the snapshot itself is server-side.
+                    cell.metadata.explanation_prefold = { committed: true };
+                }
+            }
+            dismissFold(cellIndex);
+        };
+
+        const ui_unfold = async (cellIndex) => {
+            const r = await apiCall('/unfold', 'POST', { cell_index: cellIndex });
+            if (r.status === 'success') {
+                const cell = notebook.value?.cells?.[cellIndex];
+                if (cell) {
+                    cell.metadata.explanation = r.explanation;
+                    cell.metadata.additions = r.additions || [];
+                    delete cell.metadata.explanation_prefold;
+                }
             }
         };
 
@@ -1569,12 +1733,15 @@ createApp({
         });
 
         return { notebook, notebook_name, loading, error, isLocked, lockNotebook, shareOutputWithAi, aiTokens, verificationStatus, toggleShareOutput,
+            askQuestions, toggleAskQuestions, clarifyState, dismissClarify, ui_submitClarification,
             sendExplanationToServer, authToken,
             sendCodeToServer, clearCellCode, ui_saveExplanationAndRun, ui_saveCodeAndRun,
             sendMarkdownToServer, generateCode, activeIndex, reloadNotebook, downloadIpynb,
             validateCode, ui_validateCode, dismissValidation, ui_verifyNotebook, dismissVerification, ui_resetAndRunAllCells, ui_forceRegenerateCellCode,
             setActiveCell, ui_runCell, running, runningActivity, asRead,
             ui_interruptKernel, insertCell, markdownEditKey,
+            foldState, ui_appendAddition, deleteAddition, ui_openFold, ui_commitFold,
+            dismissFold, ui_unfold,
             moduleInstall, ui_installModule, dismissModuleInstall,
             last_executed_cell_index, last_valid_code_cell_index, last_valid_output_cell_index,
             last_valid_test_cell_index,

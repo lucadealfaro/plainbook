@@ -48,6 +48,7 @@
         :active-ai-provider="activeAiProvider"
         :available-ai-providers="availableAiProviders"
         :share-output-with-ai="shareOutputWithAi"
+        :ask-questions="askQuestions"
         :ai-tokens="aiTokens"
         :verification="notebook?.metadata?.verification"
         :verification-status="verificationStatus"
@@ -58,6 +59,7 @@
         @lock="lockNotebook"
         @restart="ui_restart"
         @toggle-share-output="toggleShareOutput"
+        @toggle-ask-questions="toggleAskQuestions"
         @refresh="reloadNotebook"
         @interrupt="ui_interruptKernel"
         @reset-run-all="ui_resetAndRunAllCells"
@@ -161,6 +163,8 @@
                         :markdown-edit-key="markdownEditKey[index]"
                         :explanation-edit-key="explanationEditKey[index]"
                         :module-install="moduleInstall[index]"
+                        :fold-state="foldState[index]"
+                        :clarify-state="clarifyState[index]"
                         @activate="setActiveCell(index)"
 
                         @save-markdown="(content) => sendMarkdownToServer(content, index)"
@@ -178,6 +182,16 @@
                         @dismiss-validation="dismissValidation(index)"
                         @install-module="(module) => ui_installModule(index, module)"
                         @dismiss-module-install="dismissModuleInstall(index)"
+
+                        @append-addition="(text) => ui_appendAddition(index, text)"
+                        @delete-addition="(id) => deleteAddition(index, id)"
+                        @open-fold="ui_openFold(index)"
+                        @commit-fold="(text) => ui_commitFold(index, text)"
+                        @dismiss-fold="dismissFold(index)"
+                        @unfold="ui_unfold(index)"
+
+                        @submit-clarification="(answers) => ui_submitClarification(index, answers)"
+                        @dismiss-clarification="dismissClarify(index)"
 
                         @run-test="ui_runTestCell(index)"
                         @save-and-run-test="(content) => ui_saveExplanationAndRunTest(content, index)"
