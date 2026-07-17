@@ -398,57 +398,36 @@ def edit_explanation():
                 print(f"Warning: failed to generate cell name: {e}")
     return dict(status='success', cell_name=cell_name)
 
-@post('/add_addition')
-@action_log.logged('add_addition')
+@post('/propose_amend')
+@action_log.logged('propose_amend')
 @stateful
 @require_token
-def add_addition():
+def propose_amend():
     data = request.json
     cell_index = data.get('cell_index')
     text = data.get('text')
-    addition = notebook.add_cell_addition(cell_index, text)
-    return dict(status='success', addition=addition)
-
-@post('/delete_addition')
-@action_log.logged('delete_addition')
-@stateful
-@require_token
-def delete_addition():
-    data = request.json
-    cell_index = data.get('cell_index')
-    addition_id = data.get('addition_id')
-    notebook.delete_cell_addition(cell_index, addition_id)
-    return dict(status='success')
-
-@post('/fold_additions')
-@action_log.logged('fold_additions')
-@stateful
-@require_token
-def fold_additions():
-    data = request.json
-    cell_index = data.get('cell_index')
     api_key, ai_provider, model, error = _get_ai_config()
     if error:
         return dict(status='error', message=error)
     try:
-        folded = notebook.fold_additions(
-            api_key, cell_index, ai_provider=ai_provider, model=model)
+        proposed = notebook.propose_amend(
+            api_key, cell_index, text, ai_provider=ai_provider, model=model)
     except Exception as e:
         friendly = _check_billing_error(e)
         if friendly:
             return dict(status='error', message=friendly)
         raise
-    return dict(status='success', folded_explanation=folded)
+    return dict(status='success', proposed=proposed)
 
-@post('/commit_fold')
-@action_log.logged('commit_fold')
+@post('/commit_amend')
+@action_log.logged('commit_amend')
 @stateful
 @require_token
-def commit_fold():
+def commit_amend():
     data = request.json
     cell_index = data.get('cell_index')
     explanation = data.get('explanation')
-    notebook.commit_fold(cell_index, explanation)
+    notebook.commit_amend(cell_index, explanation)
     return dict(status='success')
 
 @post('/unfold')
@@ -462,7 +441,7 @@ def unfold():
     if result is None:
         return dict(status='error', message='Nothing to unfold.')
     return dict(status='success', explanation=result['explanation'],
-                additions=result['additions'])
+                source=result['source'])
 
 @post('/edit_code')
 @action_log.logged('edit_code')
