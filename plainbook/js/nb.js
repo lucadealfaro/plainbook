@@ -923,28 +923,82 @@ createApp({
         // Folds awaiting review: foldState[index] = { status, original, proposed }.
         const foldState = ref({});
 
-        const addAddition = async (cellIndex, text) => {
-            const r = await apiCall('/add_addition', 'POST', {
-                cell_index: cellIndex, text });
-            const cell = notebook.value?.cells?.[cellIndex];
-            if (cell && r.addition) {
-                if (!Array.isArray(cell.metadata.additions)) cell.metadata.additions = [];
-                cell.metadata.additions.push(r.addition);
-            }
-            return r;
+        const dismissFold = (cellIndex) => {
+            const next = { ...foldState.value };
+            delete next[cellIndex];
+            foldState.value = next;
         };
 
-        // Appends guidance, regenerates, and re-runs, so the output shown is not
-        // the stale one from before the addition.
-        const ui_appendAddition = async (cellIndex, text) => {
+        // Asks the AI to fold the instruction into the explanation and opens the
+        // review. Nothing is stored until the user accepts.
+        const ui_amendAndFold = async (cellIndex, text) => {
             if (!text || !text.trim() || running.value) return;
-            asRead.value = false;
+            const cell = notebook.value?.cells?.[cellIndex];
             flushActiveEdits();
             await waitForPendingSaves();
-            await addAddition(cellIndex, text.trim());
+            running.value = true;
+            runningActivity.value = { type: 'folding', cellIndex,
+                cellName: cell?.metadata?.name || null };
+            try {
+                const r = await apiCall('/propose_amend', 'POST', {
+                    cell_index: cellIndex, text: text.trim() });
+                if (r.status !== 'success') throw new Error(r.message || 'Amend failed');
+                const original = Array.isArray(cell.metadata.explanation)
+                    ? cell.metadata.explanation.join('')
+                    : (cell.metadata.explanation || '');
+                foldState.value = { ...foldState.value,
+                    [cellIndex]: { status: 'review', original, proposed: r.proposed } };
+            } finally {
+                running.value = false;
+                runningActivity.value = { type: null, cellIndex: null };
+            }
+        };
+
+        // Installs the reviewed explanation, then regenerates and runs through the
+        // normal pipeline, so the stored code is code this explanation produced.
+        const ui_acceptAmend = async (cellIndex, editedText) => {
+            if (running.value) return;
+            const r = await apiCall('/commit_amend', 'POST', {
+                cell_index: cellIndex, explanation: editedText });
+            if (r.status !== 'success') throw new Error(r.message || 'Commit failed');
+            const cell = notebook.value?.cells?.[cellIndex];
+            if (cell) {
+                cell.metadata.explanation = editedText;
+                // Marker so Unfold appears; the snapshot itself is server-side.
+                cell.metadata.explanation_prefold = { committed: true };
+            }
+            dismissFold(cellIndex);
+            asRead.value = false;
             running.value = true;
             try {
                 await generateCodeOneCell(cellIndex, true, null);
+                // Only run if it produced code, rather than questions.
+                if (!clarifyState.value[cellIndex]) {
+                    await runCells(cellIndex);
+                }
+            } finally {
+                running.value = false;
+                runningActivity.value = { type: null, cellIndex: null };
+            }
+        };
+
+        // Restores the explanation and the code saved with it, then re-runs. The
+        // pair already ran together, so this needs no AI call.
+        const ui_unfold = async (cellIndex) => {
+            if (running.value) return;
+            const r = await apiCall('/unfold', 'POST', { cell_index: cellIndex });
+            if (r.status !== 'success') return;
+            const cell = notebook.value?.cells?.[cellIndex];
+            if (cell) {
+                cell.metadata.explanation = r.explanation;
+                delete cell.metadata.explanation_prefold;
+                if (r.source !== null) cell.source = r.source;
+            }
+            asRead.value = false;
+            running.value = true;
+            try {
+                // A legacy snapshot carries no code, so it must be regenerated.
+                if (r.source === null) await generateCodeOneCell(cellIndex, true, null);
                 await runCells(cellIndex);
             } finally {
                 running.value = false;
@@ -959,8 +1013,8 @@ createApp({
             clarifyState.value = next;
         };
 
-        // Adds the answers as an addition, so they are visible and persist, then
-        // regenerates.
+        // Answers are folded into the explanation through the amend path, so they
+        // persist and a later regeneration does not ask again.
         const ui_submitClarification = async (cellIndex, answers) => {
             if (running.value) return;
             const cs = clarifyState.value[cellIndex];
@@ -969,96 +1023,9 @@ createApp({
                 const a = (answers[i] || '').trim();
                 return a ? `Q: ${q}\nA: ${a}` : null;
             }).filter(Boolean);
-            if (!lines.length) return; // nothing answered
-            const text = 'Clarifications:\n' + lines.join('\n');
-            asRead.value = false;
-            flushActiveEdits();
-            await waitForPendingSaves();
+            if (!lines.length) return;
             dismissClarify(cellIndex);
-            await addAddition(cellIndex, text);
-            running.value = true;
-            try {
-                await generateCodeOneCell(cellIndex, true, null);
-                // Only run if it produced code, rather than more questions.
-                if (!clarifyState.value[cellIndex]) {
-                    await runCells(cellIndex);
-                }
-            } finally {
-                running.value = false;
-                runningActivity.value = { type: null, cellIndex: null };
-            }
-        };
-
-        const deleteAddition = async (cellIndex, additionId) => {
-            await apiCall('/delete_addition', 'POST', {
-                cell_index: cellIndex, addition_id: additionId });
-            const cell = notebook.value?.cells?.[cellIndex];
-            if (cell && Array.isArray(cell.metadata.additions)) {
-                cell.metadata.additions = cell.metadata.additions.filter(
-                    a => a.id !== additionId);
-            }
-        };
-
-        const dismissFold = (cellIndex) => {
-            const next = { ...foldState.value };
-            delete next[cellIndex];
-            foldState.value = next;
-        };
-
-        // Opens the review panel with the proposed fold; does not commit it.
-        const ui_openFold = async (cellIndex) => {
-            if (running.value) return;
-            const cell = notebook.value?.cells?.[cellIndex];
-            const additions = cell?.metadata?.additions || [];
-            if (!additions.length) return;
-            flushActiveEdits();
-            await waitForPendingSaves();
-            running.value = true;
-            runningActivity.value = { type: 'folding', cellIndex,
-                cellName: cell?.metadata?.name || null };
-            try {
-                const r = await apiCall('/fold_additions', 'POST', { cell_index: cellIndex });
-                if (r.status === 'success') {
-                    const original = Array.isArray(cell.metadata.explanation)
-                        ? cell.metadata.explanation.join('')
-                        : (cell.metadata.explanation || '');
-                    foldState.value = { ...foldState.value,
-                        [cellIndex]: { status: 'review', original,
-                            proposed: r.folded_explanation } };
-                } else {
-                    throw new Error(r.message || 'Fold failed');
-                }
-            } finally {
-                running.value = false;
-                runningActivity.value = { type: null, cellIndex: null };
-            }
-        };
-
-        const ui_commitFold = async (cellIndex, editedText) => {
-            const r = await apiCall('/commit_fold', 'POST', {
-                cell_index: cellIndex, explanation: editedText });
-            if (r.status === 'success') {
-                const cell = notebook.value?.cells?.[cellIndex];
-                if (cell) {
-                    cell.metadata.explanation = editedText;
-                    cell.metadata.additions = [];
-                    // Marker so Unfold appears; the snapshot itself is server-side.
-                    cell.metadata.explanation_prefold = { committed: true };
-                }
-            }
-            dismissFold(cellIndex);
-        };
-
-        const ui_unfold = async (cellIndex) => {
-            const r = await apiCall('/unfold', 'POST', { cell_index: cellIndex });
-            if (r.status === 'success') {
-                const cell = notebook.value?.cells?.[cellIndex];
-                if (cell) {
-                    cell.metadata.explanation = r.explanation;
-                    cell.metadata.additions = r.additions || [];
-                    delete cell.metadata.explanation_prefold;
-                }
-            }
+            await ui_amendAndFold(cellIndex, 'Clarifications:\n' + lines.join('\n'));
         };
 
 
@@ -1740,8 +1707,7 @@ createApp({
             validateCode, ui_validateCode, dismissValidation, ui_verifyNotebook, dismissVerification, ui_resetAndRunAllCells, ui_forceRegenerateCellCode,
             setActiveCell, ui_runCell, running, runningActivity, asRead,
             ui_interruptKernel, insertCell, markdownEditKey,
-            foldState, ui_appendAddition, deleteAddition, ui_openFold, ui_commitFold,
-            dismissFold, ui_unfold,
+            foldState, ui_amendAndFold, ui_acceptAmend, dismissFold, ui_unfold,
             moduleInstall, ui_installModule, dismissModuleInstall,
             last_executed_cell_index, last_valid_code_cell_index, last_valid_output_cell_index,
             last_valid_test_cell_index,
