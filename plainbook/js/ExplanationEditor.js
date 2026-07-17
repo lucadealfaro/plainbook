@@ -223,7 +223,7 @@ const ExplanationRenderer = {
         <!-- Amend field: always available on an active action cell with code -->
         <div v-if="showFolding && !isEditing && isActive && hasCode && !foldReview && !clarify" class="px-4 pb-2">
             <textarea v-model="amendText" class="textarea is-small mb-2" rows="2"
-                placeholder="Amend this cell — e.g. also drop rows with null revenue."
+                placeholder="Amend this cell, e.g. also drop rows with null revenue."
                 @keydown.enter.exact.prevent="submitAmend"></textarea>
             <div class="is-flex is-justify-content-flex-end" style="gap:0.5rem;">
                 <button class="button is-small is-primary" :disabled="!amendText.trim() || running || localIsLocked" @click.stop="submitAmend">
@@ -237,7 +237,7 @@ const ExplanationRenderer = {
             <div class="fold-review p-3">
                 <p class="is-size-7 has-text-weight-semibold mb-2">
                     <span class="icon is-small"><i class="bx bx-merge"></i></span>
-                    Review the amended description — accepting regenerates the code from it.
+                    Review the amended description. Accepting regenerates the code from it.
                 </p>
                 <p class="is-size-7 has-text-grey mb-1">Current:</p>
                 <div class="fold-original p-2 mb-2 is-size-7">{{ foldReview.original }}</div>
