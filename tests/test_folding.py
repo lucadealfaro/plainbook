@@ -146,3 +146,43 @@ class TestGeneratorReadsExplanationDirectly:
         assert not hasattr(notebook, 'add_cell_addition')
         assert not hasattr(notebook, 'delete_cell_addition')
         assert not hasattr(notebook, '_explanation_with_additions')
+
+
+class TestLegacyMigration:
+
+    def test_leftover_additions_are_folded_onto_the_explanation(self, tmp_notebook_path):
+        nb = Plainbook(tmp_notebook_path)
+        idx = _add_action_cell(nb, "Plot revenue.")
+        nb.nb.cells[idx].metadata['additions'] = [
+            {'id': 'a1', 'text': "Color the bars blue."},
+            {'id': 'a2', 'text': "Drop null rows first."},
+        ]
+        nb._write()
+        nb._shutdown()
+
+        reloaded = Plainbook(tmp_notebook_path)
+        try:
+            cell = reloaded.nb.cells[idx]
+            explanation = cell.metadata['explanation']
+            # The guidance must survive, and the key must be gone.
+            assert "Plot revenue." in explanation
+            assert "Color the bars blue." in explanation
+            assert "Drop null rows first." in explanation
+            assert 'additions' not in cell.metadata
+        finally:
+            reloaded._shutdown()
+
+    def test_empty_additions_leave_the_explanation_alone(self, tmp_notebook_path):
+        nb = Plainbook(tmp_notebook_path)
+        idx = _add_action_cell(nb, "Plot revenue.")
+        nb.nb.cells[idx].metadata['additions'] = []
+        nb._write()
+        nb._shutdown()
+
+        reloaded = Plainbook(tmp_notebook_path)
+        try:
+            cell = reloaded.nb.cells[idx]
+            assert cell.metadata['explanation'] == "Plot revenue."
+            assert 'additions' not in cell.metadata
+        finally:
+            reloaded._shutdown()
