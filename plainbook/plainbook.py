@@ -527,6 +527,15 @@ class Plainbook:
         self.last_valid_output_cell = self.nb.metadata.get('last_valid_output', -1)
         self.last_valid_test_cell = self.nb.metadata.get('last_valid_test_cell', -1)
 
+        # Migrate cells written before amend: fold leftover additions into the
+        # explanation, so their guidance is not silently dropped.
+        for cell in self.nb.cells:
+            additions = cell.metadata.pop('additions', None)
+            if additions:
+                base = self._normalize_explanation(cell.metadata.get('explanation'))
+                guidance = "\n".join(f"- {a.get('text', '')}" for a in additions)
+                cell.metadata['explanation'] = f"{base}\n\nAdditional guidance:\n{guidance}"
+
         # Migrate old unit test format (no 'cells' wrapper) to new format
         for cell in self.nb.cells:
             for test_name, ut in cell.metadata.get('unit_tests', {}).items():
