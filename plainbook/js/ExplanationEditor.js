@@ -3,11 +3,11 @@ import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from './vu
 const ExplanationRenderer = {
     props: ['source', 'isActive', 'codeValid', 'outputValid', 'executed', 'hasError',
             'asRead', 'startEditKey', 'isLocked', 'running', 'hasCode', 'outputVisible', 'cellMode',
-            'unitTestCount', 'additions', 'foldState', 'hasPrefold', 'clarifyState'],
+            'unitTestCount', 'foldState', 'hasPrefold', 'clarifyState'],
     emits: ['update:source', 'save', 'saveandrun', 'gencode', 'clearcode', 'validate',
             'run', 'interrupt', 'delete', 'moveUp', 'moveDown', 'toggle-output', 'open-test-help',
             'open-unit-test', 'dismiss-error',
-            'append-addition', 'delete-addition', 'open-fold', 'commit-fold', 'dismiss-fold', 'unfold',
+            'amend-and-fold', 'accept-amend', 'dismiss-fold', 'unfold',
             'submit-clarification', 'dismiss-clarification'],
     setup(props, { emit }) {
         const mode = computed(() => props.cellMode || 'normal');
@@ -167,18 +167,14 @@ const ExplanationRenderer = {
             if (event.target.closest('button')) emit('dismiss-error');
         };
 
-        // Only action cells get the append/fold workflow.
+        // Only action cells get the amend workflow.
         const showFolding = computed(() => mode.value === 'normal');
-        const additionList = computed(() => props.additions || []);
         const foldReview = computed(() =>
             (props.foldState && props.foldState.status === 'review') ? props.foldState : null);
 
-        const appending = ref(false);
-        const appendText = ref('');
-        const appendEl = ref(null);
+        const amendText = ref('');
         const foldEdit = ref('');
         const foldEl = ref(null);
-        const additionsCollapsed = ref(false);
 
         watch(foldReview, (fr) => {
             if (fr) {
@@ -187,23 +183,14 @@ const ExplanationRenderer = {
             }
         });
 
-        const startAppend = () => {
-            appending.value = true;
-            appendText.value = '';
-            nextTick(() => { if (appendEl.value) appendEl.value.focus(); });
-        };
-        const cancelAppend = () => { appending.value = false; appendText.value = ''; };
-        const submitAppend = () => {
-            const t = appendText.value.trim();
+        const submitAmend = () => {
+            const t = amendText.value.trim();
             if (!t) return;
-            emit('append-addition', t);
-            appending.value = false;
-            appendText.value = '';
+            emit('amend-and-fold', t);
+            amendText.value = '';
         };
-        const removeAddition = (id) => emit('delete-addition', id);
-        const onFold = () => emit('open-fold');
         const onUnfold = () => emit('unfold');
-        const acceptFold = () => emit('commit-fold', foldEdit.value);
+        const acceptFold = () => emit('accept-amend', foldEdit.value);
         const dismissFoldReview = () => emit('dismiss-fold');
         const autoResizeFold = (e) => {
             const el = e.target; el.style.height = 'auto'; el.style.height = `${el.scrollHeight}px`;
@@ -230,9 +217,8 @@ const ExplanationRenderer = {
             generating, onGenCode, validating, onValidate, onButtonPress,
             mode, showRun, showMoveUpDown, showDelete, showTestHelp, showUnitTest, showSaveAndRun,
             placeholderText,
-            showFolding, additionList, foldReview, appending, appendText, appendEl,
-            foldEdit, foldEl, additionsCollapsed, startAppend, cancelAppend, submitAppend,
-            removeAddition, onFold, onUnfold, acceptFold, dismissFoldReview, autoResizeFold,
+            showFolding, foldReview, amendText, foldEdit, foldEl, submitAmend,
+            onUnfold, acceptFold, dismissFoldReview, autoResizeFold,
             clarify, clarifyAnswers, hasAnyAnswer, submitClarify, cancelClarify };
     },
 
@@ -244,56 +230,35 @@ const ExplanationRenderer = {
             </div>
         </div>
 
-        <!-- Appended guidance trail + fold review (action cells only) -->
-        <div v-if="showFolding && !isEditing && (additionList.length || foldReview)" class="px-4 pb-2">
-            <div v-if="additionList.length" class="additions-stack">
-                <div class="is-flex is-align-items-center mb-1" style="gap:0.35rem;">
-                    <span class="icon is-small has-text-grey"><i class="bx bx-plus"></i></span>
-                    <span class="is-size-7 has-text-weight-semibold has-text-grey">Appended guidance ({{ additionList.length }})</span>
-                    <button class="button is-white is-small px-1 py-0" style="height:auto;"
-                            :title="additionsCollapsed ? 'Show appended guidance' : 'Hide appended guidance'"
-                            @click.stop="additionsCollapsed = !additionsCollapsed">
-                        <span class="icon is-small"><i :class="additionsCollapsed ? 'bx bx-chevron-down' : 'bx bx-chevron-up'"></i></span>
-                    </button>
-                </div>
-                <div v-show="!additionsCollapsed" class="is-flex is-flex-direction-column" style="gap:0.35rem;">
-                    <div v-for="a in additionList" :key="a.id" class="addition-chip">
-                        <span class="addition-text">{{ a.text }}</span>
-                        <button v-if="isActive && !localIsLocked" class="delete is-small addition-del"
-                                title="Remove this guidance" @click.stop="removeAddition(a.id)"></button>
-                    </div>
-                </div>
-            </div>
-
-            <div v-if="foldReview" class="fold-review mt-2 p-3">
-                <p class="is-size-7 has-text-weight-semibold mb-2">
-                    <span class="icon is-small"><i class="bx bx-merge"></i></span>
-                    Review folded description — replaces the original + appended guidance with one clean description. The code is not regenerated.
-                </p>
-                <p class="is-size-7 has-text-grey mb-1">Current (original + {{ additionList.length }} appended):</p>
-                <div class="fold-original p-2 mb-2 is-size-7">{{ foldReview.original }}</div>
-                <p class="is-size-7 has-text-grey mb-1">Folded description (editable):</p>
-                <textarea ref="foldEl" v-model="foldEdit" class="textarea is-small mb-2" rows="3" @input="autoResizeFold"></textarea>
-                <div class="is-flex is-justify-content-flex-end" style="gap:0.5rem;">
-                    <button class="button is-small" @click.stop="dismissFoldReview">Cancel</button>
-                    <button class="button is-small is-info" @click.stop="acceptFold">
-                        <span class="icon"><i class="bx bx-check"></i></span><span>Accept fold</span>
-                    </button>
-                </div>
+        <!-- Amend field: always available on an active action cell with code -->
+        <div v-if="showFolding && !isEditing && isActive && hasCode && !foldReview && !clarify" class="px-4 pb-2">
+            <textarea v-model="amendText" class="textarea is-small mb-2" rows="2"
+                placeholder="Amend this cell — e.g. also drop rows with null revenue."
+                @keydown.enter.exact.prevent="submitAmend"></textarea>
+            <div class="is-flex is-justify-content-flex-end" style="gap:0.5rem;">
+                <button class="button is-small is-primary" :disabled="!amendText.trim() || running || localIsLocked" @click.stop="submitAmend">
+                    <span class="icon"><i class="bx bx-merge"></i></span><span>Amend &amp; fold</span>
+                </button>
             </div>
         </div>
 
-        <!-- Append input -->
-        <div v-if="showFolding && appending && !isEditing" class="px-4 pb-2">
-            <p class="is-size-7 has-text-grey mb-1">Append an instruction — the code is regenerated with it applied:</p>
-            <textarea ref="appendEl" v-model="appendText" class="textarea is-small mb-2" rows="2"
-                placeholder="e.g. Also color the bars steel blue, and drop rows with null revenue."
-                @keydown.enter.exact.prevent="submitAppend" @keydown.esc="cancelAppend"></textarea>
-            <div class="is-flex is-justify-content-flex-end" style="gap:0.5rem;">
-                <button class="button is-small" @click.stop="cancelAppend">Cancel</button>
-                <button class="button is-small is-primary" :disabled="!appendText.trim() || running" @click.stop="submitAppend">
-                    <span class="icon"><i class="bx bx-cog"></i></span><span>Append &amp; regenerate</span>
-                </button>
+        <!-- Fold review -->
+        <div v-if="showFolding && !isEditing && foldReview" class="px-4 pb-2">
+            <div class="fold-review p-3">
+                <p class="is-size-7 has-text-weight-semibold mb-2">
+                    <span class="icon is-small"><i class="bx bx-merge"></i></span>
+                    Review the amended description — accepting regenerates the code from it.
+                </p>
+                <p class="is-size-7 has-text-grey mb-1">Current:</p>
+                <div class="fold-original p-2 mb-2 is-size-7">{{ foldReview.original }}</div>
+                <p class="is-size-7 has-text-grey mb-1">Amended (editable):</p>
+                <textarea ref="foldEl" v-model="foldEdit" class="textarea is-small mb-2" rows="3" @input="autoResizeFold"></textarea>
+                <div class="is-flex is-justify-content-flex-end" style="gap:0.5rem;">
+                    <button class="button is-small" @click.stop="dismissFoldReview">Cancel</button>
+                    <button class="button is-small is-info" :disabled="!foldEdit.trim()" @click.stop="acceptFold">
+                        <span class="icon"><i class="bx bx-check"></i></span><span>Accept &amp; regenerate</span>
+                    </button>
+                </div>
             </div>
         </div>
 
@@ -388,18 +353,9 @@ const ExplanationRenderer = {
                     <span class="icon"><i class="bx bx-medical-flask"></i></span>
                     <span>Test this cell</span>
                 </button>
-                <button v-if="showFolding" class="button is-small is-link is-light"
-                        title="Append an instruction and regenerate the code"
-                        :disabled="running || localIsLocked || appending || !hasCode" @click.stop="startAppend">
-                    <span class="icon"><i class="bx bx-plus"></i></span><span>Append</span>
-                </button>
-                <button v-if="showFolding && additionList.length" class="button is-small is-link"
-                        title="Fold the appended guidance into one clean description"
-                        :disabled="running || localIsLocked" @click.stop="onFold">
-                    <span class="icon"><i class="bx bx-merge"></i></span><span>Fold</span>
-                </button>
-                <button v-if="showFolding && hasPrefold && !additionList.length" class="button is-small is-link is-light"
-                        title="Undo the last fold" :disabled="running || localIsLocked" @click.stop="onUnfold">
+                <button v-if="showFolding && hasPrefold" class="button is-small is-link is-light"
+                        title="Undo the last amendment, restoring the description and code"
+                        :disabled="running || localIsLocked" @click.stop="onUnfold">
                     <span class="icon"><i class="bx bx-expand"></i></span><span>Unfold</span>
                 </button>
                 <button class="button is-small"
