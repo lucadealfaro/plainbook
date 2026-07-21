@@ -164,6 +164,8 @@ const ExplanationRenderer = {
         const amendText = ref('');
         const foldEdit = ref('');
         const foldEl = ref(null);
+        const amendEl = ref(null);
+        const isAmending = ref(false);
 
         watch(foldReview, (fr) => {
             if (fr) {
@@ -172,11 +174,29 @@ const ExplanationRenderer = {
             }
         });
 
+        watch(() => props.isActive, (newVal) => {
+            if (!newVal) isAmending.value = false;
+        });
+        watch(() => props.isLocked, (newVal) => {
+            if (newVal) isAmending.value = false;
+        });
+
+        const startAmend = () => {
+            if (localIsLocked.value) return;
+            amendText.value = '';
+            isAmending.value = true;
+            nextTick(() => { if (amendEl.value) amendEl.value.focus(); });
+        };
+        const cancelAmend = () => {
+            isAmending.value = false;
+            amendText.value = '';
+        };
         const submitAmend = () => {
             const t = amendText.value.trim();
             if (!t) return;
             emit('amend-and-fold', t);
             amendText.value = '';
+            isAmending.value = false;
         };
         const onUnfold = () => emit('unfold');
         const acceptFold = () => emit('accept-amend', foldEdit.value);
@@ -208,6 +228,7 @@ const ExplanationRenderer = {
             mode, showRun, showMoveUpDown, showDelete, showTestHelp, showUnitTest, showSaveAndRun,
             placeholderText,
             showFolding, foldReview, amendText, foldEdit, foldEl, submitAmend,
+            amendEl, isAmending, startAmend, cancelAmend,
             onUnfold, acceptFold, dismissFoldReview, autoResizeFold,
             clarify, clarifyAnswers, hasAnyAnswer, submitClarify, cancelClarify };
     },
@@ -220,14 +241,18 @@ const ExplanationRenderer = {
             </div>
         </div>
 
-        <!-- Amend field: always available on an active action cell with code -->
-        <div v-if="showFolding && !isEditing && isActive && hasCode && !foldReview && !clarify" class="px-4 pb-2">
-            <textarea v-model="amendText" class="textarea is-small mb-2" rows="2"
+        <!-- Amend mode -->
+        <div v-if="showFolding && !isEditing && isAmending && isActive && hasCode && !foldReview && !clarify"
+             class="explanation-edit-mode px-2 pb-2">
+            <textarea ref="amendEl" v-model="amendText" class="textarea is-small mb-2" rows="2"
                 placeholder="Amend this cell, e.g. also drop rows with null revenue."
                 @keydown.enter.exact.prevent="submitAmend"></textarea>
-            <div class="is-flex is-justify-content-flex-end" style="gap:0.5rem;">
-                <button class="button is-small is-primary" :disabled="!amendText.trim() || running || localIsLocked" @click.stop="submitAmend">
-                    <span class="icon"><i class="bx bx-merge"></i></span><span>Amend &amp; fold</span>
+            <div style="display: flex; justify-content: flex-end; gap: 0.5rem;">
+                <button class="button is-small" @mousedown.prevent @click.stop="cancelAmend">Cancel</button>
+                <button class="button is-small is-primary"
+                        :disabled="!amendText.trim() || running || localIsLocked"
+                        @mousedown.prevent @click.stop="submitAmend">
+                    <span class="icon"><i class="bx bx-merge"></i></span><span>Fold</span>
                 </button>
             </div>
         </div>
@@ -274,7 +299,7 @@ const ExplanationRenderer = {
             </div>
         </div>
 
-        <div v-if="!isEditing && isActive && !foldReview"
+        <div v-if="!isEditing && !isAmending && isActive && !foldReview"
                 class="explanation-toolbar pl-3 pr-3"
                 style="flex-wrap: wrap;">
             <div class="toolbar-left">
@@ -312,6 +337,10 @@ const ExplanationRenderer = {
                 <button class="button is-small is-info" title="Edit action description"
                         :disabled="localIsLocked" @click.stop="enterEditMode">
                     <span class="icon"><i class="bx bx-pencil"></i></span><span>Edit</span>
+                </button>
+                <button v-if="showFolding && hasCode" class="button is-small is-primary" title="Amend this cell"
+                        :disabled="running || localIsLocked" @click.stop="startAmend">
+                    <span class="icon"><i class="bx bx-merge"></i></span><span>Amend</span>
                 </button>
                 <button v-if="showMoveUpDown" class="button is-small is-info py-1 "
                         :disabled="localIsLocked"
