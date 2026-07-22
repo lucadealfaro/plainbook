@@ -352,6 +352,19 @@ class Plainbook:
             self.last_valid_output_cell = max(index, self.last_valid_output_cell)
             # Get variables for AI context
             cell.metadata['variables'] = self._get_variables()
+            # Record which pre-existing symbols this cell read, plus their hashes
+            # in the source state (state s), for later change detection.
+            accessed = result.get("accessed_symbols") or []
+            cell.metadata['accessed_symbols'] = accessed
+            if accessed:
+                hashes_resp = self._sk_request("POST", "/symbol_hashes", {
+                    "state_name": input_state,
+                    "symbols": accessed,
+                    "hash_algo": "full",
+                })
+                cell.metadata['accessed_symbol_hashes'] = hashes_resp.get("hashes", {})
+            else:
+                cell.metadata['accessed_symbol_hashes'] = {}
             self._write()
             return cell.outputs, 'ok'
 
