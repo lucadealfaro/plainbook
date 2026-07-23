@@ -11,8 +11,6 @@ from .ai_common import (
     NOTEBOOK_VERIFY_INSTRUCTIONS,
     TEST_VERIFY_INSTRUCTIONS,
     FOLD_SYSTEM_INSTRUCTIONS,
-    CLARIFY_INSTRUCTIONS,
-    FOLD_CLARIFY_INSTRUCTIONS,
     add_tokens,
     build_context_prompt,
     build_unit_test_prompt,
@@ -21,8 +19,6 @@ from .ai_common import (
     build_fold_prompt,
     dump_ai_request,
     log_ai_request_size,
-    parse_fold_response,
-    parse_generate_response,
     parse_validation_response,
     parse_verify_response,
     strip_markdown_code_fences,
@@ -64,15 +60,12 @@ def gemini_generate_code(
     validation_context=None,
     model=None,
     debug=False,
-    dump_ai_requests=False,
-    ask_questions=False):
+    dump_ai_requests=False):
     # 1. Initialize the Gemini client
     client = genai.Client(api_key=api_key)
     model = model or GEMINI_GENERATE_MODEL
 
     system_instructions = SYSTEM_INSTRUCTIONS
-    if ask_questions:
-        system_instructions += CLARIFY_INSTRUCTIONS
 
     # 2. Create the prompt
     prompt = build_context_prompt(
@@ -115,9 +108,6 @@ Code:
     if debug:
         print("Response:", response.text)
     # 4. Process the response
-    if ask_questions:
-        # Returns (code, questions); questions is set only if it asked.
-        return parse_generate_response(response.text)
     code = strip_markdown_code_fences(response.text)
     return code
 
@@ -366,14 +356,12 @@ def gemini_verify_tests(api_key, payload, model=None, debug=False, dump_ai_reque
 
 
 def gemini_fold_additions(api_key, explanation=None, additions=None, model=None,
-                          debug=False, dump_ai_requests=False, ask_questions=False):
+                          debug=False, dump_ai_requests=False):
     """Rewrites `explanation` to absorb `additions`. Returns the rewritten text."""
     client = genai.Client(api_key=api_key)
     model = model or GEMINI_GENERATE_MODEL
 
     system_instructions = FOLD_SYSTEM_INSTRUCTIONS
-    if ask_questions:
-        system_instructions += FOLD_CLARIFY_INSTRUCTIONS
 
     prompt = build_fold_prompt(explanation or '', additions or [])
     if debug:
@@ -398,9 +386,6 @@ def gemini_fold_additions(api_key, explanation=None, additions=None, model=None,
         add_tokens(response.usage_metadata.prompt_token_count, response.usage_metadata.candidates_token_count)
     if debug:
         print("Response to fold_additions:", response.text)
-    if ask_questions:
-        # Returns (description, questions); questions is set only if it asked.
-        return parse_fold_response(response.text)
     return (response.text or '').strip()
 
 

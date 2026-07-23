@@ -1,10 +1,10 @@
 export default {
     props: ['isLocked', 'running', 'restarting', 'runningActivity', 'hasNotebook', 'upToDate', 'cellCount', 'hasApiKey', 'debug',
-            'activeAiProvider', 'availableAiProviders', 'shareOutputWithAi', 'askQuestions', 'aiTokens', 'verification', 'verificationStatus', 'logEnabled', 'logviewEnabled', 'authToken'],
+            'activeAiProvider', 'availableAiProviders', 'shareOutputWithAi', 'aiTokens', 'verification', 'verificationStatus', 'logEnabled', 'logviewEnabled', 'authToken'],
     emits: [
         'lock', 'refresh', 'interrupt', 'regenerate-all',
         'restart', 'reset-run-all', 'run-all', 'run-all-tests', 'verify-notebook', 'clear-outputs', 'open-info', 'open-settings', 'debug-request',
-        'set-ai-provider', 'toggle-share-output', 'toggle-ask-questions', 'reset-tokens', 'download-ipynb'
+        'set-ai-provider', 'toggle-share-output', 'reset-tokens', 'download-ipynb'
         ],
     data() {
         return { aiDropdownOpen: false };
@@ -238,13 +238,6 @@ export default {
                         <button v-if="debug" class="button is-warning" title="Send debug request" @click="$emit('debug-request')">
                             <span class="icon"><i class="bx bx-bug"></i></span>
                             <span>Debug</span>
-                        </button>
-                        <button class="button" :class="askQuestions ? 'is-success' : 'is-light'"
-                                @click="$emit('toggle-ask-questions')"
-                                :title="askQuestions ? 'Agent questions ON: the AI asks for clarification when a request is unclear (click to disable)' : 'Agent questions OFF: the AI generates code directly without asking (click to enable)'">
-                            <span class="icon">
-                                <i :class="askQuestions ? 'bx bx-message-rounded-dots' : 'bx bx-message-rounded'"></i>
-                            </span>
                         </button>
                         <button class="button" :class="shareOutputWithAi ? 'is-success' : 'is-light'"
                                 @click="$emit('toggle-share-output')"

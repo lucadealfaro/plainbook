@@ -12,8 +12,6 @@ from .ai_common import (
     NOTEBOOK_VERIFY_INSTRUCTIONS,
     TEST_VERIFY_INSTRUCTIONS,
     FOLD_SYSTEM_INSTRUCTIONS,
-    CLARIFY_INSTRUCTIONS,
-    FOLD_CLARIFY_INSTRUCTIONS,
     add_tokens,
     build_context_prompt,
     build_unit_test_prompt,
@@ -22,8 +20,6 @@ from .ai_common import (
     build_fold_prompt,
     dump_ai_request,
     log_ai_request_size,
-    parse_fold_response,
-    parse_generate_response,
     parse_validation_response,
     parse_verify_response,
     strip_markdown_code_fences,
@@ -109,14 +105,11 @@ def claude_generate_code(
     validation_context=None,
     model=None,
     debug=False,
-    dump_ai_requests=False,
-    ask_questions=False):
+    dump_ai_requests=False):
     client = _get_client(api_key)
     model = model or CLAUDE_MODEL
 
     system_instructions = SYSTEM_INSTRUCTIONS
-    if ask_questions:
-        system_instructions += CLARIFY_INSTRUCTIONS
 
     prompt = build_context_prompt(
         preceding=preceding_code,
@@ -155,9 +148,6 @@ Code:
     response_text = _response_text(message)
     if debug:
         print("Response:", response_text)
-    if ask_questions:
-        # Returns (code, questions); questions is set only if it asked.
-        return parse_generate_response(response_text)
     code = strip_markdown_code_fences(response_text)
     return code
 
@@ -401,14 +391,12 @@ def claude_verify_tests(api_key, payload, model=None, debug=False, dump_ai_reque
 
 
 def claude_fold_additions(api_key, explanation=None, additions=None, model=None,
-                          debug=False, dump_ai_requests=False, ask_questions=False):
+                          debug=False, dump_ai_requests=False):
     """Rewrites `explanation` to absorb `additions`. Returns the rewritten text."""
     client = _get_client(api_key)
     model = model or CLAUDE_MODEL
 
     system_instructions = FOLD_SYSTEM_INSTRUCTIONS
-    if ask_questions:
-        system_instructions += FOLD_CLARIFY_INSTRUCTIONS
 
     prompt = build_fold_prompt(explanation or '', additions or [])
     if debug:
@@ -430,9 +418,6 @@ def claude_fold_additions(api_key, explanation=None, additions=None, model=None,
     response_text = message.content[0].text
     if debug:
         print("Response to fold_additions:", response_text)
-    if ask_questions:
-        # Returns (description, questions); questions is set only if it asked.
-        return parse_fold_response(response_text)
     return response_text.strip()
 
 

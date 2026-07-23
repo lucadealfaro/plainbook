@@ -12,7 +12,7 @@ export default {
     components: { MarkdownCell, CodeCell, ExplanationEditor, ValidationCell, OutputRenderer, MissingModuleBar },
     props: ['cell', 'isActive', 'isLocked', 'running', 'codeValid', 'outputValid', 'executed',
         'asRead', 'markdownEditKey', 'explanationEditKey', 'testCodeValid', 'moduleInstall',
-        'foldState', 'clarifyState'],
+        'foldState'],
     emits: [
         'save-markdown', 'save-explanation', 'save-code',
         'run-cell', 'save-and-run', 'save-code-and-run', 'generate-code', 'clear-code',
@@ -23,8 +23,7 @@ export default {
         'open-unit-test',
         'install-module', 'dismiss-module-install',
         'dismiss-error',
-        'amend-and-fold', 'accept-amend', 'dismiss-fold', 'unfold',
-        'submit-clarification', 'dismiss-clarification'
+        'amend-and-fold', 'accept-amend', 'dismiss-fold', 'unfold'
     ],
     setup(props, { emit }) {
         const hasError = computed(() => {
@@ -98,7 +97,6 @@ export default {
                         :start-edit-key="explanationEditKey"
                         :unit-test-count="Object.keys(cell.metadata.unit_tests || {}).length"
                         :fold-state="foldState"
-                        :clarify-state="clarifyState"
                         :has-prefold="!!cell.metadata.explanation_prefold"
                         @save="$emit('save-explanation', $event)"
                         @toggle-output="outputVisible = !outputVisible"
@@ -116,9 +114,7 @@ export default {
                         @amend-and-fold="(text) => $emit('amend-and-fold', text)"
                         @accept-amend="(text) => $emit('accept-amend', text)"
                         @dismiss-fold="$emit('dismiss-fold')"
-                        @unfold="$emit('unfold')"
-                        @submit-clarification="(answers) => $emit('submit-clarification', answers)"
-                        @dismiss-clarification="$emit('dismiss-clarification')" />
+                        @unfold="$emit('unfold')" />
                 </div>
 
                 <validation-cell
