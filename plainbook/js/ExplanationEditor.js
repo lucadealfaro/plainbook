@@ -120,26 +120,6 @@ const ExplanationRenderer = {
             isEditing.value = false;
         };
 
-        const menuOpen = ref(false);
-        const menuPos = ref({ top: 0, right: 0 });
-        const triggerEl = ref(null);
-        const closeMenu = () => { menuOpen.value = false; };
-        const toggleMenu = () => {
-            if (menuOpen.value) { menuOpen.value = false; return; }
-            const r = triggerEl.value.getBoundingClientRect();
-            menuPos.value = { top: r.bottom + 4, right: window.innerWidth - r.right };
-            menuOpen.value = true;
-        };
-        const menuEmit = (evt) => { emit(evt); closeMenu(); };
-        onMounted(() => {
-            window.addEventListener('click', closeMenu);
-            window.addEventListener('scroll', closeMenu, true);
-        });
-        onBeforeUnmount(() => {
-            window.removeEventListener('click', closeMenu);
-            window.removeEventListener('scroll', closeMenu, true);
-        });
-
         const generating = ref(false);
         const onGenCode = () => {
             generating.value = true;
@@ -149,7 +129,6 @@ const ExplanationRenderer = {
         const onValidate = () => {
             validating.value = true;
             emit('validate');
-            closeMenu();
         };
         watch(() => props.running, (val) => {
             if (!val) {
@@ -246,7 +225,6 @@ const ExplanationRenderer = {
             cancelEdit, textareaEl, autoResize, saveAndRun, onBlur, localIsLocked,
             isTestCell, clearLabel, generateLabel, stopGenerateLabel, validateLabel,
             generating, onGenCode, validating, onValidate,
-            menuOpen, menuPos, triggerEl, toggleMenu, closeMenu, menuEmit,
             mode, showRun, showMoveUpDown, showDelete, showTestHelp, showUnitTest, showSaveAndRun,
             placeholderText,
             showFolding, foldReview, amendText, foldEdit, foldEl, submitAmend,
@@ -339,6 +317,21 @@ const ExplanationRenderer = {
                         <span v-else>Run test</span>
                     </button>
                 </template>
+                <button v-if="showTestHelp" class="button is-success is-small mr-1" title="Test Help" @click.stop="$emit('open-test-help')">
+                    <span class="icon"><i class="bx bx-info-circle"></i></span>
+                </button>
+                <button class="button is-small" style="opacity: 0.6;"
+                    title="Toggle output visibility"
+                    @click.stop="$emit('toggle-output')">
+                    <span class="icon">
+                        <i :class="outputVisible ? 'bx bx-eye-slash' : 'bx bx-eye'"></i>
+                    </span>
+                    <span>Output:&nbsp;</span>
+                    <span v-if="!codeValid">Stale</span>
+                    <span v-else-if="!outputValid">Stale</span>
+                    <span v-else-if="asRead">Unmodified</span>
+                    <span v-else>Up to date</span>
+                </button>
             </div>
             <div class="toolbar-right" style="display: flex; flex-wrap: wrap; gap: 0.25rem;">
                 <button class="button is-small is-info" title="Edit action description"
@@ -348,6 +341,34 @@ const ExplanationRenderer = {
                 <button v-if="showFolding && hasCode" class="button is-small is-primary" title="Amend this cell"
                         :disabled="running || localIsLocked" @click.stop="startAmend">
                     <span class="icon"><i class="bx bx-merge"></i></span><span>Amend</span>
+                </button>
+                <button v-if="showMoveUpDown" class="button is-small is-info py-1 "
+                        :disabled="localIsLocked"
+                        title="Move cell up" aria-label="Move Up" @click.stop="$emit('moveUp')">
+                    <span class="icon"><i class="bx bx-arrow-up"></i></span>
+                </button>
+                <button v-if="showMoveUpDown" class="button is-small is-info py-1 "
+                        :disabled="localIsLocked"
+                        title="Move cell down" aria-label="Move Down" @click.stop="$emit('moveDown')">
+                    <span class="icon"><i class="bx bx-arrow-down"></i></span>
+                </button>
+                <button v-if="showUnitTest" class="button is-small is-warning" title="Unit Test"
+                        @click.stop="$emit('open-unit-test')">
+                    <span v-if="unitTestCount" class="unit-test-counter mr-1" style="font-weight: 600;">{{ unitTestCount }}</span>
+                    <span class="icon"><i class="bx bx-medical-flask"></i></span>
+                    <span>Test this cell</span>
+                </button>
+                <button v-if="showFolding && hasPrefold" class="button is-small is-link is-light"
+                        title="Undo the last amendment, restoring the description and code"
+                        :disabled="running || localIsLocked" @click.stop="onUnfold">
+                    <span class="icon"><i class="bx bx-expand"></i></span><span>Unfold</span>
+                </button>
+                <button class="button is-small"
+                        :class="isTestCell ? 'is-warning' : 'is-success'"
+                        :title="clearLabel"
+                        :disabled="localIsLocked || !hasCode" @click.stop="$emit('clearcode')">
+                    <span class="icon"><i class="bx bx-eraser"></i></span>
+                    <span>{{ clearLabel }}</span>
                 </button>
                 <button v-if="generating" class="button is-small is-success"
                         title="Stop code generation" @click.stop="$emit('interrupt')">
@@ -361,67 +382,20 @@ const ExplanationRenderer = {
                     <span class="icon"><i class="bx bx-cognition"></i></span>
                     <span>{{ generateLabel }}</span>
                 </button>
-
-                <button ref="triggerEl" class="button is-small" title="More actions" aria-haspopup="true"
-                        @click.stop="toggleMenu">
-                    <span class="icon"><i class="bx bx-dots-vertical-rounded"></i></span>
+                <button v-if="validating" class="button is-small is-success"
+                        title="Stop validation" @click.stop="$emit('interrupt')">
+                    <span class="icon"><i class="bx bx-stop-circle"></i></span>
+                    <span>Stop validation</span>
                 </button>
-                <teleport to="body">
-                    <div v-if="menuOpen" class="dropdown-content" role="menu"
-                         :style="{ position: 'fixed', top: menuPos.top + 'px', right: menuPos.right + 'px', zIndex: 9999,
-                                   backgroundColor: 'var(--bulma-scheme-main)', border: '1px solid var(--bulma-border)',
-                                   boxShadow: '0 4px 16px rgba(0,0,0,0.35)' }">
-                            <a class="dropdown-item" @click.stop="menuEmit('toggle-output')">
-                                <span class="icon"><i :class="outputVisible ? 'bx bx-eye-slash' : 'bx bx-eye'"></i></span>
-                                <span>Output:&nbsp;</span>
-                                <span v-if="!codeValid">Stale</span>
-                                <span v-else-if="!outputValid">Stale</span>
-                                <span v-else-if="asRead">Unmodified</span>
-                                <span v-else>Up to date</span>
-                            </a>
-                            <a v-if="showTestHelp" class="dropdown-item has-text-success" @click.stop="menuEmit('open-test-help')">
-                                <span class="icon"><i class="bx bx-info-circle"></i></span><span>Test help</span>
-                            </a>
-                            <a v-if="showMoveUpDown" class="dropdown-item has-text-info"
-                               :style="localIsLocked ? 'pointer-events:none;opacity:0.5;' : ''"
-                               @click.stop="menuEmit('moveUp')">
-                                <span class="icon"><i class="bx bx-arrow-up"></i></span><span>Move up</span>
-                            </a>
-                            <a v-if="showMoveUpDown" class="dropdown-item has-text-info"
-                               :style="localIsLocked ? 'pointer-events:none;opacity:0.5;' : ''"
-                               @click.stop="menuEmit('moveDown')">
-                                <span class="icon"><i class="bx bx-arrow-down"></i></span><span>Move down</span>
-                            </a>
-                            <a v-if="showUnitTest" class="dropdown-item has-text-warning" @click.stop="menuEmit('open-unit-test')">
-                                <span class="icon"><i class="bx bx-medical-flask"></i></span>
-                                <span>Test this cell</span>
-                                <span v-if="unitTestCount" class="unit-test-counter ml-2" style="font-weight: 600;">{{ unitTestCount }}</span>
-                            </a>
-                            <a class="dropdown-item" :class="isTestCell ? 'has-text-warning' : 'has-text-success'"
-                               :style="(localIsLocked || !hasCode) ? 'pointer-events:none;opacity:0.5;' : ''"
-                               @click.stop="menuEmit('clearcode')">
-                                <span class="icon"><i class="bx bx-eraser"></i></span><span>{{ clearLabel }}</span>
-                            </a>
-                            <a v-if="validating" class="dropdown-item has-text-success" @click.stop="menuEmit('interrupt')">
-                                <span class="icon"><i class="bx bx-stop-circle"></i></span><span>Stop validation</span>
-                            </a>
-                            <a v-else class="dropdown-item" :class="isTestCell ? 'has-text-warning' : 'has-text-success'"
-                               :style="(running || !codeValid) ? 'pointer-events:none;opacity:0.5;' : ''"
-                               @click.stop="onValidate">
-                                <span class="icon"><i class="bx bx-check"></i></span><span>{{ validateLabel }}</span>
-                            </a>
-                            <a v-if="showFolding && hasPrefold" class="dropdown-item has-text-link"
-                               :style="(running || localIsLocked) ? 'pointer-events:none;opacity:0.5;' : ''"
-                               @click.stop="menuEmit('unfold')">
-                                <span class="icon"><i class="bx bx-undo"></i></span><span>Unfold</span>
-                            </a>
-                            <a v-if="showDelete" class="dropdown-item has-text-danger"
-                               :style="localIsLocked ? 'pointer-events:none;opacity:0.5;' : ''"
-                               @click.stop="menuEmit('delete')">
-                                <span class="icon"><i class="bx bx-trash"></i></span><span>Delete</span>
-                            </a>
-                    </div>
-                </teleport>
+                <button v-else :disabled="running || !codeValid" class="button is-small"
+                        :class="isTestCell ? 'is-warning' : 'is-success'"
+                        title="Validate code against description" @click.stop="onValidate">
+                    <span class="icon"><i class="bx bx-check"></i></span> <span>{{ validateLabel }}</span>
+                </button>
+                <button v-if="showDelete" class="button is-small is-danger py-1 " title="Delete cell" aria-label="Delete"
+                        :disabled="localIsLocked" @click.stop="$emit('delete')">
+                    <span class="icon"><i class="bx bx-trash"></i></span>
+                </button>
             </div>
         </div>
 
