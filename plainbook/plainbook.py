@@ -19,12 +19,12 @@ import requests
 
 from .ai_common import get_session_tokens
 from .utilities import PIP_INSTALL_CODE, parse_pip_install_result, resolve_package_name
-from .gemini import gemini_generate_code, gemini_validate_code, gemini_generate_cell_name, gemini_generate_test_code, gemini_generate_unit_test_code, gemini_verify_notebook, gemini_verify_tests, gemini_fold_additions
-from .claude import claude_generate_code, claude_validate_code, claude_generate_cell_name, claude_generate_test_code, claude_generate_unit_test_code, claude_verify_notebook, claude_verify_tests, claude_fold_additions
+from .gemini import gemini_generate_code, gemini_validate_code, gemini_generate_cell_name, gemini_generate_test_code, gemini_generate_unit_test_code, gemini_verify_notebook, gemini_verify_tests, gemini_fold_additions, gemini_amend_explanation
+from .claude import claude_generate_code, claude_validate_code, claude_generate_cell_name, claude_generate_test_code, claude_generate_unit_test_code, claude_verify_notebook, claude_verify_tests, claude_fold_additions, claude_amend_explanation
 
 AI_PROVIDERS = {
-    "gemini": {"generate": gemini_generate_code, "validate": gemini_validate_code, "name": gemini_generate_cell_name, "generate_test": gemini_generate_test_code, "generate_unit_test": gemini_generate_unit_test_code, "verify_notebook": gemini_verify_notebook, "verify_tests": gemini_verify_tests, "fold": gemini_fold_additions},
-    "claude": {"generate": claude_generate_code, "validate": claude_validate_code, "name": claude_generate_cell_name, "generate_test": claude_generate_test_code, "generate_unit_test": claude_generate_unit_test_code, "verify_notebook": claude_verify_notebook, "verify_tests": claude_verify_tests, "fold": claude_fold_additions},
+    "gemini": {"generate": gemini_generate_code, "validate": gemini_validate_code, "name": gemini_generate_cell_name, "generate_test": gemini_generate_test_code, "generate_unit_test": gemini_generate_unit_test_code, "verify_notebook": gemini_verify_notebook, "verify_tests": gemini_verify_tests, "fold": gemini_fold_additions, "amend_explanation": gemini_amend_explanation},
+    "claude": {"generate": claude_generate_code, "validate": claude_validate_code, "name": claude_generate_cell_name, "generate_test": claude_generate_test_code, "generate_unit_test": claude_generate_unit_test_code, "verify_notebook": claude_verify_notebook, "verify_tests": claude_verify_tests, "fold": claude_fold_additions, "amend_explanation": claude_amend_explanation},
 }
 
 MAX_OUTPUT_CHARS_FOR_AI = 2000
@@ -555,6 +555,15 @@ class Plainbook:
                     else:
                         ut['validity'] = validity
 
+    def _mark_all_stale(self):
+        """Mark all code, outputs and tests stale (watermarks to -1) so the
+        code is regenerated to match a changed input-file set. Caller holds
+        self._lock and persists via _write(). Outputs are kept, just flagged.
+        last_executed_cell is intentionally left alone (kernel snapshots stay)."""
+        self.last_valid_code_cell = -1
+        self.last_valid_output_cell = -1
+        self.last_valid_test_cell = -1
+
     def _filter_input_files(self):
         """Filters the input files from notebook metadata."""
         if 'input_files' in self.nb.metadata:
@@ -569,6 +578,10 @@ class Plainbook:
                     missing_input_files.append(f)
             self.nb.metadata['input_files'] = present_input_files
             self.nb.metadata['missing_input_files'] = missing_input_files
+            # Condition-1: files listed by the notebook are missing on disk, so
+            # the code refers to files that aren't there -- mark everything stale.
+            if missing_input_files:
+                self._mark_all_stale()
 
     def _write(self):
         self.nb.metadata['last_valid_code_cell'] = self.last_valid_code_cell
@@ -576,6 +589,36 @@ class Plainbook:
         self.nb.metadata['last_valid_test_cell'] = self.last_valid_test_cell
         with open(self.path, "w") as f:
             nbformat.write(self.nb, f)
+
+    def rename(self, new_name):
+        """Rename the notebook by saving a *copy* under a new name (with a
+        .plnb extension) in the same directory, and switching all future saves
+        to it. The original file is left untouched. Because the notebook is
+        saved continuously, simply changing the name/path and writing once is
+        enough for it to continue naturally under the new name.
+
+        Raises ValueError on an empty or conflicting name.
+        """
+        with self._lock:
+            name = os.path.basename((new_name or '').strip())
+            # Drop a trailing notebook extension if the user typed one.
+            for ext in ('.plnb', '.ipynb'):
+                if name.lower().endswith(ext):
+                    name = name[:-len(ext)]
+                    break
+            name = name.strip()
+            if not name:
+                raise ValueError("Please provide a name for the notebook.")
+            if name == self.name:
+                return
+            parent = os.path.dirname(self.path) or "."
+            new_path = os.path.join(parent, name + ".plnb")
+            if os.path.exists(new_path):
+                raise ValueError(
+                    f"A notebook named '{name}.plnb' already exists in this folder.")
+            self.name = name
+            self.path = new_path
+            self._write()
 
     def append_log_entry(self, entry):
         """Append an action-log entry to nb.metadata['log'] and persist.
@@ -1429,8 +1472,15 @@ class Plainbook:
         return None
 
 
-    def generate_code_cell(self, api_key, index, ai_provider="gemini", model=None, validation_feedback=None):
-        """Generates code for a code or test cell at index using the specified AI provider."""
+    def generate_code_cell(self, api_key, index, ai_provider="gemini", model=None, validation_feedback=None, amend_description=False):
+        """Generates code for a code or test cell at index using the specified AI provider.
+
+        Returns a 3-tuple ``(new_code, success, amended_explanation)``. When the caller
+        requests it (``amend_description``) and the cell had an error that is now fixed,
+        the cell's plain-language description is also amended so that regenerating from
+        it on a clean slate would avoid the error; the amended text is returned as the
+        third element (``None`` otherwise). Amendment is best-effort and never blocks the
+        code fix."""
         with self._lock:
             assert 0 <= index < len(self.nb.cells)
             cell = self.nb.cells[index]
@@ -1446,6 +1496,9 @@ class Plainbook:
             variable_context = self._get_variables_for_ai(previous_code_cell) if previous_code_cell else ""
             preceding_code = self._get_preceding_code_for_ai(index)
             previous_code = self._get_cell_w_change_noted(cell)
+            # Raw buggy source, captured before it is overwritten with new_code;
+            # needed as context if we amend the description below.
+            buggy_code = cell.source
             # Mark that an AI request is pending
             if self.ai_request_pending:
                 raise RuntimeError("An AI request is already pending.")
@@ -1494,11 +1547,42 @@ class Plainbook:
                             if self.nb.cells[j].metadata.get('unit_tests'):
                                 self._invalidate_all_unit_tests(j, 'setup_code')
                         self.last_valid_code_cell = index
+                    # Persist the code fix durably before the (best-effort) amend
+                    # call below, so a slow or failing amend never loses the fix.
                     self._write()
-                    return new_code, True
+
+                    # Amend the description so a clean-slate regeneration would
+                    # avoid the error just fixed. Best-effort, action cells only.
+                    amended = None
+                    if amend_description and error_context and not is_test:
+                        try:
+                            amend_fn = AI_PROVIDERS[ai_provider]["amend_explanation"]
+                            amended = amend_fn(
+                                api_key,
+                                cell.metadata.get('explanation'),
+                                error_context,
+                                buggy_code,
+                                new_code,
+                                model=model,
+                                debug=self.debug,
+                                dump_ai_requests=self.dump_ai_requests)
+                            if amended and amended.strip():
+                                amended = amended.strip()
+                                cell.metadata['explanation'] = amended
+                                # In sync with the just-generated code. Do NOT lower
+                                # last_valid_code_cell/output (that would re-invalidate
+                                # the fix we just made).
+                                cell.metadata['explanation_timestamp'] = cell.metadata['code_timestamp']
+                                self._write()
+                            else:
+                                amended = None
+                        except Exception as e:
+                            print(f"Warning: failed to amend explanation for cell {index}: {e}")
+                            amended = None
+                    return new_code, True, amended
                 else:
                     # The request was cancelled, return the current code.
-                    return None, False
+                    return None, False, None
             finally:
                 self.ai_request_pending = False
 
@@ -1977,10 +2061,19 @@ class Plainbook:
             self._write()
 
     def set_input_files(self, files, missing_files=[]):
-        """Sets the input files for the notebook."""
+        """Sets the input files for the notebook. Condition-2: if the set of
+        files actually changed, mark all code/outputs stale so the code is
+        regenerated to refer to the new files. (This is also called on every
+        Files-tab mount with the unchanged selection, so we compare first.)"""
         with self._lock:
+            paths = lambda lst: {f.get('path') for f in (lst or [])}
+            old = (paths(self.nb.metadata.get('input_files'))
+                   | paths(self.nb.metadata.get('missing_input_files')))
+            new = paths(files) | paths(missing_files)
             self.nb.metadata['input_files'] = files
             self.nb.metadata['missing_input_files'] = missing_files
+            if new != old:
+                self._mark_all_stale()
             self._write()
 
 

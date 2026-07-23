@@ -7,6 +7,7 @@ from .ai_common import (
     UNIT_TEST_SYSTEM_INSTRUCTIONS,
     CHECKING_INSTRUCTIONS,
     NAME_GENERATION_INSTRUCTIONS,
+    AMEND_EXPLANATION_INSTRUCTIONS,
     NOTEBOOK_VERIFY_INSTRUCTIONS,
     TEST_VERIFY_INSTRUCTIONS,
     FOLD_SYSTEM_INSTRUCTIONS,
@@ -17,6 +18,7 @@ from .ai_common import (
     build_unit_test_prompt,
     build_name_prompt,
     build_fold_prompt,
+    build_amend_explanation_prompt,
     dump_ai_request,
     log_ai_request_size,
     parse_fold_response,
@@ -118,6 +120,48 @@ Code:
         return parse_generate_response(response.text)
     code = strip_markdown_code_fences(response.text)
     return code
+
+
+def gemini_amend_explanation(
+    api_key,
+    explanation,
+    error_context,
+    previous_code,
+    new_code,
+    model=None,
+    debug=False,
+    dump_ai_requests=False):
+    """Revise a cell's plain-language description so that regenerating code from it
+    would avoid the error that was just fixed. Returns the amended description text."""
+    client = genai.Client(api_key=api_key)
+    model = model or GEMINI_GENERATE_MODEL
+
+    prompt = build_amend_explanation_prompt(
+        explanation, error_context, previous_code, new_code)
+
+    if debug:
+        log_ai_request_size("gemini amend_explanation", AMEND_EXPLANATION_INSTRUCTIONS, prompt)
+    if dump_ai_requests:
+        dump_ai_request(dump_ai_requests, "gemini amend_explanation", {
+            "model": model,
+            "contents": prompt,
+            "system_instruction": AMEND_EXPLANATION_INSTRUCTIONS,
+            "max_output_tokens": 1024,
+        })
+
+    response = client.models.generate_content(
+        model=model,
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            system_instruction=AMEND_EXPLANATION_INSTRUCTIONS,
+            max_output_tokens=1024,
+        ),
+    )
+    if response.usage_metadata:
+        add_tokens(response.usage_metadata.prompt_token_count, response.usage_metadata.candidates_token_count)
+    if debug:
+        print("Response to explanation amendment:", response.text)
+    return (response.text or "").strip()
 
 
 def gemini_generate_test_code(

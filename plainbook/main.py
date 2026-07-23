@@ -517,6 +517,20 @@ def move_cell():
 def get_notebook_state():
     return {}
 
+@post('/rename_notebook')
+@stateful
+@require_token
+def rename_notebook():
+    """Save the notebook as a copy under a new name; all future edits then
+    happen on the new copy. The refreshed state (with the new name) is added
+    by the @stateful decorator."""
+    data = request.json or {}
+    try:
+        notebook.rename(data.get('name'))
+        return dict(status='success')
+    except ValueError as e:
+        return dict(status='error', message=str(e))
+
 @post('/execute_cell')
 @action_log.logged('execute_cell')
 @stateful
@@ -602,13 +616,15 @@ def generate_code_cell():
     data = request.json
     cell_index = data.get('cell_index')
     validation_feedback = data.get('validation_feedback')
+    amend_description = data.get('amend_description', False)
     api_key, ai_provider, model, error = _get_ai_config()
     if error:
         return dict(status='error', message=error)
     try:
-        new_code, success = notebook.generate_code_cell(
+        new_code, success, amended = notebook.generate_code_cell(
             api_key, cell_index, ai_provider=ai_provider,
-            model=model, validation_feedback=validation_feedback)
+            model=model, validation_feedback=validation_feedback,
+            amend_description=amend_description)
     except ClarificationNeeded as e:
         # The AI asked questions; the cell source is untouched.
         return dict(status='needs_clarification', questions=e.questions)
@@ -618,7 +634,10 @@ def generate_code_cell():
             return dict(status='error', message=friendly)
         raise
     if success:
-        return dict(status='success', code=new_code)
+        result = dict(status='success', code=new_code)
+        if amended:
+            result['explanation'] = amended
+        return result
     else:
         # The request was cancelled, we need to avoid updating the code.
         return dict(status='cancelled', code=None)
@@ -636,7 +655,7 @@ def generate_test_code():
     if error:
         return dict(status='error', message=error)
     try:
-        new_code, success = notebook.generate_code_cell(
+        new_code, success, _amended = notebook.generate_code_cell(
             api_key, cell_index, ai_provider=ai_provider,
             model=model, validation_feedback=validation_feedback)
     except Exception as e:
@@ -828,8 +847,9 @@ def set_ask_questions():
 @get('/current_dir')
 @require_token
 def get_current_dir():
-    """Returns the absolute path of the working directory where plainbook was launched."""
-    return {"path": str(Path.cwd())}
+    """Returns the folder where the notebook lives (not the working directory
+    where plainbook was launched)."""
+    return {"path": os.path.dirname(os.path.abspath(notebook.path))}
 
 @get('/home_dir')
 @require_token

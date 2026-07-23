@@ -8,6 +8,7 @@ from .ai_common import (
     UNIT_TEST_SYSTEM_INSTRUCTIONS,
     CHECKING_INSTRUCTIONS,
     NAME_GENERATION_INSTRUCTIONS,
+    AMEND_EXPLANATION_INSTRUCTIONS,
     NOTEBOOK_VERIFY_INSTRUCTIONS,
     TEST_VERIFY_INSTRUCTIONS,
     FOLD_SYSTEM_INSTRUCTIONS,
@@ -18,6 +19,7 @@ from .ai_common import (
     build_unit_test_prompt,
     build_name_prompt,
     build_fold_prompt,
+    build_amend_explanation_prompt,
     dump_ai_request,
     log_ai_request_size,
     parse_fold_response,
@@ -27,10 +29,39 @@ from .ai_common import (
     strip_markdown_code_fences,
 )
 
-# CLAUDE_MODEL = "claude-sonnet-4-5-20250929"
-CLAUDE_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-haiku-4-5-20251001")
+# Default to Sonnet: it supports adaptive thinking, so it self-scales thinking
+# depth to cell complexity (trivial cells get ~none, hard cells get it) — which
+# suits the mixed difficulty of code-generation tasks. Override with ANTHROPIC_MODEL.
+CLAUDE_MODEL = os.environ.get("ANTHROPIC_MODEL", "claude-sonnet-5")
 
 USE_BEDROCK = os.environ.get("CLAUDE_CODE_USE_BEDROCK") == "1"
+
+
+def _response_text(message):
+    """Return the concatenated text of a Claude message.
+
+    ``message.content`` is a list of typed blocks (TextBlock, ThinkingBlock,
+    ToolUseBlock, ...). We can't assume ``content[0]`` is text: when thinking is
+    enabled the first block is a ThinkingBlock, which has no ``.text``. Select
+    the text blocks by type and join them."""
+    return "".join(
+        block.text for block in message.content if block.type == "text"
+    )
+
+
+def _create_without_thinking(client, **kwargs):
+    """Issue a messages.create request with thinking turned off.
+
+    Used for cell-name generation, a trivial summarization where thinking would
+    only add latency and cost. The reasoning-heavy calls (code generation,
+    validation, verification) deliberately use the model default instead, since
+    thinking can improve their output. Not every model accepts an explicit
+    ``{"type": "disabled"}`` (e.g. Fable 5 rejects it), so fall back to a plain
+    request if the model refuses the parameter."""
+    try:
+        return client.messages.create(thinking={"type": "disabled"}, **kwargs)
+    except anthropic.BadRequestError:
+        return client.messages.create(**kwargs)
 
 
 def _get_client(api_key=None):
@@ -121,7 +152,7 @@ Code:
         messages=[{"role": "user", "content": prompt}],
     )
     add_tokens(message.usage.input_tokens, message.usage.output_tokens)
-    response_text = message.content[0].text
+    response_text = _response_text(message)
     if debug:
         print("Response:", response_text)
     if ask_questions:
@@ -129,6 +160,47 @@ Code:
         return parse_generate_response(response_text)
     code = strip_markdown_code_fences(response_text)
     return code
+
+
+def claude_amend_explanation(
+    api_key,
+    explanation,
+    error_context,
+    previous_code,
+    new_code,
+    model=None,
+    debug=False,
+    dump_ai_requests=False):
+    """Revise a cell's plain-language description so that regenerating code from it
+    would avoid the error that was just fixed. Returns the amended description text.
+    Uses the model default (thinking on where supported), since encoding a fix into
+    the description is a reasoning task."""
+    client = _get_client(api_key)
+    model = model or CLAUDE_MODEL
+
+    prompt = build_amend_explanation_prompt(
+        explanation, error_context, previous_code, new_code)
+
+    if debug:
+        log_ai_request_size("claude amend_explanation", AMEND_EXPLANATION_INSTRUCTIONS, prompt)
+    if dump_ai_requests:
+        dump_ai_request(dump_ai_requests, "claude amend_explanation", {
+            "model": model, "max_tokens": 1024,
+            "system": AMEND_EXPLANATION_INSTRUCTIONS,
+            "messages": [{"role": "user", "content": prompt}],
+        })
+
+    message = client.messages.create(
+        model=model,
+        max_tokens=1024,
+        system=AMEND_EXPLANATION_INSTRUCTIONS,
+        messages=[{"role": "user", "content": prompt}],
+    )
+    add_tokens(message.usage.input_tokens, message.usage.output_tokens)
+    response_text = _response_text(message)
+    if debug:
+        print("Response to explanation amendment:", response_text)
+    return response_text.strip()
 
 
 def claude_generate_test_code(
@@ -180,7 +252,7 @@ Code:
         messages=[{"role": "user", "content": prompt}],
     )
     add_tokens(message.usage.input_tokens, message.usage.output_tokens)
-    response_text = message.content[0].text
+    response_text = _response_text(message)
     if debug:
         print("Response:", response_text)
     code = strip_markdown_code_fences(response_text)
@@ -241,7 +313,7 @@ def claude_generate_unit_test_code(
         messages=[{"role": "user", "content": prompt}],
     )
     add_tokens(message.usage.input_tokens, message.usage.output_tokens)
-    response_text = message.content[0].text
+    response_text = _response_text(message)
     if debug:
         print("Response:", response_text)
     code = strip_markdown_code_fences(response_text)
@@ -285,7 +357,7 @@ Validation Result:
         messages=[{"role": "user", "content": prompt}],
     )
     add_tokens(message.usage.input_tokens, message.usage.output_tokens)
-    response_text = message.content[0].text
+    response_text = _response_text(message)
     if debug:
         print("Response:", response_text)
     return parse_validation_response(response_text)
@@ -310,7 +382,7 @@ def _claude_verify(api_key, system_instructions, payload, label, model=None,
         messages=[{"role": "user", "content": payload}],
     )
     add_tokens(message.usage.input_tokens, message.usage.output_tokens)
-    response_text = message.content[0].text
+    response_text = _response_text(message)
     if debug:
         print("Response:", response_text)
     return parse_verify_response(response_text)
@@ -376,14 +448,15 @@ def claude_generate_cell_name(api_key, explanation, model=None, debug=False, dum
             "system": NAME_GENERATION_INSTRUCTIONS,
             "messages": [{"role": "user", "content": prompt}],
         })
-    message = client.messages.create(
+    message = _create_without_thinking(
+        client,
         model=model,
         max_tokens=50,
         system=NAME_GENERATION_INSTRUCTIONS,
         messages=[{"role": "user", "content": prompt}],
     )
     add_tokens(message.usage.input_tokens, message.usage.output_tokens)
-    response_text = message.content[0].text
+    response_text = _response_text(message)
     if debug:
         print("Response to name generation:", response_text)
     return response_text

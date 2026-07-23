@@ -110,6 +110,29 @@ NAME_GENERATION_INSTRUCTIONS = """You need to summarize what a notebook cell doe
 You will be given the cell's explanation, which describes what the cell does.
 Please return at least 2 words, and at most 3. Return only these words."""
 
+AMEND_EXPLANATION_INSTRUCTIONS = """You maintain the plain-language description of a Jupyter notebook cell.
+In this notebook, each cell's Python code is generated automatically from its description.
+
+The code generated for one cell raised an error, and the code has just been corrected.
+Revise that cell's description so that, if code were regenerated from scratch using only
+the revised description and the surrounding notebook, it would avoid the error that was
+just fixed.
+
+Rules:
+- Preserve the original intent, scope, wording style, and level of detail.
+- Make the SMALLEST change necessary to prevent the error from recurring -- for example a
+  required dependency or import, an edge case to handle, an assumption about a column, type,
+  or format, an order of operations, or a correction of a factual mistake in the original wording.
+- Describe WHAT the cell should do, in plain language, not HOW to write the Python. Do not
+  paste code, function names, or snippets into the description unless the original description
+  already referred to them.
+- Do not mention the error, the fix, or that anything was changed. The result must read as a
+  clean, standalone description.
+- Keep it concise. If the original description already implies the corrected behavior, return
+  it essentially unchanged.
+
+Return ONLY the revised description text, with no markdown fences, headings, quotes, or commentary."""
+
 CHECKING_INSTRUCTIONS = """
 You are an assistant that validates Python code for Jupyter cells.
 Your task is to check whether a Jupyter notebook cell does what it specified in its instructions.
@@ -232,6 +255,27 @@ ADDITIONAL GUIDANCE (in the order it was added, oldest first; later items win on
 {guidance}
 
 Rewritten description:"""
+
+
+def build_amend_explanation_prompt(explanation, error_context, previous_code, new_code):
+    """Builds the prompt for amending a cell's description after its code was fixed."""
+    error_context = truncate_to_token_limit(error_context)
+    previous_code = truncate_to_token_limit(previous_code)
+    new_code = truncate_to_token_limit(new_code)
+    return f"""Original description of the cell:
+{explanation}
+
+When code was generated from that description and run, it produced this error:
+{error_context}
+
+The code that produced the error:
+{previous_code}
+
+The corrected code, which now runs without the error:
+{new_code}
+
+Revise the original description, following the rules, so that regenerating code from it
+would avoid this error. Return only the revised description:"""
 
 
 # Session-level token accumulator

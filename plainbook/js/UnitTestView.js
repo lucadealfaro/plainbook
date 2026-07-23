@@ -7,6 +7,7 @@ import ValidationCell from './ValidationCell.js';
 import OutputRenderer from './OutputRenderer.js';
 import CellLabel from './CellLabel.js';
 import UnitTestHelpModal from './UnitTestHelpModal.js';
+import { outputsHaveError } from './errorUtils.js';
 
 export default {
     components: { UnitTestTabBar, UnitTestSubCell, ExplanationEditor, CodeCell, ValidationCell, OutputRenderer, CellLabel, UnitTestHelpModal },
@@ -46,10 +47,7 @@ export default {
             return unitTests.value[activeTestName.value] || null;
         });
 
-        const hasTargetError = computed(() => {
-            if (!targetCell.value || !targetCell.value.outputs) return false;
-            return targetCell.value.outputs.some(out => out.output_type === 'error');
-        });
+        const hasTargetError = computed(() => outputsHaveError(targetCell.value && targetCell.value.outputs));
 
         const targetCodeValid = computed(() => props.lastValidCodeCellIndex >= props.targetCellIndex);
         const targetOutputVisible = ref(true);

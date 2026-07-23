@@ -7,6 +7,7 @@ import ExplanationEditor from './ExplanationEditor.js';
 import ValidationCell from './ValidationCell.js';
 import OutputRenderer from './OutputRenderer.js';
 import MissingModuleBar from './MissingModuleBar.js';
+import { outputsHaveError } from './errorUtils.js';
 export default {
     components: { MarkdownCell, CodeCell, ExplanationEditor, ValidationCell, OutputRenderer, MissingModuleBar },
     props: ['cell', 'isActive', 'isLocked', 'running', 'codeValid', 'outputValid', 'executed',
@@ -21,14 +22,14 @@ export default {
         'run-test', 'save-and-run-test', 'save-code-and-run-test', 'generate-test-code', 'open-test-help',
         'open-unit-test',
         'install-module', 'dismiss-module-install',
+        'dismiss-error',
         'amend-and-fold', 'accept-amend', 'dismiss-fold', 'unfold',
         'submit-clarification', 'dismiss-clarification'
     ],
     setup(props, { emit }) {
         const hasError = computed(() => {
             if (!['code', 'test'].includes(props.cell.cell_type)) return false;
-            if (!props.cell.outputs) return false;
-            return props.cell.outputs.some(out => out.output_type === 'error');
+            return outputsHaveError(props.cell.outputs);
         });
 
         const outputVisible = ref(true);
@@ -101,7 +102,7 @@ export default {
                         :has-prefold="!!cell.metadata.explanation_prefold"
                         @save="$emit('save-explanation', $event)"
                         @toggle-output="outputVisible = !outputVisible"
-                        @gencode="$emit('generate-code')"
+                        @gencode="$emit('generate-code', $event)"
                         @clearcode="$emit('clear-code')"
                         @validate="$emit('validate-code')"
                         @run="$emit('run-cell')"
@@ -110,6 +111,7 @@ export default {
                         @delete="$emit('delete')"
                         @moveUp="$emit('move-up')"
                         @moveDown="$emit('move-down')"
+                        @dismiss-error="$emit('dismiss-error')"
                         @open-unit-test="$emit('open-unit-test')"
                         @amend-and-fold="(text) => $emit('amend-and-fold', text)"
                         @accept-amend="(text) => $emit('accept-amend', text)"
@@ -179,7 +181,8 @@ export default {
                         @open-test-help="$emit('open-test-help')"
                         @delete="$emit('delete')"
                         @moveUp="$emit('move-up')"
-                        @moveDown="$emit('move-down')" />
+                        @moveDown="$emit('move-down')"
+                        @dismiss-error="$emit('dismiss-error')" />
                 </div>
 
                 <validation-cell

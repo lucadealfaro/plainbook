@@ -6,7 +6,7 @@ const ExplanationRenderer = {
             'unitTestCount', 'foldState', 'hasPrefold', 'clarifyState'],
     emits: ['update:source', 'save', 'saveandrun', 'gencode', 'clearcode', 'validate',
             'run', 'interrupt', 'delete', 'moveUp', 'moveDown', 'toggle-output', 'open-test-help',
-            'open-unit-test',
+            'open-unit-test', 'dismiss-error',
             'amend-and-fold', 'accept-amend', 'dismiss-fold', 'unfold',
             'submit-clarification', 'dismiss-clarification'],
     setup(props, { emit }) {
@@ -123,7 +123,9 @@ const ExplanationRenderer = {
         const generating = ref(false);
         const onGenCode = () => {
             generating.value = true;
-            emit('gencode');
+            // hasError is true exactly when the button reads "Fix Code": signal
+            // the parent to also amend the description, not just regenerate code.
+            emit('gencode', props.hasError);
         };
         const validating = ref(false);
         const onValidate = () => {
@@ -221,10 +223,19 @@ const ExplanationRenderer = {
         };
         const cancelClarify = () => emit('dismiss-clarification');
 
+        // Pressing any toolbar or edit-mode button implies the user is acting
+        // on the cell, so dismiss the top-level error bar. Use the capture phase
+        // so this still fires for buttons that stop click propagation
+        // (@click.stop); the closest('button') guard limits it to actual button
+        // presses (not clicks on the textarea or empty toolbar space).
+        const onButtonPress = (event) => {
+            if (event.target.closest('button')) emit('dismiss-error');
+        };
+
         return { isEditing, localSource, rendered, enterEditMode, saveChanges,
             cancelEdit, textareaEl, autoResize, saveAndRun, onBlur, localIsLocked,
             isTestCell, clearLabel, generateLabel, stopGenerateLabel, validateLabel,
-            generating, onGenCode, validating, onValidate,
+            generating, onGenCode, validating, onValidate, onButtonPress,
             mode, showRun, showMoveUpDown, showDelete, showTestHelp, showUnitTest, showSaveAndRun,
             placeholderText,
             showFolding, foldReview, amendText, foldEdit, foldEl, submitAmend,
@@ -301,7 +312,8 @@ const ExplanationRenderer = {
 
         <div v-if="!isEditing && !isAmending && isActive && !foldReview"
                 class="explanation-toolbar pl-3 pr-3"
-                style="flex-wrap: wrap;">
+                style="flex-wrap: wrap;"
+                @click.capture="onButtonPress">
             <div class="toolbar-left">
                 <template v-if="showRun">
                     <button v-if="running" class="button run-button is-small mr-1 is-primary"
@@ -315,6 +327,19 @@ const ExplanationRenderer = {
                         <span class="icon"><i class="bx bx-play"></i></span>
                         <span v-if="!isTestCell">Run</span>
                         <span v-else>Run test</span>
+                    </button>
+                </template>
+                <template v-if="hasError">
+                    <button v-if="generating" class="button is-small is-success mr-1"
+                            title="Stop fixing the code" @click.stop="$emit('interrupt')">
+                        <span class="icon"><i class="bx bx-stop-circle"></i></span>
+                        <span>{{ stopGenerateLabel }}</span>
+                    </button>
+                    <button v-else class="button is-small is-warning has-text-weight-bold mr-1"
+                            title="Fix the code so it runs without errors"
+                            :disabled="running || localIsLocked || !localSource.trim()" @click.stop="onGenCode">
+                        <span class="icon"><i class="bx bx-cognition"></i></span>
+                        <span>{{ generateLabel }}</span>
                     </button>
                 </template>
                 <button v-if="showTestHelp" class="button is-success is-small mr-1" title="Test Help" @click.stop="$emit('open-test-help')">
@@ -370,18 +395,20 @@ const ExplanationRenderer = {
                     <span class="icon"><i class="bx bx-eraser"></i></span>
                     <span>{{ clearLabel }}</span>
                 </button>
-                <button v-if="generating" class="button is-small is-success"
-                        title="Stop code generation" @click.stop="$emit('interrupt')">
-                    <span class="icon"><i class="bx bx-stop-circle"></i></span>
-                    <span>{{ stopGenerateLabel }}</span>
-                </button>
-                <button v-else class="button is-small"
-                        :class="isTestCell ? 'is-warning' : 'is-success'"
-                        title="Generate or regenerate the code"
-                        :disabled="running || localIsLocked || !localSource.trim()" @click.stop="onGenCode">
-                    <span class="icon"><i class="bx bx-cognition"></i></span>
-                    <span>{{ generateLabel }}</span>
-                </button>
+                <template v-if="!hasError">
+                    <button v-if="generating" class="button is-small is-success"
+                            title="Stop code generation" @click.stop="$emit('interrupt')">
+                        <span class="icon"><i class="bx bx-stop-circle"></i></span>
+                        <span>{{ stopGenerateLabel }}</span>
+                    </button>
+                    <button v-else class="button is-small"
+                            :class="isTestCell ? 'is-warning' : 'is-success'"
+                            title="Generate or regenerate the code"
+                            :disabled="running || localIsLocked || !localSource.trim()" @click.stop="onGenCode">
+                        <span class="icon"><i class="bx bx-cognition"></i></span>
+                        <span>{{ generateLabel }}</span>
+                    </button>
+                </template>
                 <button v-if="validating" class="button is-small is-success"
                         title="Stop validation" @click.stop="$emit('interrupt')">
                     <span class="icon"><i class="bx bx-stop-circle"></i></span>
@@ -399,7 +426,8 @@ const ExplanationRenderer = {
             </div>
         </div>
 
-        <div v-if="isEditing" class="explanation-edit-mode px-2 pb-2">
+        <div v-if="isEditing" class="explanation-edit-mode px-2 pb-2"
+                @click.capture="onButtonPress">
             <textarea 
                 ref="textareaEl"
                 v-model="localSource" 

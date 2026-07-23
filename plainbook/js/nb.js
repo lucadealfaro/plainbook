@@ -11,9 +11,11 @@ import UiError from './UiError.js';
 import PanelBar from './PanelBar.js';
 import NotebookHelp from './NotebookHelp.js';
 import UnitTestView from './UnitTestView.js';
+import NotebookTitle from './NotebookTitle.js';
+import { outputsHaveError, getErrorInfo } from './errorUtils.js';
 
 createApp({
-    components: { AppNavbar, NotebookCell, CellInsertionZone, CellLabel, SettingsModal, InfoModal, TestHelpModal, UiError, PanelBar, NotebookHelp, UnitTestView },
+    components: { AppNavbar, NotebookCell, CellInsertionZone, CellLabel, SettingsModal, InfoModal, TestHelpModal, UiError, PanelBar, NotebookHelp, UnitTestView, NotebookTitle },
     setup() {
         // Extract token from URL
         const urlParams = new URLSearchParams(window.location.search);
@@ -642,7 +644,7 @@ createApp({
         
         
         // Function in charge of generating code for one cell.
-        const generateCodeOneCell = async (cellIndex, force = false, validationFeedback = null) => {
+        const generateCodeOneCell = async (cellIndex, force = false, validationFeedback = null, amend = false) => {
             const cell = notebook.value.cells[cellIndex];
             if (cell.cell_type !== 'code') return; // Only code cells
             if (!force && last_valid_code_cell_index.value >= cellIndex) return; // Already valid code
@@ -658,13 +660,26 @@ createApp({
             if (validationFeedback) {
                 body.validation_feedback = validationFeedback;
             }
+            // "Fix Code" also asks the server to amend the description.
+            if (amend) {
+                body.amend_description = true;
+            }
             const r = await apiCall('/generate_code', 'POST', body);
             if (r.status == 'success') {
                 if (notebook.value && notebook.value.cells[cellIndex]) {
                     cell.source = r.code;
+                    // Regenerated code invalidates the old outputs; the server
+                    // clears them (plainbook.py generate_code_cell), so mirror
+                    // that here. This also drops any prior error output, so a
+                    // single "Fix Code" reverts the button to "Regenerate code".
+                    cell.outputs = [];
                     delete cell.metadata.validation;
                     // A successful generation supersedes any pending questions.
                     dismissClarify(cellIndex);
+                    // The server amended the description (Fix Code only); reflect it.
+                    if (r.explanation) {
+                        cell.metadata.explanation = r.explanation;
+                    }
                     console.log('Code generated for cell:', cellIndex);
                 }
             } else if (r.status == 'needs_clarification') {
@@ -731,16 +746,20 @@ createApp({
                 } 
                 cell.outputs = r.outputs;
                 console.log('Cell executed:', cellIndex, r.details);
-                if (r.details === 'CellExecutionError') {
-                    // The cell executed, but we have to stop other further
-                    // cells from executing.
+                // Stop the run when the cell raised (CellExecutionError) or when
+                // its output contains an error-like stderr stream (e.g. an
+                // uncaught traceback or a pandas warning printed to stderr).
+                if (r.details === 'CellExecutionError' || outputsHaveError(r.outputs)) {
+                    // Locate the actual error across all outputs (it may follow
+                    // normal output), rather than assuming outputs[0].
+                    const info = getErrorInfo(r.outputs) || {};
                     let err;
-                    if(r.outputs[0].ename === 'ModuleNotFoundError') {
-                        err = new Error('The code uses the Python module ' + r.outputs[0].evalue.split("'")[1] + ', which is not installed. Use the options shown in the cell output to install it or rewrite the code.');
-                    } else if (r.outputs[0].ename === 'FileNotFoundError') {
+                    if (info.ename === 'ModuleNotFoundError') {
+                        err = new Error('The code uses the Python module ' + (info.evalue || '').split("'")[1] + ', which is not installed. Use the options shown in the cell output to install it or rewrite the code.');
+                    } else if (info.ename === 'FileNotFoundError') {
                         err = new Error('The notebook cannot find a file it needs. Please select all the required input files using the selector at the top, so that the AI knows where to find them, and re-generate the code. If the files are already selected, you might want to refer to them in a more precise way, for instance citing their full name.');
                     } else {
-                        err = new Error("Execution error: " + r.outputs[0].ename);
+                        err = new Error("Execution error: " + (info.ename || 'Error') + (info.evalue ? ': ' + info.evalue : ''));
                     }
                     err.cellIndex = cellIndex;
                     throw err;
@@ -878,7 +897,7 @@ createApp({
         };
 
 
-        const ui_forceRegenerateCellCode = async (cellIndex) => {
+        const ui_forceRegenerateCellCode = async (cellIndex, amend = false) => {
             asRead.value = false;
             flushActiveEdits();
             await waitForPendingSaves();
@@ -892,7 +911,9 @@ createApp({
                     validationFeedback = v.message;
                     dismissValidation(cellIndex);
                 }
-                await generateCodeOneCell(cellIndex, true, validationFeedback);
+                // amend is true when triggered from the "Fix Code" button: also
+                // amend the description so a clean-slate regeneration avoids the error.
+                await generateCodeOneCell(cellIndex, true, validationFeedback, amend);
                 running.value = false;
                 runningActivity.value = { type: null, cellIndex: null };
             }
@@ -1643,6 +1664,21 @@ createApp({
             uiError.value = null;
         };
 
+        // Rename the notebook: the server saves a copy under the new name and
+        // switches all future saves to it. On success the @stateful response
+        // carries the new name, which updateState() applies to notebook_name.
+        const renameNotebook = async (newName) => {
+            if (!newName) return;
+            try {
+                const r = await apiCall('/rename_notebook', 'POST', { name: newName });
+                if (r.status === 'error') {
+                    uiError.value = r.message || 'Could not rename the notebook.';
+                }
+            } catch (err) {
+                uiError.value = (err && err.message) || 'Could not rename the notebook.';
+            }
+        };
+
         const handleClickOutside = (event) => {
             if (event.target.closest('.modal')) return;
             const container = document.querySelector('.notebook-container');
@@ -1653,15 +1689,23 @@ createApp({
             }
         };
 
+        // Changing the input files (Files tab) can mark all cells stale on the
+        // server; InputFile.js dispatches the fresh state so we can update.
+        const onFilesChanged = (e) => {
+            if (e.detail) updateState(e.detail);
+        };
+
         onMounted(() => {
             fetchNotebook();
             window.addEventListener('keydown', handleKeydown);
             window.addEventListener('click', handleClickOutside);
+            window.addEventListener('plainbook:files-changed', onFilesChanged);
         });
 
         onBeforeUnmount(() => {
             window.removeEventListener('keydown', handleKeydown);
             window.removeEventListener('click', handleClickOutside);
+            window.removeEventListener('plainbook:files-changed', onFilesChanged);
         });
 
         return { notebook, notebook_name, loading, error, isLocked, lockNotebook, shareOutputWithAi, aiTokens, verificationStatus, toggleShareOutput,
@@ -1677,7 +1721,7 @@ createApp({
             last_executed_cell_index, last_valid_code_cell_index, last_valid_output_cell_index,
             last_valid_test_cell_index,
             saveSettings, showSettings, showInfo, showTestHelp,
-            genError, uiError, closeUiError, debug, sendDebugRequest, resetTokens,
+            genError, uiError, closeUiError, renameNotebook, debug, sendDebugRequest, resetTokens,
             explanationEditKey, deleteCell, moveCell,
             clearOutputs, activeAiProvider, availableAiProviders, setActiveAiProvider, isCodespace, hasGeminiKey, hasClaudeKey, claudeViaBedrock, logEnabled, logviewEnabled, printAllEnabled, authToken,
             restarting, ui_restart,

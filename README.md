@@ -9,7 +9,7 @@ The use of plain language allows you to share your data analysis and science wit
 Plainbook can use multiple AIs to check that the code faithfully implements the natural language description, and can include tests to further validate the notebook. 
 When you share a notebook, the recipients can also check that the code under the hood implements the natural-language tasks. Recipients can also edit the plainbook, regenerate the code, and rerun it, just as in Jupyter notebooks. 
 
-Thus, the goal of the Plainbook project is to replicate in natural language what made Jupyter notebooks so successful: the ability to share together code and results, so that any recipient can validate and modify the notebook.
+Thus, the goal of the Plainbook project is to replicate in natural language what made Jupyter notebooks so successful: the ability to share together code and results, so that any recipient can validate and modify the notebook.  You can read more about the design of Plainbook in our [paper](https://arxiv.org/abs/2607.05717).
 
 ### Try Plainbook Now
 
@@ -25,7 +25,6 @@ Thus, the goal of the Plainbook project is to replicate in natural language what
 
 **Example Notebooks:**
 * [Soccer World Cup Analysis](https://github.com/lucadealfaro/plainbook/raw/main/examples/Soccer_w_Tests.plnb) — demonstrates action cells, tests, and AI validation
-
 
 ## Installation and use
 
@@ -57,7 +56,6 @@ You can use any file name you like, with any extension you like.
 * [GitHub Repository](https://github.com/lucadealfaro/plainbook).
 * [Pypi package](https://pypi.org/project/plainbook/).
 
-
 ## Plainbook Structure
 
 Plainbooks consist of three types of cells: 
@@ -76,6 +74,12 @@ Currently, Plainbook supports Gemini and Claude models.  You will need an API ke
 
 ## Contributors
 
+### Papers
+
+* L. de Alfaro, M. Aubert, R. Jhala, E. Pastor, E. Baralis. [_Plainbook: Data Science, in Plain Language_](https://arxiv.org/abs/2607.05717).
+
+### Implementation
+
 * [Luca de Alfaro](https://github.com/lucadealfaro), UC Santa Cruz. 
 * [Mathis Aubert](https://github.com/Maths-A), UC Santa Cruz. 
-* [Ranjit Jhala](https://github.com/ranjitjhala), UC San Diego.
+

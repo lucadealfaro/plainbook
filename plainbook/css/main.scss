@@ -213,6 +213,7 @@ pre[class*="language-"] {
 
 // ── Input file browser (InputFile.js) ──
 .file-browser { background: var(--bulma-scheme-main); }
+.file-browser-title { padding: 0.4rem 0.5rem; background: var(--bulma-scheme-main-ter); font-weight: bold; display: flex; align-items: center; justify-content: space-between; gap: 6px; }
 .file-browser-header { padding: 0.4rem 0.5rem; background: var(--bulma-scheme-main-ter); font-size: 0.85rem; color: var(--bulma-text-weak); }
 .file-browser-filter { padding: 8px; background: var(--bulma-scheme-main-ter); display: flex; gap: 8px; }
 .file-browser-filter input { border: 1px solid var(--bulma-border); }
@@ -278,6 +279,26 @@ pre[class*="language-"] {
 
 .button.is-small .bx {
   font-size: 1rem; /* adjust as needed */
+}
+
+// ── Notebook title (rename) ────────────────────────────────────────────
+// Hover shows an outline (hinting interactivity); click edits.
+.notebook-title-text {
+  cursor: pointer;
+  border-radius: 4px;
+  padding: 0.1em 0.25em;
+  outline: none;
+  &:hover {
+    outline: 2px solid var(--bulma-link, #485fc7);
+    outline-offset: 2px;
+  }
+}
+
+.notebook-title-input {
+  font-size: inherit;
+  font-weight: inherit;
+  height: auto;
+  padding: 0.1em 0.25em;
 }
 
 // ── Print styles ───────────────────────────────────────────────────────

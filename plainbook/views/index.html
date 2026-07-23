@@ -122,9 +122,10 @@
     />
 
     <div v-else class="section notebook-area">
-        <h1 class="title">
-            {{ notebook_name }}
-        </h1>
+        <notebook-title
+            :name="notebook_name"
+            :is-locked="isLocked"
+            @rename="renameNotebook" />
         <div class="notebook-container px-2 py-2">
             <div v-if="loading" class="has-text-centered py-6">
                 <button class="button is-loading is-ghost is-large">Loading</button>
@@ -175,7 +176,7 @@
 
                         @interrupt="ui_interruptKernel"
                         @run-cell="ui_runCell(index)"
-                        @generate-code="ui_forceRegenerateCellCode(index)"
+                        @generate-code="ui_forceRegenerateCellCode(index, $event)"
                         @clear-code="clearCellCode(index)"
                         @validate-code="ui_validateCode(index)"
                         @dismiss-validation="dismissValidation(index)"
@@ -200,6 +201,7 @@
                         @delete="deleteCell(index)"
                         @move-up="moveCell(index, -1)"
                         @move-down="moveCell(index, 1)"
+                        @dismiss-error="closeUiError"
                     />
 
                 </template>
