@@ -11,6 +11,7 @@ from .ai_common import (
     AMEND_EXPLANATION_INSTRUCTIONS,
     NOTEBOOK_VERIFY_INSTRUCTIONS,
     TEST_VERIFY_INSTRUCTIONS,
+    CLARIFY_INSTRUCTIONS,
     add_tokens,
     build_context_prompt,
     build_unit_test_prompt,
@@ -18,6 +19,7 @@ from .ai_common import (
     build_amend_explanation_prompt,
     dump_ai_request,
     log_ai_request_size,
+    parse_generate_response,
     parse_validation_response,
     parse_verify_response,
     strip_markdown_code_fences,
@@ -103,9 +105,14 @@ def claude_generate_code(
     validation_context=None,
     model=None,
     debug=False,
-    dump_ai_requests=False):
+    dump_ai_requests=False,
+    ask_questions=False):
     client = _get_client(api_key)
     model = model or CLAUDE_MODEL
+
+    system_instructions = SYSTEM_INSTRUCTIONS
+    if ask_questions:
+        system_instructions += CLARIFY_INSTRUCTIONS
 
     prompt = build_context_prompt(
         preceding=preceding_code,
@@ -122,7 +129,7 @@ Code:
 """
 
     if debug:
-        log_ai_request_size("claude generate_code", SYSTEM_INSTRUCTIONS, prompt,
+        log_ai_request_size("claude generate_code", system_instructions, prompt,
                             preceding=preceding_code, instructions=instructions,
                             previous=previous_code, file_context=file_context,
                             error_context=error_context, variable_context=variable_context,
@@ -130,20 +137,23 @@ Code:
     if dump_ai_requests:
         dump_ai_request(dump_ai_requests, "claude generate_code", {
             "model": model, "max_tokens": 4096,
-            "system": SYSTEM_INSTRUCTIONS,
+            "system": system_instructions,
             "messages": [{"role": "user", "content": prompt}],
         })
 
     message = client.messages.create(
         model=model,
         max_tokens=4096,
-        system=SYSTEM_INSTRUCTIONS,
+        system=system_instructions,
         messages=[{"role": "user", "content": prompt}],
     )
     add_tokens(message.usage.input_tokens, message.usage.output_tokens)
     response_text = _response_text(message)
     if debug:
         print("Response:", response_text)
+    if ask_questions:
+        # Returns (code, questions); questions is set only if it asked.
+        return parse_generate_response(response_text)
     code = strip_markdown_code_fences(response_text)
     return code
 

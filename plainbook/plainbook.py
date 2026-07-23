@@ -42,6 +42,13 @@ class CellExecutionError(Exception):
         self.evalue = evalue
         super().__init__(f"{ename}: {evalue}")
 
+class ClarificationNeeded(Exception):
+    """Raised when the AI asks questions instead of generating code. The cell is
+    left unchanged."""
+    def __init__(self, questions):
+        self.questions = questions
+        super().__init__("The AI needs clarification before generating code.")
+
 def getlist(value):
     """Utility to ensure a value is a list."""
     if isinstance(value, list):
@@ -634,6 +641,7 @@ class Plainbook:
             'last_valid_test_cell': self.last_valid_test_cell,
             'is_locked': self.nb.metadata.get('is_locked', False),
             'share_output_with_ai': self.nb.metadata.get('share_output_with_ai', True),
+            'ask_questions': self.nb.metadata.get('ask_questions', False),
             'ai_tokens': get_session_tokens(),
             'verification_status': self.get_verification_status(),
         }
@@ -675,6 +683,12 @@ class Plainbook:
         """Sets whether cell outputs are shared with AI."""
         with self._lock:
             self.nb.metadata['share_output_with_ai'] = share
+            self._write()
+
+    def set_ask_questions(self, value):
+        """Sets whether the AI may ask questions instead of guessing."""
+        with self._lock:
+            self.nb.metadata['ask_questions'] = bool(value)
             self._write()
 
     def insert_cell(self, index, cell_type):
@@ -1386,12 +1400,13 @@ class Plainbook:
             # Mark that an AI request is pending
             if self.ai_request_pending:
                 raise RuntimeError("An AI request is already pending.")
+            # Only action cells can ask questions; test cells always generate.
+            ask_questions = (not is_test) and self.nb.metadata.get('ask_questions', False)
             try:
                 self.ai_request_pending = True
                 ai_fn_key = "generate_test" if is_test else "generate"
                 generate_fn = AI_PROVIDERS[ai_provider][ai_fn_key]
-                new_code = generate_fn(
-                    api_key,
+                gen_kwargs = dict(
                     preceding_code=preceding_code,
                     previous_code=previous_code,
                     instructions=instructions,
@@ -1401,6 +1416,14 @@ class Plainbook:
                     model=model,
                     debug=self.debug,
                     dump_ai_requests=self.dump_ai_requests)
+                if ask_questions:
+                    gen_kwargs['ask_questions'] = True
+                    new_code, questions = generate_fn(api_key, **gen_kwargs)
+                    # A cancelled request must not raise.
+                    if questions and self.ai_request_pending:
+                        raise ClarificationNeeded(questions)
+                else:
+                    new_code = generate_fn(api_key, **gen_kwargs)
                 # If we are still in a request, update the cell.
                 if self.ai_request_pending:
                     cell.source = new_code

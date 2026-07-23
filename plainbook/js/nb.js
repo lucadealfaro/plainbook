@@ -32,6 +32,10 @@ createApp({
         const explanationEditKey = ref({});
         const isLocked = ref(false);
         const shareOutputWithAi = ref(true);
+        // When true, the AI may ask questions instead of guessing.
+        const askQuestions = ref(false);
+        // Questions awaiting answers: clarifyState[index] = { questions: [...] }.
+        const clarifyState = ref({});
         const aiTokens = ref({input: 0, output: 0});
         const verificationStatus = ref('none');
         const debug = ref(false);
@@ -142,6 +146,7 @@ createApp({
             last_valid_test_cell_index.value = state.last_valid_test_cell;
             isLocked.value = state.is_locked || logviewEnabled.value;
             shareOutputWithAi.value = state.share_output_with_ai;
+            askQuestions.value = !!state.ask_questions;
             if (state.ai_tokens) {
                 aiTokens.value = state.ai_tokens;
             }
@@ -379,6 +384,16 @@ createApp({
                 await apiCall('/set_share_output', 'POST', { share: newVal });
             } catch (err) {
                 throw new Error('Failed to toggle output sharing', { cause: err });
+            }
+        };
+
+        const toggleAskQuestions = async () => {
+            try {
+                const newVal = !askQuestions.value;
+                // apiCall applies the returned state, which updates askQuestions.
+                await apiCall('/set_ask_questions', 'POST', { value: newVal });
+            } catch (err) {
+                throw new Error('Failed to toggle agent questions', { cause: err });
             }
         };
 
@@ -659,12 +674,19 @@ createApp({
                     // single "Fix Code" reverts the button to "Regenerate code".
                     cell.outputs = [];
                     delete cell.metadata.validation;
+                    // A successful generation supersedes any pending questions.
+                    dismissClarify(cellIndex);
                     // The server amended the description (Fix Code only); reflect it.
                     if (r.explanation) {
                         cell.metadata.explanation = r.explanation;
                     }
                     console.log('Code generated for cell:', cellIndex);
                 }
+            } else if (r.status == 'needs_clarification') {
+                // The AI asked questions; show them and leave the source as-is.
+                clarifyState.value = { ...clarifyState.value,
+                    [cellIndex]: { questions: r.questions || [] } };
+                console.log('Clarification requested for cell:', cellIndex, r.questions);
             } else if (r.status == 'cancelled') {
                 console.log('Code generation cancelled for cell:', cellIndex);
             } else {
@@ -895,6 +917,36 @@ createApp({
                 running.value = false;
                 runningActivity.value = { type: null, cellIndex: null };
             }
+        };
+
+        const dismissClarify = (cellIndex) => {
+            if (!clarifyState.value[cellIndex]) return;
+            const next = { ...clarifyState.value };
+            delete next[cellIndex];
+            clarifyState.value = next;
+        };
+
+        // Answers are appended to the cell's description (so they persist and a
+        // later regeneration does not ask again), then the code is regenerated.
+        const ui_submitClarification = async (cellIndex, answers) => {
+            if (running.value) return;
+            const cs = clarifyState.value[cellIndex];
+            if (!cs) return;
+            const lines = cs.questions.map((q, i) => {
+                const a = (answers[i] || '').trim();
+                return a ? `Q: ${q}\nA: ${a}` : null;
+            }).filter(Boolean);
+            if (!lines.length) return;
+            const clarifications = 'Clarifications:\n' + lines.join('\n');
+            const cell = notebook.value.cells[cellIndex];
+            const current = ((cell.metadata.explanation || '')).trim();
+            const newExplanation = current
+                ? `${current}\n\n${clarifications}`
+                : clarifications;
+            dismissClarify(cellIndex);
+            // Persist the enriched description, then regenerate from it.
+            await sendExplanationToServer(newExplanation, cellIndex);
+            await ui_forceRegenerateCellCode(cellIndex);
         };
 
 
@@ -1569,6 +1621,7 @@ createApp({
         });
 
         return { notebook, notebook_name, loading, error, isLocked, lockNotebook, shareOutputWithAi, aiTokens, verificationStatus, toggleShareOutput,
+            askQuestions, toggleAskQuestions, clarifyState, dismissClarify, ui_submitClarification,
             sendExplanationToServer, authToken,
             sendCodeToServer, clearCellCode, ui_saveExplanationAndRun, ui_saveCodeAndRun,
             sendMarkdownToServer, generateCode, activeIndex, reloadNotebook, downloadIpynb,

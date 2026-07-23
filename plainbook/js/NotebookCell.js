@@ -11,7 +11,8 @@ import { outputsHaveError } from './errorUtils.js';
 export default {
     components: { MarkdownCell, CodeCell, ExplanationEditor, ValidationCell, OutputRenderer, MissingModuleBar },
     props: ['cell', 'isActive', 'isLocked', 'running', 'codeValid', 'outputValid', 'executed',
-        'asRead', 'markdownEditKey', 'explanationEditKey', 'testCodeValid', 'moduleInstall'],
+        'asRead', 'markdownEditKey', 'explanationEditKey', 'testCodeValid', 'moduleInstall',
+        'clarifyState'],
     emits: [
         'save-markdown', 'save-explanation', 'save-code',
         'run-cell', 'save-and-run', 'save-code-and-run', 'generate-code', 'clear-code',
@@ -21,6 +22,7 @@ export default {
         'run-test', 'save-and-run-test', 'save-code-and-run-test', 'generate-test-code', 'open-test-help',
         'open-unit-test',
         'install-module', 'dismiss-module-install',
+        'submit-clarification', 'dismiss-clarification',
         'dismiss-error'
     ],
     setup(props, { emit }) {
@@ -94,6 +96,7 @@ export default {
                         :outputVisible="outputVisible"
                         :start-edit-key="explanationEditKey"
                         :unit-test-count="Object.keys(cell.metadata.unit_tests || {}).length"
+                        :clarify-state="clarifyState"
                         @save="$emit('save-explanation', $event)"
                         @toggle-output="outputVisible = !outputVisible"
                         @gencode="$emit('generate-code', $event)"
@@ -106,7 +109,9 @@ export default {
                         @moveUp="$emit('move-up')"
                         @moveDown="$emit('move-down')"
                         @dismiss-error="$emit('dismiss-error')"
-                        @open-unit-test="$emit('open-unit-test')" />
+                        @open-unit-test="$emit('open-unit-test')"
+                        @submit-clarification="(answers) => $emit('submit-clarification', answers)"
+                        @dismiss-clarification="$emit('dismiss-clarification')" />
                 </div>
 
                 <validation-cell

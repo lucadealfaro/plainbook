@@ -3,10 +3,11 @@ import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from './vu
 const ExplanationRenderer = {
     props: ['source', 'isActive', 'codeValid', 'outputValid', 'executed', 'hasError',
             'asRead', 'startEditKey', 'isLocked', 'running', 'hasCode', 'outputVisible', 'cellMode',
-            'unitTestCount'],
+            'unitTestCount', 'clarifyState'],
     emits: ['update:source', 'save', 'saveandrun', 'gencode', 'clearcode', 'validate',
             'run', 'interrupt', 'delete', 'moveUp', 'moveDown', 'toggle-output', 'open-test-help',
-            'open-unit-test', 'dismiss-error'],
+            'open-unit-test', 'dismiss-error',
+            'submit-clarification', 'dismiss-clarification'],
     setup(props, { emit }) {
         const mode = computed(() => props.cellMode || 'normal');
         const isTestCell = computed(() => mode.value === 'test');
@@ -165,21 +166,70 @@ const ExplanationRenderer = {
             if (event.target.closest('button')) emit('dismiss-error');
         };
 
+        // Grow a textarea to fit its content, keyed off the event target so it
+        // works for the dynamically-rendered per-question answer fields.
+        const autoGrowField = (e) => {
+            const el = e.target;
+            el.style.height = 'auto';
+            el.style.height = `${el.scrollHeight}px`;
+        };
+
+        // Pending clarifying questions from the AI (action cells only), or null.
+        const clarify = computed(() =>
+            (props.clarifyState && Array.isArray(props.clarifyState.questions)
+                && props.clarifyState.questions.length) ? props.clarifyState : null);
+        // Answers, reset whenever the question set changes.
+        const clarifyAnswers = ref([]);
+        watch(clarify, (c) => {
+            clarifyAnswers.value = c ? c.questions.map(() => '') : [];
+        }, { immediate: true });
+        const hasAnyAnswer = computed(() =>
+            clarifyAnswers.value.some(a => a && a.trim()));
+        const submitClarify = () => {
+            if (!hasAnyAnswer.value) return;
+            emit('submit-clarification', [...clarifyAnswers.value]);
+        };
+        const cancelClarify = () => emit('dismiss-clarification');
+
         return { isEditing, localSource, rendered, enterEditMode, saveChanges,
             cancelEdit, textareaEl, autoResize, saveAndRun, onBlur, localIsLocked,
             isTestCell, clearLabel, generateLabel, stopGenerateLabel, validateLabel,
             generating, onGenCode, validating, onValidate, onButtonPress,
             mode, showRun, showMoveUpDown, showDelete, showTestHelp, showUnitTest, showSaveAndRun,
-            placeholderText };
+            placeholderText, autoGrowField,
+            clarify, clarifyAnswers, hasAnyAnswer, submitClarify, cancelClarify };
     },
 
     template: /* html */ `
         <div class="explanation-container pt-3 pl-4 pr-4 pb-1">
-            <div v-if="!isEditing" 
+            <div v-if="!isEditing"
                  class="explanation-body content"
                  v-html="rendered" @dblclick="enterEditMode">
             </div>
         </div>
+
+        <!-- Clarifying questions from the AI (action cells only) -->
+        <div v-if="clarify && !isEditing" class="px-4 pb-2">
+            <div class="box mt-2 p-3">
+                <p class="is-size-7 has-text-weight-semibold mb-2">
+                    <span class="icon is-small"><i class="bx bx-help-circle"></i></span>
+                    The AI needs a bit more information before writing the code:
+                </p>
+                <div v-for="(q, qi) in clarify.questions" :key="qi" class="mb-2">
+                    <p class="is-size-7 mb-1">{{ qi + 1 }}. {{ q }}</p>
+                    <textarea v-model="clarifyAnswers[qi]" class="textarea is-small" rows="1"
+                        placeholder="Your answer..." @input="autoGrowField"></textarea>
+                </div>
+                <div class="is-flex is-justify-content-flex-end" style="gap:0.5rem;">
+                    <button class="button is-small" @click.stop="cancelClarify">Cancel</button>
+                    <button class="button is-small is-success"
+                            :disabled="running || localIsLocked || !hasAnyAnswer" @click.stop="submitClarify">
+                        <span class="icon"><i class="bx bx-cog"></i></span><span>Answer &amp; regenerate</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
         <div v-if="!isEditing && isActive"
                 class="explanation-toolbar pl-3 pr-3"
                 style="flex-wrap: wrap;"

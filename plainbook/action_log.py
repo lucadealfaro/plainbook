@@ -93,6 +93,7 @@ OP_LOG_CONFIG = {
     "clear_unit_test_outputs": {"snapshot": True},
     "lock_notebook": {"snapshot": False},
     "set_share_output": {"snapshot": False},
+    "set_ask_questions": {"snapshot": False},
     "set_files": {"snapshot": False, "truncate_param_fields": {"files": 4096, "missing_files": 4096}},
     "set_ai_instructions": {"snapshot": False, "truncate_param_fields": {"ai_instructions": 4096}},
     "reset_tokens": {"snapshot": False},
