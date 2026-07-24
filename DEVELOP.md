@@ -6,9 +6,13 @@ Contributions are welcome! If you want to contribute to the Plainbook project, p
 
 It is recommended to coordinate the changes with the maintainers ahead of time, by writing to the [Plainbook email list](https://groups.google.com/g/plainbook).  This ensures, for example, that two contributors do not work on the same feature at the same time, and that features do not conflict with planned changes. 
 
-## Pull requests
+## Branching and pull requests
 
-We recommend you perform the pull requests against the `develop` branch, which is the main development branch.  The `main` branch is reserved for stable releases.
+The main branch is `main`, and `develop` is the main development branch. 
+For the time being, let Luca do the merges into the `develop` and `main` branches, and the pypi releases. 
+
+When you work on something, branch from the `develop` branch, and submit a pull request to the `develop` branch.  
+If you have access to the main repository, you can create your feature branch directly on the main repository, named something like `yourname-feature`.  Otherwise, you can fork the repository, create your feature branch on your fork, and submit a pull request to the `develop` branch of the main repository.  Do clean up your feature branches from time to time. 
 
 ## Code style
 
