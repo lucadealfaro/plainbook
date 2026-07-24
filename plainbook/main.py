@@ -782,6 +782,17 @@ def set_share_output():
     return {}
 
 
+@post('/set_skip_reexecution')
+@action_log.logged('set_skip_reexecution')
+@stateful
+@require_token
+def set_skip_reexecution():
+    data = request.json
+    skip = data.get('skip', True)
+    notebook.set_skip_reexecution(skip)
+    return {}
+
+
 @get('/current_dir')
 @require_token
 def get_current_dir():

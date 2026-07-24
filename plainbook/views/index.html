@@ -216,6 +216,7 @@
         :has-gemini-key="hasGeminiKey"
         :has-claude-key="hasClaudeKey"
         :claude-via-bedrock="claudeViaBedrock"
+        :skip-reexecution="skipReexecution"
         @close="showSettings = false"
         @save="(keys) => {showSettings = false; saveSettings(keys); }"
     />

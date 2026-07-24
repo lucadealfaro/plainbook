@@ -55,6 +55,7 @@ You can use any file name you like, with any extension you like.
 
 * [GitHub Repository](https://github.com/lucadealfaro/plainbook).
 * [Pypi package](https://pypi.org/project/plainbook/).
+* [Development mailing list](https://groups.google.com/g/plainbook).
 
 ## Plainbook Structure
 
@@ -72,14 +73,19 @@ Differently from standard Jupyter notebooks, Plainbooks cells are guaranteed to 
 Plainbook is designed to work with multiple AI providers, and users can choose which provider to use for code generation and checking.  The system is designed to allow users to easily switch between providers, so that users can cross-check that the implementation obtained from one provider is considered valid by another provider.  This avoids over-reliance on a single class of AI models. 
 Currently, Plainbook supports Gemini and Claude models.  You will need an API key for at least one such provider to use Plainbook.
 
+
+## Papers
+
+* L. de Alfaro, M. Aubert, R. Jhala, E. Pastor, E. Baralis. [_Plainbook: Data Science, in Plain Language_](https://arxiv.org/abs/2607.05717), July 2026.
+
 ## Contributors
 
-### Papers
+To contribute to Plainbook, please see the [DEVELOP.md](DEVELOP.md) file. 
 
-* L. de Alfaro, M. Aubert, R. Jhala, E. Pastor, E. Baralis. [_Plainbook: Data Science, in Plain Language_](https://arxiv.org/abs/2607.05717).
-
-### Implementation
-
-* [Luca de Alfaro](https://github.com/lucadealfaro), UC Santa Cruz. 
+* [Luca de Alfaro](https://github.com/lucadealfaro), lead developer, UC Santa Cruz. 
 * [Mathis Aubert](https://github.com/Maths-A), UC Santa Cruz. 
-
+* [Ranjit Jhala](https://ranjitjhala.github.io/), UC San Diego. 
+* [Dhyan Soni](). 
+* [Uchechi Ejiogu]().
+* [Eliana Pastor](https://elianap.github.io/), Politecnico di Torino.
+* [Elena Baralis](https://www.polito.it/en/staff?p=elena.baralis), Politecnico di Torino.

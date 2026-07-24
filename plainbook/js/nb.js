@@ -32,6 +32,7 @@ createApp({
         const explanationEditKey = ref({});
         const isLocked = ref(false);
         const shareOutputWithAi = ref(true);
+        const skipReexecution = ref(true);
         const aiTokens = ref({input: 0, output: 0});
         const verificationStatus = ref('none');
         const debug = ref(false);
@@ -142,6 +143,9 @@ createApp({
             last_valid_test_cell_index.value = state.last_valid_test_cell;
             isLocked.value = state.is_locked || logviewEnabled.value;
             shareOutputWithAi.value = state.share_output_with_ai;
+            if (state.skip_reexecution !== undefined) {
+                skipReexecution.value = state.skip_reexecution;
+            }
             if (state.ai_tokens) {
                 aiTokens.value = state.ai_tokens;
             }
@@ -1501,6 +1505,14 @@ createApp({
             } catch (err) {
                 throw new Error('Error saving API keys', { cause: err });
             }
+            // Save the notebook execution setting (independent of API keys).
+            if (keys.skip_reexecution !== undefined) {
+                try {
+                    await apiCall('/set_skip_reexecution', 'POST', { skip: keys.skip_reexecution });
+                } catch (err) {
+                    throw new Error('Error saving execution setting', { cause: err });
+                }
+            }
         };
 
         const setActiveAiProvider = async (providerId) => {
@@ -1568,7 +1580,7 @@ createApp({
             window.removeEventListener('plainbook:files-changed', onFilesChanged);
         });
 
-        return { notebook, notebook_name, loading, error, isLocked, lockNotebook, shareOutputWithAi, aiTokens, verificationStatus, toggleShareOutput,
+        return { notebook, notebook_name, loading, error, isLocked, lockNotebook, shareOutputWithAi, skipReexecution, aiTokens, verificationStatus, toggleShareOutput,
             sendExplanationToServer, authToken,
             sendCodeToServer, clearCellCode, ui_saveExplanationAndRun, ui_saveCodeAndRun,
             sendMarkdownToServer, generateCode, activeIndex, reloadNotebook, downloadIpynb,
