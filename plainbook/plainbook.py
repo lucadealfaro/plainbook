@@ -19,12 +19,12 @@ import requests
 
 from .ai_common import get_session_tokens
 from .utilities import PIP_INSTALL_CODE, parse_pip_install_result, resolve_package_name
-from .gemini import gemini_generate_code, gemini_validate_code, gemini_generate_cell_name, gemini_generate_test_code, gemini_generate_unit_test_code, gemini_verify_notebook, gemini_verify_tests, gemini_amend_explanation
-from .claude import claude_generate_code, claude_validate_code, claude_generate_cell_name, claude_generate_test_code, claude_generate_unit_test_code, claude_verify_notebook, claude_verify_tests, claude_amend_explanation
+from .gemini import gemini_generate_code, gemini_validate_code, gemini_explain_code, gemini_generate_cell_name, gemini_generate_test_code, gemini_generate_unit_test_code, gemini_verify_notebook, gemini_verify_tests, gemini_amend_explanation
+from .claude import claude_generate_code, claude_validate_code, claude_explain_code, claude_generate_cell_name, claude_generate_test_code, claude_generate_unit_test_code, claude_verify_notebook, claude_verify_tests, claude_amend_explanation
 
 AI_PROVIDERS = {
-    "gemini": {"generate": gemini_generate_code, "validate": gemini_validate_code, "name": gemini_generate_cell_name, "generate_test": gemini_generate_test_code, "generate_unit_test": gemini_generate_unit_test_code, "verify_notebook": gemini_verify_notebook, "verify_tests": gemini_verify_tests, "amend_explanation": gemini_amend_explanation},
-    "claude": {"generate": claude_generate_code, "validate": claude_validate_code, "name": claude_generate_cell_name, "generate_test": claude_generate_test_code, "generate_unit_test": claude_generate_unit_test_code, "verify_notebook": claude_verify_notebook, "verify_tests": claude_verify_tests, "amend_explanation": claude_amend_explanation},
+    "gemini": {"generate": gemini_generate_code, "validate": gemini_validate_code, "explain": gemini_explain_code, "name": gemini_generate_cell_name, "generate_test": gemini_generate_test_code, "generate_unit_test": gemini_generate_unit_test_code, "verify_notebook": gemini_verify_notebook, "verify_tests": gemini_verify_tests, "amend_explanation": gemini_amend_explanation},
+    "claude": {"generate": claude_generate_code, "validate": claude_validate_code, "explain": claude_explain_code, "name": claude_generate_cell_name, "generate_test": claude_generate_test_code, "generate_unit_test": claude_generate_unit_test_code, "verify_notebook": claude_verify_notebook, "verify_tests": claude_verify_tests, "amend_explanation": claude_amend_explanation},
 }
 
 MAX_OUTPUT_CHARS_FOR_AI = 2000
@@ -878,6 +878,7 @@ class Plainbook:
             'is_locked': self.nb.metadata.get('is_locked', False),
             'share_output_with_ai': self.nb.metadata.get('share_output_with_ai', True),
             'skip_reexecution': self.nb.metadata.get('skip_reexecution', True),
+            'auto_explain': self.nb.metadata.get('auto_explain', False),
             'ai_tokens': get_session_tokens(),
             'verification_status': self.get_verification_status(),
         }
@@ -930,6 +931,12 @@ class Plainbook:
         (time, random numbers, external files, etc.)."""
         with self._lock:
             self.nb.metadata['skip_reexecution'] = skip
+            self._write()
+
+    def set_auto_explain(self, auto_explain):
+        """Sets whether to automatically explain cells after generation."""
+        with self._lock:
+            self.nb.metadata['auto_explain'] = auto_explain
             self._write()
 
     def insert_cell(self, index, cell_type):
@@ -1969,6 +1976,42 @@ class Plainbook:
                     return validation_result
                 else:
                     return None
+            finally:
+                self.ai_request_pending = False
+
+
+    def explain_code_cell(self, api_key, index, level=2, use_bullets=False, use_latex=False, ai_provider="gemini", model=None):
+        """Generates an explanation for the code in the cell at index,
+        and overrides the original description with it."""
+        with self._lock:
+            if self.ai_request_pending:
+                raise RuntimeError("An AI request is already pending.")
+            self.ai_request_pending = True
+            assert 0 <= index < len(self.nb.cells)
+            cell = self.nb.cells[index]
+            assert cell.cell_type in ('code', 'test')
+            code_to_explain = cell.source
+            instructions = self._get_instructions(cell.metadata.get('explanation'))
+            previous_code = self._get_preceding_code_for_ai(index)
+            previous_code_cell = self._get_preceding_code_cell(index)
+            variable_context = self._get_variables_for_ai(previous_code_cell) if previous_code_cell else ""
+            try:
+                explain_fn = AI_PROVIDERS[ai_provider]["explain"]
+                explanation = explain_fn(api_key, previous_code, code_to_explain,
+                                         instructions, variable_context=variable_context,
+                                         level=level, use_bullets=use_bullets, use_latex=use_latex,
+                                         model=model, debug=self.debug,
+                                         dump_ai_requests=self.dump_ai_requests)
+                if self.ai_request_pending:
+                    explanation = explanation.strip()
+                    # Store in a separate field so we don't override the user's prompt
+                    cell.metadata['ai_explanation'] = explanation
+                    # Update timestamp
+                    cell.metadata['ai_explanation_timestamp'] = datetime.datetime.now().isoformat()
+                    self._write()
+                    return explanation, index
+                else:
+                    return None, None
             finally:
                 self.ai_request_pending = False
 

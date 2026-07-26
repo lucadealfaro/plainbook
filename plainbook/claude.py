@@ -7,6 +7,7 @@ from .ai_common import (
     TEST_SYSTEM_INSTRUCTIONS,
     UNIT_TEST_SYSTEM_INSTRUCTIONS,
     CHECKING_INSTRUCTIONS,
+    EXPLAIN_INSTRUCTIONS,
     NAME_GENERATION_INSTRUCTIONS,
     AMEND_EXPLANATION_INSTRUCTIONS,
     NOTEBOOK_VERIFY_INSTRUCTIONS,
@@ -347,6 +348,67 @@ Validation Result:
     if debug:
         print("Response:", response_text)
     return parse_validation_response(response_text)
+
+
+def claude_explain_code(api_key, previous_code, code_to_explain, instructions, variable_context=None, level=2, use_bullets=False, use_latex=False, model=None, debug=False, dump_ai_requests=False):
+    client = _get_client(api_key)
+    model = model or CLAUDE_MODEL
+
+    level_instruction = {
+        1: "Provide a BRIEF, high-level summary of the code.",
+        2: "Provide a NORMAL explanation of the code, covering the main steps.",
+        3: "Provide a DETAILED explanation, covering all significant parts of the logic.",
+        4: "Provide an EXTREMELY DETAILED, line-by-line or section-by-section breakdown of everything the code does."
+    }.get(level, "Provide a normal explanation.")
+
+    if use_bullets:
+        level_instruction += " Use bullet points to organize the explanation."
+    if use_latex:
+        level_instruction += " Use LaTeX for any mathematical equations (e.g., $x^2$, $$\\frac{a}{b}$$). Do this for any mathematical equations that are NEEDED"
+    else:
+        level_instruction += " Avoid using LaTeX; use plain text for math if possible."
+
+    prompt = build_context_prompt(
+        preceding=previous_code,
+        variable_context=variable_context
+    )
+    prompt += f"""
+
+CODE TO EXPLAIN:
+{code_to_explain}
+
+INSTRUCTIONS for original cell description:
+{instructions}
+
+EXPLANATION GUIDELINE:
+{level_instruction}
+
+Explanation:
+"""
+
+    if debug:
+        log_ai_request_size("claude explain_code", EXPLAIN_INSTRUCTIONS, prompt,
+                            preceding=previous_code, instructions=instructions,
+                            variable_context=variable_context)
+    if dump_ai_requests:
+        dump_ai_request(dump_ai_requests, "claude explain_code", {
+            "model": model,
+            "messages": [{"role": "user", "content": prompt}],
+            "system_instruction": EXPLAIN_INSTRUCTIONS,
+        })
+
+    message = client.messages.create(
+        model=model,
+        max_tokens=2048,
+        system=EXPLAIN_INSTRUCTIONS,
+        messages=[{"role": "user", "content": prompt}],
+    )
+
+    add_tokens(message.usage.input_tokens, message.usage.output_tokens)
+    response_text = _response_text(message)
+    if debug:
+        print("Response:", response_text)
+    return response_text
 
 
 def _claude_verify(api_key, system_instructions, payload, label, model=None,

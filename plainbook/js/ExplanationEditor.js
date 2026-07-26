@@ -3,10 +3,10 @@ import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from './vu
 const ExplanationRenderer = {
     props: ['source', 'isActive', 'codeValid', 'outputValid', 'executed', 'hasError',
             'asRead', 'startEditKey', 'isLocked', 'running', 'hasCode', 'outputVisible', 'cellMode',
-            'unitTestCount'],
-    emits: ['update:source', 'save', 'saveandrun', 'gencode', 'clearcode', 'validate',
+            'unitTestCount', 'aiDescriptionVisible'],
+    emits: ['update:source', 'save', 'saveandrun', 'gencode', 'clearcode', 'validate', 'explain',
             'run', 'interrupt', 'delete', 'moveUp', 'moveDown', 'toggle-output', 'open-test-help',
-            'open-unit-test', 'dismiss-error'],
+            'open-unit-test', 'dismiss-error', 'toggle-ai-description'],
     setup(props, { emit }) {
         const mode = computed(() => props.cellMode || 'normal');
         const isTestCell = computed(() => mode.value === 'test');
@@ -19,12 +19,47 @@ const ExplanationRenderer = {
         const isEditing = ref(false);
         const localSource = ref((Array.isArray(props.source) ? props.source.join('') : props.source) || '');
         const originalSource = ref(localSource.value);
-        const md = new markdownit({ html: true });
+        const md = window.markdownit ? window.markdownit({ html: true, linkify: true, typographer: true }) : { render: (x) => x };
         const textareaEl = ref(null);
         const localIsLocked = ref(props.isLocked);
-
+        const explanationBody = ref(null);
 
         const rendered = computed(() => md.render(localSource.value));
+
+        const renderMath = () => {
+            if (!window.renderMathInElement) return;
+            nextTick(() => {
+                const els = document.querySelectorAll('.explanation-body');
+                els.forEach(el => {
+                    try {
+                        window.renderMathInElement(el, {
+                            delimiters: [
+                                {left: '$$', right: '$$', display: true},
+                                {left: '$', right: '$', display: false},
+                                {left: '\\(', right: '\\)', display: false},
+                                {left: '\\[', right: '\\]', display: true}
+                            ],
+                            throwOnError: false
+                        });
+                    } catch (e) {
+                        console.error('KaTeX error:', e);
+                    }
+                });
+            });
+        };
+
+        onMounted(() => {
+            renderMath();
+            window.addEventListener('plainbook:flush-edits', handleFlushEdits);
+        });
+
+        onBeforeUnmount(() => {
+            window.removeEventListener('plainbook:flush-edits', handleFlushEdits);
+        });
+
+        watch([rendered], () => {
+            renderMath();
+        });
 
         const autoResize = () => {
             const el = textareaEl.value;
@@ -36,7 +71,6 @@ const ExplanationRenderer = {
             el.style.height = `${el.scrollHeight}px`;
         };
 
-        // keep local copy in sync if parent changes
         watch(() => props.source, (val) => {
             localSource.value = (Array.isArray(val) ? val.join('') : val) || '';
             nextTick(autoResize);
@@ -63,14 +97,12 @@ const ExplanationRenderer = {
             isEditing.value = true;
             nextTick(() => {
                 autoResize();
-                // if (textareaEl.value) textareaEl.value.scrollTop = 0;
             });
         };
 
         watch(() => props.startEditKey, (newVal) => {
             if (newVal !== undefined) {
                 enterEditMode();
-                // Force focus after autoResize
                 nextTick(() => {
                     if (textareaEl.value) textareaEl.value.focus();
                 });
@@ -88,24 +120,15 @@ const ExplanationRenderer = {
             emit('saveandrun', localSource.value);
         };
 
-        // Handler for the flush-edits event: save if currently editing.
         const handleFlushEdits = () => {
             if (isEditing.value) {
                 saveChanges();
             }
         };
 
-        // On blur, dispatch the flush event (which this and other editors listen for).
         const onBlur = () => {
             window.dispatchEvent(new Event('plainbook:flush-edits'));
         };
-
-        onMounted(() => {
-            window.addEventListener('plainbook:flush-edits', handleFlushEdits);
-        });
-        onBeforeUnmount(() => {
-            window.removeEventListener('plainbook:flush-edits', handleFlushEdits);
-        });
 
         const cancelEdit = () => {
             const originalIsEmpty = !originalSource.value || originalSource.value.trim().length === 0;
@@ -121,8 +144,6 @@ const ExplanationRenderer = {
         const generating = ref(false);
         const onGenCode = () => {
             generating.value = true;
-            // hasError is true exactly when the button reads "Fix Code": signal
-            // the parent to also amend the description, not just regenerate code.
             emit('gencode', props.hasError);
         };
         const validating = ref(false);
@@ -130,14 +151,40 @@ const ExplanationRenderer = {
             validating.value = true;
             emit('validate');
         };
+        const explaining = ref(false);
+        const showExplainModal = ref(false);
+        const explanationLevel = ref(2);
+        const useBullets = ref(true);
+        const useLatex = ref(true);
+
+        const onExplain = () => {
+            showExplainModal.value = true;
+        };
+
+        const confirmExplain = () => {
+            showExplainModal.value = false;
+            explaining.value = true;
+            emit('explain', {
+                level: explanationLevel.value,
+                use_bullets: useBullets.value,
+                use_latex: useLatex.value
+            });
+        };
+
+        const explanationLevelLabel = computed(() => {
+            const labels = { 1: 'Brief', 2: 'Normal', 3: 'Detailed', 4: 'Expert' };
+            return labels[explanationLevel.value];
+        });
+
         watch(() => props.running, (val) => {
             if (!val) {
                 generating.value = false;
                 validating.value = false;
+                explaining.value = false;
             }
         });
 
-        const clearLabel = computed(() => isTestCell.value ? 'Clear code' : 'Clear code');
+        const clearLabel = computed(() => 'Clear code');
         const generateLabel = computed(() => {
             if (props.hasError) return 'Fix Code';
             if (props.hasCode) return 'Regenerate code';
@@ -147,20 +194,14 @@ const ExplanationRenderer = {
             if (props.hasError) return 'Stop fixing';
             return 'Stop generating';
         });
-        const validateLabel = computed(() => isTestCell.value ? 'Validate code' : 'Validate code');
+        const validateLabel = computed(() => 'Validate code');
 
         const placeholderText = computed(() => {
-            if (mode.value === 'unit_setup') return 'Describe how to prepare the data before running the target cell. For help on testing a cell, click on the green info button above.';
-            if (mode.value === 'unit_test') return 'Describe what should be checked after the target cell runs.';
-            if (isTestCell.value) return 'Describe what should be tested. For help on writing tests, click on the green information button below.';
+            if (mode.value === 'unit_setup') return 'Describe how to prepare the data...';
+            if (mode.value === 'unit_test') return 'Describe what should be checked...';
             return 'Explain what the cell should do...';
         });
 
-        // Pressing any toolbar or edit-mode button implies the user is acting
-        // on the cell, so dismiss the top-level error bar. Use the capture phase
-        // so this still fires for buttons that stop click propagation
-        // (@click.stop); the closest('button') guard limits it to actual button
-        // presses (not clicks on the textarea or empty toolbar space).
         const onButtonPress = (event) => {
             if (event.target.closest('button')) emit('dismiss-error');
         };
@@ -168,156 +209,111 @@ const ExplanationRenderer = {
         return { isEditing, localSource, rendered, enterEditMode, saveChanges,
             cancelEdit, textareaEl, autoResize, saveAndRun, onBlur, localIsLocked,
             isTestCell, clearLabel, generateLabel, stopGenerateLabel, validateLabel,
-            generating, onGenCode, validating, onValidate, onButtonPress,
+            generating, onGenCode, validating, onValidate,
+            explaining, onExplain, showExplainModal, explanationLevel, explanationLevelLabel,
+            useBullets, useLatex, confirmExplain,
+            onButtonPress,
             mode, showRun, showMoveUpDown, showDelete, showTestHelp, showUnitTest, showSaveAndRun,
             placeholderText };
     },
 
     template: /* html */ `
-        <div class="explanation-container pt-3 pl-4 pr-4 pb-1">
-            <div v-if="!isEditing" 
+        <div class="explanation-container pl-4 pr-4 pb-1 pt-3">
+            <div v-if="!isEditing"
                  class="explanation-body content"
+                 ref="explanationBody"
                  v-html="rendered" @dblclick="enterEditMode">
             </div>
+            <div v-else class="explanation-editor-active">
+                <textarea
+                    ref="textareaEl"
+                    v-model="localSource"
+                    class="textarea is-small"
+                    :placeholder="placeholderText"
+                    :disabled="localIsLocked"
+                    @input="autoResize"
+                    @blur="onBlur"
+                    @keydown.meta.enter="saveAndRun"
+                    @keydown.ctrl.enter="saveAndRun"
+                    @keydown.esc="cancelEdit"></textarea>
+                <div class="buttons mt-1 is-right">
+                    <button class="button is-small" @click="cancelEdit">Cancel</button>
+                    <button class="button is-small is-info" @click="saveChanges">Save</button>
+                    <button v-if="showSaveAndRun" class="button is-small is-primary" @click="saveAndRun">Save & Run</button>
+                </div>
+            </div>
         </div>
-        <div v-if="!isEditing && isActive"
-                class="explanation-toolbar pl-3 pr-3"
-                style="flex-wrap: wrap;"
-                @click.capture="onButtonPress">
+
+        <div v-if="!isEditing && isActive" class="explanation-toolbar pl-3 pr-3" style="flex-wrap: wrap;" @click.capture="onButtonPress">
             <div class="toolbar-left">
                 <template v-if="showRun">
-                    <button v-if="running" class="button run-button is-small mr-1 is-primary"
-                            title="Interrupt execution" @click.stop="$emit('interrupt')">
-                        <span class="icon"><i class="bx bx-stop-circle"></i></span>
-                        <span>Interrupt</span>
+                    <button v-if="running" class="button run-button is-small mr-1 is-primary" @click.stop="$emit('interrupt')">
+                        <span class="icon"><i class="bx bx-stop-circle"></i></span><span>Interrupt</span>
                     </button>
-                    <button v-else class="button run-button is-small mr-1"
-                            :class="isTestCell ? 'is-warning' : 'is-primary'"
-                            title="Run this cell and all necessary preceding cells" @click.stop="$emit('run')">
-                        <span class="icon"><i class="bx bx-play"></i></span>
-                        <span v-if="!isTestCell">Run</span>
-                        <span v-else>Run test</span>
+                    <button v-else class="button run-button is-small mr-1" :class="isTestCell ? 'is-warning' : 'is-primary'" @click.stop="$emit('run')">
+                        <span class="icon"><i class="bx bx-play"></i></span><span>{{ isTestCell ? 'Run test' : 'Run' }}</span>
                     </button>
                 </template>
-                <template v-if="hasError">
-                    <button v-if="generating" class="button is-small is-success mr-1"
-                            title="Stop fixing the code" @click.stop="$emit('interrupt')">
-                        <span class="icon"><i class="bx bx-stop-circle"></i></span>
-                        <span>{{ stopGenerateLabel }}</span>
-                    </button>
-                    <button v-else class="button is-small is-warning has-text-weight-bold mr-1"
-                            title="Fix the code so it runs without errors"
-                            :disabled="running || localIsLocked || !localSource.trim()" @click.stop="onGenCode">
-                        <span class="icon"><i class="bx bx-cognition"></i></span>
-                        <span>{{ generateLabel }}</span>
-                    </button>
-                </template>
-                <button v-if="showTestHelp" class="button is-success is-small mr-1" title="Test Help" @click.stop="$emit('open-test-help')">
-                    <span class="icon"><i class="bx bx-info-circle"></i></span>
+
+                <button class="button is-small" style="opacity: 0.6;" @click.stop="$emit('toggle-output')">
+                    <span class="icon"><i :class="outputVisible ? 'bx bx-eye-slash' : 'bx bx-eye'"></i></span>
+                    <span>Output: {{ !codeValid || !outputValid ? 'Stale' : (asRead ? 'Unmodified' : 'Up to date') }}</span>
                 </button>
-                <button class="button is-small" style="opacity: 0.6;"
-                    title="Toggle output visibility"
-                    @click.stop="$emit('toggle-output')">
-                    <span class="icon">
-                        <i :class="outputVisible ? 'bx bx-eye-slash' : 'bx bx-eye'"></i>
-                    </span>
-                    <span>Output:&nbsp;</span>
-                    <span v-if="!codeValid">Stale</span>
-                    <span v-else-if="!outputValid">Stale</span>
-                    <span v-else-if="asRead">Unmodified</span>
-                    <span v-else>Up to date</span>
+
+                <button class="button is-small ml-1" style="opacity: 0.6;" @click.stop="$emit('toggle-ai-description')">
+                    <span class="icon"><i :class="aiDescriptionVisible ? 'bx bx-chevron-down' : 'bx bx-chevron-right'"></i></span>
+                    <span>AI Description</span>
                 </button>
             </div>
+
             <div class="toolbar-right" style="display: flex; flex-wrap: wrap; gap: 0.25rem;">
-                <button class="button is-small is-info" title="Edit action description"
-                        :disabled="localIsLocked" @click.stop="enterEditMode">
+                <button class="button is-small is-info" :disabled="localIsLocked" @click.stop="enterEditMode">
                     <span class="icon"><i class="bx bx-pencil"></i></span><span>Edit</span>
                 </button>
-                <button v-if="showMoveUpDown" class="button is-small is-info py-1 "
-                        :disabled="localIsLocked"
-                        title="Move cell up" aria-label="Move Up" @click.stop="$emit('moveUp')">
-                    <span class="icon"><i class="bx bx-arrow-up"></i></span>
-                </button>
-                <button v-if="showMoveUpDown" class="button is-small is-info py-1 "
-                        :disabled="localIsLocked"
-                        title="Move cell down" aria-label="Move Down" @click.stop="$emit('moveDown')">
-                    <span class="icon"><i class="bx bx-arrow-down"></i></span>
-                </button>
-                <button v-if="showUnitTest" class="button is-small is-warning" title="Unit Test"
-                        @click.stop="$emit('open-unit-test')">
+                <button v-if="showUnitTest" class="button is-small is-warning" @click.stop="$emit('open-unit-test')">
                     <span v-if="unitTestCount" class="unit-test-counter mr-1" style="font-weight: 600;">{{ unitTestCount }}</span>
-                    <span class="icon"><i class="bx bx-medical-flask"></i></span>
-                    <span>Test this cell</span>
+                    <span class="icon"><i class="bx bx-medical-flask"></i></span><span>Test this cell</span>
                 </button>
-                <button class="button is-small"
-                        :class="isTestCell ? 'is-warning' : 'is-success'"
-                        :title="clearLabel"
-                        :disabled="localIsLocked || !hasCode" @click.stop="$emit('clearcode')">
-                    <span class="icon"><i class="bx bx-eraser"></i></span>
-                    <span>{{ clearLabel }}</span>
+                <button class="button is-small" :class="isTestCell ? 'is-warning' : 'is-success'" :disabled="localIsLocked || !hasCode" @click.stop="$emit('clearcode')">
+                    <span class="icon"><i class="bx bx-eraser"></i></span><span>Clear code</span>
                 </button>
-                <template v-if="!hasError">
-                    <button v-if="generating" class="button is-small is-success"
-                            title="Stop code generation" @click.stop="$emit('interrupt')">
-                        <span class="icon"><i class="bx bx-stop-circle"></i></span>
-                        <span>{{ stopGenerateLabel }}</span>
-                    </button>
-                    <button v-else class="button is-small"
-                            :class="isTestCell ? 'is-warning' : 'is-success'"
-                            title="Generate or regenerate the code"
-                            :disabled="running || localIsLocked || !localSource.trim()" @click.stop="onGenCode">
-                        <span class="icon"><i class="bx bx-cognition"></i></span>
-                        <span>{{ generateLabel }}</span>
-                    </button>
-                </template>
-                <button v-if="validating" class="button is-small is-success"
-                        title="Stop validation" @click.stop="$emit('interrupt')">
-                    <span class="icon"><i class="bx bx-stop-circle"></i></span>
-                    <span>Stop validation</span>
+                <button v-if="!hasError" class="button is-small" :class="isTestCell ? 'is-warning' : 'is-success'" :disabled="running || localIsLocked || !localSource.trim()" @click.stop="onGenCode">
+                    <span class="icon"><i class="bx bx-cognition"></i></span><span>{{ generateLabel }}</span>
                 </button>
-                <button v-else :disabled="running || !codeValid" class="button is-small"
-                        :class="isTestCell ? 'is-warning' : 'is-success'"
-                        title="Validate code against description" @click.stop="onValidate">
-                    <span class="icon"><i class="bx bx-check"></i></span> <span>{{ validateLabel }}</span>
+                <button v-else class="button is-small is-warning has-text-weight-bold" :disabled="running || localIsLocked" @click.stop="onGenCode">
+                    <span class="icon"><i class="bx bx-cognition"></i></span><span>Fix Code</span>
                 </button>
-                <button v-if="showDelete" class="button is-small is-danger py-1 " title="Delete cell" aria-label="Delete"
-                        :disabled="localIsLocked" @click.stop="$emit('delete')">
+                <button v-else :disabled="running || !codeValid" class="button is-small" :class="isTestCell ? 'is-warning' : 'is-success'" @click.stop="onValidate">
+                    <span class="icon"><i class="bx bx-check"></i></span><span>{{ validateLabel }}</span>
+                </button>
+                <button :disabled="running || !hasCode" class="button is-small" style="background-color: #b86bff; color: white; border-color: #b86bff;" @click.stop="onExplain">
+                    <span class="icon"><i class="bx bx-help-circle"></i></span><span>Explain code</span>
+                </button>
+                <button v-if="showDelete" class="button is-small is-danger py-1" :disabled="localIsLocked" @click.stop="$emit('delete')">
                     <span class="icon"><i class="bx bx-trash"></i></span>
                 </button>
             </div>
         </div>
 
-        <div v-if="isEditing" class="explanation-edit-mode px-2 pb-2"
-                @click.capture="onButtonPress">
-            <textarea 
-                ref="textareaEl"
-                v-model="localSource" 
-                :placeholder="placeholderText"
-                class="textarea is-family-monospace mb-2" 
-                rows="1"
-                style="overflow: hidden; resize: none; height: 0;"
-                @input="autoResize"
-                @blur="onBlur"
-                @keydown.enter.shift.prevent="saveAndRun">
-            </textarea>
-            <div style="display: flex; justify-content: space-between; align-items: center;">
-                <div>
-                    <button v-if="isTestCell" class="button is-success is-small" title="Test Help" @mousedown.prevent @click.stop="$emit('open-test-help')">
-                        <span class="icon"><i class="bx bx-info-circle"></i></span>
-                    </button>
-                </div>
-                <div style="display: flex; gap: 0.5rem;">
-                <button class="button is-small" @mousedown.prevent @click="cancelEdit">
-                    Cancel
-                </button>
-                <button class="button is-small is-info" :disabled="localIsLocked" @mousedown.prevent @click="saveChanges">
-                    Save
-                </button>
-                <button v-if="showSaveAndRun" class="button is-small" :class="isTestCell ? 'is-warning' : 'is-primary'" :disabled="localIsLocked" @mousedown.prevent @click="saveAndRun">
-                    <span class="icon"><i class="bx bx-play"></i></span>
-                    <span>Save and Run</span>
-                </button>
-                </div>
+        <div class="modal" :class="{'is-active': showExplainModal}">
+            <div class="modal-background" @click="showExplainModal = false"></div>
+            <div class="modal-card" style="max-width: 400px;">
+                <header class="modal-card-head py-3">
+                    <p class="modal-card-title is-size-5">Explain Code</p>
+                    <button class="delete" @click="showExplainModal = false"></button>
+                </header>
+                <section class="modal-card-body">
+                    <div class="field">
+                        <label class="label">Detail: <strong>{{ explanationLevelLabel }}</strong></label>
+                        <input class="slider is-fullwidth is-primary" type="range" min="1" max="4" step="1" v-model.number="explanationLevel" style="width: 100%;">
+                    </div>
+                    <div class="field mt-4"><label class="checkbox"><input type="checkbox" v-model="useBullets"> Include bullet points</label></div>
+                    <div class="field"><label class="checkbox"><input type="checkbox" v-model="useLatex"> Use LaTeX for equations</label></div>
+                </section>
+                <footer class="modal-card-foot py-3" style="justify-content: flex-end;">
+                    <button class="button is-small" @click="showExplainModal = false">Cancel</button>
+                    <button class="button is-small is-primary" style="background-color: #b86bff; border-color: #b86bff;" @click="confirmExplain">Explain</button>
+                </footer>
             </div>
         </div>
     `

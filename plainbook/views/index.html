@@ -9,6 +9,9 @@
     <link rel="stylesheet" href="css/boxicons-free/fonts/basic/boxicons.min.css">
     <link rel="stylesheet" href="css/boxicons-free/fonts/animations.min.css">
     <link rel="stylesheet" href="css/boxicons-free/fonts/transformations.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/katex.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/katex.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/katex@0.16.21/dist/contrib/auto-render.min.js"></script>
     <style>
         /* Prevent the main page from scrolling */
     html, body {
@@ -175,6 +178,7 @@
                         @generate-code="ui_forceRegenerateCellCode(index, $event)"
                         @clear-code="clearCellCode(index)"
                         @validate-code="ui_validateCode(index)"
+                        @explain-code="ui_explainCode(index, $event)"
                         @dismiss-validation="dismissValidation(index)"
                         @install-module="(module) => ui_installModule(index, module)"
                         @dismiss-module-install="dismissModuleInstall(index)"
@@ -217,6 +221,7 @@
         :has-claude-key="hasClaudeKey"
         :claude-via-bedrock="claudeViaBedrock"
         :skip-reexecution="skipReexecution"
+        :auto-explain="autoExplain"
         @close="showSettings = false"
         @save="(keys) => {showSettings = false; saveSettings(keys); }"
     />

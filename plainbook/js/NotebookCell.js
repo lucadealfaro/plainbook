@@ -1,4 +1,4 @@
-import { ref, computed, watch } from './vue.esm-browser.js';
+import { ref, computed, watch, nextTick } from './vue.esm-browser.js';
 
 // NotebookCell.js
 import MarkdownCell from './MarkdownCell.js';
@@ -8,6 +8,7 @@ import ValidationCell from './ValidationCell.js';
 import OutputRenderer from './OutputRenderer.js';
 import MissingModuleBar from './MissingModuleBar.js';
 import { outputsHaveError } from './errorUtils.js';
+
 export default {
     components: { MarkdownCell, CodeCell, ExplanationEditor, ValidationCell, OutputRenderer, MissingModuleBar },
     props: ['cell', 'isActive', 'isLocked', 'running', 'codeValid', 'outputValid', 'executed',
@@ -15,7 +16,7 @@ export default {
     emits: [
         'save-markdown', 'save-explanation', 'save-code',
         'run-cell', 'save-and-run', 'save-code-and-run', 'generate-code', 'clear-code',
-        'validate-code', 'dismiss-validation',
+        'validate-code', 'explain-code', 'dismiss-validation',
         'delete', 'move-up', 'move-down',
         'activate', 'interrupt',
         'run-test', 'save-and-run-test', 'save-code-and-run-test', 'generate-test-code', 'open-test-help',
@@ -24,6 +25,30 @@ export default {
         'dismiss-error'
     ],
     setup(props, { emit }) {
+        const md = window.markdownit ? window.markdownit({ html: true, linkify: true, typographer: true }) : { render: (x) => x };
+        const aiExplanationBody = ref(null);
+        const aiDescriptionVisible = ref(true);
+
+        const renderAiExplanation = (text) => {
+            return md.render(text || '');
+        };
+
+        const renderMath = () => {
+            if (window.renderMathInElement && aiExplanationBody.value && aiDescriptionVisible.value) {
+                window.renderMathInElement(aiExplanationBody.value, {
+                    delimiters: [
+                        {left: '$$', right: '$$', display: true},
+                        {left: '$', right: '$', display: false}
+                    ],
+                    throwOnError: false
+                });
+            }
+        };
+
+        watch([() => props.cell.metadata?.ai_explanation, aiDescriptionVisible], () => {
+            if (aiDescriptionVisible.value) nextTick(renderMath);
+        }, { immediate: true });
+
         const hasError = computed(() => {
             if (!['code', 'test'].includes(props.cell.cell_type)) return false;
             return outputsHaveError(props.cell.outputs);
@@ -31,9 +56,6 @@ export default {
 
         const outputVisible = ref(true);
 
-        // Missing-module bar: shown when execution failed with a
-        // ModuleNotFoundError. The module name is parsed from the error
-        // value, e.g. "No module named 'plotly'".
         const missingModule = computed(() => {
             if (!['code', 'test'].includes(props.cell.cell_type)) return null;
             const errOut = (props.cell.outputs || []).find(
@@ -44,7 +66,6 @@ export default {
         });
 
         const moduleBarDismissed = ref(false);
-        // A re-run replaces the outputs array: show the bar again.
         watch(() => props.cell.outputs, () => { moduleBarDismissed.value = false; });
 
         const onModuleRewrite = () => {
@@ -59,7 +80,8 @@ export default {
         };
 
         return { hasError, outputVisible, missingModule, moduleBarDismissed,
-            onModuleRewrite, onModuleDismiss };
+            onModuleRewrite, onModuleDismiss, renderAiExplanation, aiExplanationBody,
+            aiDescriptionVisible };
     },
     template: /* html */ `
         <div class="notebook-cell box p-0 mb-2 is-clipped shadow-sm"
@@ -80,38 +102,41 @@ export default {
 
             <div v-else-if="cell.cell_type === 'code'">
                 <div class="bg-scheme-bis p-0 border-bottom">
-                <explanation-editor
-                        v-model:source="cell.metadata.explanation"
-                        :hasCode="(cell.source || '').trim().length > 0"
-                        :isActive="isActive"
-                        :isLocked="isLocked"
-                        :running="running"
-                        :asRead="asRead"
-                        :codeValid="codeValid"
-                        :outputValid="outputValid"
-                        :executed="executed"
-                        :hasError="hasError"
-                        :outputVisible="outputVisible"
-                        :start-edit-key="explanationEditKey"
-                        :unit-test-count="Object.keys(cell.metadata.unit_tests || {}).length"
-                        @save="$emit('save-explanation', $event)"
-                        @toggle-output="outputVisible = !outputVisible"
-                        @gencode="$emit('generate-code', $event)"
-                        @clearcode="$emit('clear-code')"
-                        @validate="$emit('validate-code')"
-                        @run="$emit('run-cell')"
-                        @interrupt="$emit('interrupt')"
-                        @saveandrun="$emit('save-and-run', $event)"
-                        @delete="$emit('delete')"
-                        @moveUp="$emit('move-up')"
-                        @moveDown="$emit('move-down')"
-                        @dismiss-error="$emit('dismiss-error')"
-                        @open-unit-test="$emit('open-unit-test')" />
+                    <explanation-editor
+                            v-model:source="cell.metadata.explanation"
+                            :hasCode="(cell.source || '').trim().length > 0"
+                            :isActive="isActive"
+                            :isLocked="isLocked"
+                            :running="running"
+                            :asRead="asRead"
+                            :codeValid="codeValid"
+                            :outputValid="outputValid"
+                            :executed="executed"
+                            :hasError="hasError"
+                            :outputVisible="outputVisible"
+                            :aiDescriptionVisible="aiDescriptionVisible"
+                            :start-edit-key="explanationEditKey"
+                            :unit-test-count="Object.keys(cell.metadata.unit_tests || {}).length"
+                            @save="$emit('save-explanation', $event)"
+                            @toggle-output="outputVisible = !outputVisible"
+                            @toggle-ai-description="aiDescriptionVisible = !aiDescriptionVisible"
+                            @gencode="$emit('generate-code', $event)"
+                            @clearcode="$emit('clear-code')"
+                            @validate="$emit('validate-code')"
+                            @explain="$emit('explain-code', $event)"
+                            @run="$emit('run-cell')"
+                            @interrupt="$emit('interrupt')"
+                            @saveandrun="$emit('save-and-run', $event)"
+                            @delete="$emit('delete')"
+                            @moveUp="$emit('move-up')"
+                            @moveDown="$emit('move-down')"
+                            @dismiss-error="$emit('dismiss-error')"
+                            @open-unit-test="$emit('open-unit-test')" />
                 </div>
 
                 <validation-cell
                     v-if="cell.metadata?.validation && !cell.metadata?.validation.is_hidden"
-                    :validation="cell.metadata.validation" 
+                    :validation="cell.metadata.validation"
                     @dismiss_validation="$emit('dismiss-validation')" />
 
                 <code-cell
@@ -127,7 +152,7 @@ export default {
                     @save="$emit('save-code', $event)"
                     @saveandrun="$emit('save-code-and-run', $event)"
                     @activate="$emit('activate')" />
-                
+
                 <div v-if="outputVisible && cell.outputs?.length" class="p-2 border-top bg-scheme-main">
                     <missing-module-bar
                         v-if="missingModule && !moduleBarDismissed"
@@ -139,6 +164,15 @@ export default {
                         @rewrite="onModuleRewrite"
                         @dismiss="onModuleDismiss" />
                     <output-renderer v-for="(out, oIdx) in cell.outputs" :key="oIdx" :output="out" />
+                </div>
+
+                <div v-if="cell.metadata?.ai_explanation && aiDescriptionVisible"
+                     class="bg-scheme-bis p-4 border-top">
+                    <div class="is-size-7 has-text-grey mb-2" style="display: flex; justify-content: space-between; align-items: center;">
+                        <span><i class="bx bx-help-circle"></i> AI DESCRIPTION</span>
+                        <button class="delete is-small" @click="delete cell.metadata.ai_explanation"></button>
+                    </div>
+                    <div class="explanation-body content" ref="aiExplanationBody" v-html="renderAiExplanation(cell.metadata.ai_explanation)"></div>
                 </div>
             </div>
 
@@ -156,13 +190,16 @@ export default {
                         :executed="false"
                         :hasError="hasError"
                         :outputVisible="outputVisible"
+                        :aiDescriptionVisible="aiDescriptionVisible"
                         :start-edit-key="explanationEditKey"
                         cellMode="test"
                         @save="$emit('save-explanation', $event)"
                         @toggle-output="outputVisible = !outputVisible"
+                        @toggle-ai-description="aiDescriptionVisible = !aiDescriptionVisible"
                         @gencode="$emit('generate-test-code')"
                         @clearcode="$emit('clear-code')"
                         @validate="$emit('validate-code')"
+                        @explain="$emit('explain-code')"
                         @run="$emit('run-test')"
                         @interrupt="$emit('interrupt')"
                         @saveandrun="$emit('save-and-run-test', $event)"

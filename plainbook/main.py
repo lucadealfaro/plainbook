@@ -656,6 +656,34 @@ def validate_code_cell():
     return dict(status='success', validation=validation_result)
 
 
+@post('/explain_code')
+@action_log.logged('explain_code')
+@stateful
+@require_token
+def explain_code_cell():
+    data = request.json
+    cell_index = data.get('cell_index')
+    level = data.get('level', 2)
+    use_bullets = data.get('use_bullets', False)
+    use_latex = data.get('use_latex', False)
+    api_key, ai_provider, model, error = _get_ai_config()
+    if error:
+        return dict(status='error', message=error)
+    try:
+        explanation, index = notebook.explain_code_cell(
+            api_key, cell_index, level=level,
+            use_bullets=use_bullets, use_latex=use_latex,
+            ai_provider=ai_provider, model=model)
+    except Exception as e:
+        friendly = _check_billing_error(e)
+        if friendly:
+            return dict(status='error', message=friendly)
+        raise
+    if explanation is None:
+        return dict(status='cancelled')
+    return dict(status='success', explanation=explanation, index=index)
+
+
 @post('/validate_unit_test_code')
 @action_log.logged('validate_unit_test_code')
 @stateful
@@ -790,6 +818,17 @@ def set_skip_reexecution():
     data = request.json
     skip = data.get('skip', True)
     notebook.set_skip_reexecution(skip)
+    return {}
+
+
+@post('/set_auto_explain')
+@action_log.logged('set_auto_explain')
+@stateful
+@require_token
+def set_auto_explain():
+    data = request.json
+    auto_explain = data.get('auto_explain', False)
+    notebook.set_auto_explain(auto_explain)
     return {}
 
 

@@ -16,8 +16,8 @@ export default {
         },
         formattedTokens() {
             const t = this.totalTokens;
-            if (t >= 1_000_000) return (t / 1_000_000).toFixed(1) + 'M';
-            if (t >= 1_000) return (t / 1_000).toFixed(1) + 'k';
+            if (t >= 1000000) return (t / 1000000).toFixed(1) + 'M';
+            if (t >= 1000) return (t / 1000).toFixed(1) + 'k';
             return String(t);
         },
         activeProviderName() {
@@ -150,6 +150,9 @@ export default {
                             </span>
                             <span v-else-if="runningActivity && runningActivity.type === 'validating'">
                                 Validating cell {{ runningActivity.cellIndex + 1 }}<template v-if="runningActivity.cellName">: {{ runningActivity.cellName }}</template>
+                            </span>
+                            <span v-else-if="runningActivity && runningActivity.type === 'explaining'">
+                                Explaining cell {{ runningActivity.cellIndex + 1 }}<template v-if="runningActivity.cellName">: {{ runningActivity.cellName }}</template>
                             </span>
                             <span v-else-if="runningActivity && runningActivity.type === 'verifying'">
                                 Verifying notebook&hellip;

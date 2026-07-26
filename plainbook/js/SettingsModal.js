@@ -1,12 +1,13 @@
 import { ref, watch } from './vue.esm-browser.js';
 
 export default {
-    props: ['isActive', 'isCodespace', 'hasGeminiKey', 'hasClaudeKey', 'claudeViaBedrock', 'skipReexecution'],
+    props: ['isActive', 'isCodespace', 'hasGeminiKey', 'hasClaudeKey', 'claudeViaBedrock', 'skipReexecution', 'autoExplain'],
     emits: ['close', 'save'],
     setup(props, { emit }) {
         const localGeminiKey = ref('');
         const localClaudeKey = ref('');
         const localSkipReexecution = ref(true);
+        const localAutoExplain = ref(false);
         // Track whether the user has clicked to edit each field
         const geminiEditing = ref(false);
         const claudeEditing = ref(false);
@@ -25,6 +26,7 @@ export default {
                 claudeRemoved.value = false;
                 // Default to on when the setting is not yet defined.
                 localSkipReexecution.value = props.skipReexecution !== false;
+                localAutoExplain.value = !!props.autoExplain;
             }
         });
 
@@ -49,10 +51,11 @@ export default {
                 gemini_api_key: geminiRemoved.value ? null : ((geminiEditing.value || !props.hasGeminiKey) ? localGeminiKey.value : ''),
                 claude_api_key: claudeRemoved.value ? null : ((claudeEditing.value || !props.hasClaudeKey) ? localClaudeKey.value : ''),
                 skip_reexecution: localSkipReexecution.value,
+                auto_explain: localAutoExplain.value,
             });
         };
 
-        return { localGeminiKey, localClaudeKey, geminiEditing, claudeEditing, geminiRemoved, claudeRemoved, localSkipReexecution, startEditing, removeKey, handleSave };
+        return { localGeminiKey, localClaudeKey, geminiEditing, claudeEditing, geminiRemoved, claudeRemoved, localSkipReexecution, localAutoExplain, startEditing, removeKey, handleSave };
     },
     template: /* html */ `
     <div class="modal" :class="{'is-active': isActive}">
@@ -133,6 +136,17 @@ export default {
                         When on (default), a cell whose code and inputs have not changed is not
                         re-run — its result is reconstructed instead. Turn this off if cells depend on
                         untracked inputs such as the current time, random numbers, or external files.
+                    </p>
+                </div>
+                <hr>
+                <div class="field">
+                    <label class="label">AI Features</label>
+                    <label class="checkbox">
+                        <input type="checkbox" v-model="localAutoExplain">
+                        Automatically explain cells after generation
+                    </label>
+                    <p class="help is-size-7" style="opacity: 0.7;">
+                        Yo, this uses a lot of tokens.
                     </p>
                 </div>
             </section>

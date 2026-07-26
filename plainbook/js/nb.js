@@ -80,6 +80,7 @@ createApp({
         const logEnabled = ref(false);
         const logviewEnabled = ref(false);
         const printAllEnabled = ref(false);
+        const autoExplain = ref(false);
 
         const availableAiProviders = computed(() => {
             const apiKeys = {
@@ -145,6 +146,9 @@ createApp({
             shareOutputWithAi.value = state.share_output_with_ai;
             if (state.skip_reexecution !== undefined) {
                 skipReexecution.value = state.skip_reexecution;
+            }
+            if (state.auto_explain !== undefined) {
+                autoExplain.value = state.auto_explain;
             }
             if (state.ai_tokens) {
                 aiTokens.value = state.ai_tokens;
@@ -469,6 +473,45 @@ createApp({
             }
         };
 
+        const explainCode = async (cellIndex, config = {}) => {
+            if (!activeAiProvider.value) {
+                throw new Error('No AI provider is active. Please set an API key in Settings.');
+            };
+            asRead.value = false;
+            const cell = notebook.value.cells[cellIndex];
+            runningActivity.value = { type: 'explaining', cellIndex, cellName: cell.metadata.name || null };
+            try {
+                const r = await apiCall('/explain_code', 'POST', {
+                    cell_index: cellIndex,
+                    level: config.level || 2,
+                    use_bullets: config.use_bullets || false,
+                    use_latex: config.use_latex || false
+                });
+                if (r.status === 'cancelled') {
+                    console.log('Explanation cancelled for cell:', cellIndex);
+                } else if (r.status === 'error') {
+                    throw new Error(r.message || 'Explanation failed');
+                } else if (r.status === 'success') {
+                    // Set the AI explanation separately
+                    if (notebook.value && notebook.value.cells[cellIndex]) {
+                        notebook.value.cells[cellIndex].metadata.ai_explanation = r.explanation;
+                    }
+                    console.log('Code explanation received for cell:', cellIndex);
+                }
+            } catch (err) {
+                throw new Error(err.message || 'Failed to explain code', { cause: err });
+            }
+        };
+
+        const ui_explainCode = async (cellIndex, config) => {
+            if (!running.value) {
+                running.value = true;
+                await explainCode(cellIndex, config);
+                running.value = false;
+                runningActivity.value = { type: null, cellIndex: null };
+            }
+        };
+
         const dismissValidation = async (cellIndex) => {
             try {
                 await apiCall('/set_validation_visibility', 'POST', { cell_index: cellIndex, is_hidden: true });
@@ -668,6 +711,11 @@ createApp({
                         cell.metadata.explanation = r.explanation;
                     }
                     console.log('Code generated for cell:', cellIndex);
+
+                    // Auto-explain if enabled
+                    if (autoExplain.value) {
+                        await explainCode(cellIndex, { level: 2, use_bullets: true, use_latex: true });
+                    }
                 }
             } else if (r.status == 'cancelled') {
                 console.log('Code generation cancelled for cell:', cellIndex);
@@ -1513,6 +1561,14 @@ createApp({
                     throw new Error('Error saving execution setting', { cause: err });
                 }
             }
+            // Save the auto-explain setting.
+            if (keys.auto_explain !== undefined) {
+                try {
+                    await apiCall('/set_auto_explain', 'POST', { auto_explain: keys.auto_explain });
+                } catch (err) {
+                    throw new Error('Error saving AI setting', { cause: err });
+                }
+            }
         };
 
         const setActiveAiProvider = async (providerId) => {
@@ -1584,7 +1640,7 @@ createApp({
             sendExplanationToServer, authToken,
             sendCodeToServer, clearCellCode, ui_saveExplanationAndRun, ui_saveCodeAndRun,
             sendMarkdownToServer, generateCode, activeIndex, reloadNotebook, downloadIpynb,
-            validateCode, ui_validateCode, dismissValidation, ui_verifyNotebook, dismissVerification, ui_resetAndRunAllCells, ui_forceRegenerateCellCode,
+            validateCode, ui_validateCode, explainCode, ui_explainCode, dismissValidation, ui_verifyNotebook, dismissVerification, ui_resetAndRunAllCells, ui_forceRegenerateCellCode,
             setActiveCell, ui_runCell, running, runningActivity, asRead,
             ui_interruptKernel, insertCell, markdownEditKey,
             moduleInstall, ui_installModule, dismissModuleInstall,
@@ -1593,7 +1649,7 @@ createApp({
             saveSettings, showSettings, showInfo, showTestHelp,
             genError, uiError, closeUiError, renameNotebook, debug, sendDebugRequest, resetTokens,
             explanationEditKey, deleteCell, moveCell,
-            clearOutputs, activeAiProvider, availableAiProviders, setActiveAiProvider, isCodespace, hasGeminiKey, hasClaudeKey, claudeViaBedrock, logEnabled, logviewEnabled, printAllEnabled, authToken,
+            clearOutputs, activeAiProvider, availableAiProviders, setActiveAiProvider, isCodespace, hasGeminiKey, hasClaudeKey, claudeViaBedrock, logEnabled, logviewEnabled, printAllEnabled, autoExplain, authToken,
             restarting, ui_restart,
             ui_runTestCell, ui_runAllTests, ui_saveExplanationAndRunTest, ui_saveCodeAndRunTest, ui_forceRegenerateTestCode,
             unitTestTargetIndex, unitTestActiveSubcell, unitTestActiveTestName, enterUnitTestMode, exitUnitTestMode,

@@ -101,6 +101,16 @@ You should return the words YES (if the code meets the instructions) or NO (if i
 followed by a brief explanation.
 """
 
+EXPLAIN_INSTRUCTIONS = """
+You are an assistant that explains Python code in natural language.
+Your task is to explain every part of the code provided to you.
+The explanation should be aimed at someone who is knowledgeable on the subject matter
+(e.g., data science, machine learning) but does not know the syntax of Python or how to code.
+The explanation should be clear, concise, and sufficient for a domain expert to understand
+the logic and implementation details without needing to read the code themselves.
+Do not include markdown code fences in your response, just the natural language explanation.
+"""
+
 VALIDATION_FEEDBACK_PREAMBLE = """The previous code for this cell does not seem to be correct.
 Here are comments on it given by an AI model:"""
 

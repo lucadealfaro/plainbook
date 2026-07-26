@@ -1,0 +1,157 @@
+{
+ "cells": [
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "6b9c532c",
+   "metadata": {
+    "ai_explanation": "The code implements a Physics-Informed Neural Network (PINN) designed to solve the two-dimensional Navier-Stokes equations for incompressible fluid flow. The implementation is organized into a model architecture, a physics-based loss function, and an optimization loop.\n\n*   **Model Architecture**: The network, named `NavierStokesPINN`, is a fully connected neural network (multilayer perceptron).\n    *   The input layer accepts three features representing the independent variables: horizontal position ($x$), vertical position ($y$), and time ($t$).\n    *   The hidden structure consists of three layers, each containing 50 neurons. The hyperbolic tangent ($\\tanh$) activation function is applied between layers to ensure the model is sufficiently smooth and differentiable, which is critical for computing higher-order derivatives.\n    *   The output layer produces three values representing the dependent physical variables: the horizontal velocity component ($u$), the vertical velocity component ($v$), and the fluid pressure ($p$).\n\n*   **Forward Pass Logic**: Within the model, the `forward` method handles the data flow. It combines the individual inputs ($x, y, t$) into a single vector, passes them through the sequential layers, and then slices the resulting output vector to return the velocity components and pressure as separate entities.\n\n*   **Navier-Stokes Loss Function**: The function `navier_stokes_loss` is the core of the PINN. It calculates the \"residual\" of the partial differential equations (PDEs), which measures how well the network's current predictions satisfy the laws of physics.\n    *   **Automatic Differentiation**: The code explicitly enables gradient tracking for the input coordinates. It uses automatic differentiation to calculate the necessary partial derivatives of the outputs ($u, v, p$) with respect to the inputs ($x, y, t$). This includes first-order temporal and spatial derivatives, as well as second-order spatial derivatives required for the viscous terms.\n    *   **Momentum Equations**: The code constructs the residuals for the $x$ and $y$ momentum equations:\n        $$f_u = \\frac{\\partial u}{\\partial t} + u\\frac{\\partial u}{\\partial x} + v\\frac{\\partial u}{\\partial y} + \\frac{\\partial p}{\\partial x} - \\nu \\left( \\frac{\\partial^2 u}{\\partial x^2} + \\frac{\\partial^2 u}{\\partial y^2} \\right)$$\n        $$f_v = \\frac{\\partial v}{\\partial t} + u\\frac{\\partial v}{\\partial x} + v\\frac{\\partial v}{\\partial y} + \\frac{\\partial p}{\\partial y} - \\nu \\left( \\frac{\\partial^2 v}{\\partial x^2} + \\frac{\\partial^2 v}{\\partial y^2} \\right)$$\n    *   **Continuity Equation**: It also calculates the mass conservation residual to ensure the flow remains incompressible:\n        $$f_{mass} = \\frac{\\partial u}{\\partial x} + \\frac{\\partial v}{\\partial y}$$\n    *   **Total PDE Loss**: The function returns the Mean Squared Error (MSE) of these residuals. As the training progresses, the optimizer will minimize this value, forcing the neural network to approximate a valid solution to the Navier-Stokes equations.\n\n*   **Initialization and Training Step**:\n    *   **Optimizer**: The model parameters are updated using the Adam optimizer, a common gradient-based optimization algorithm, with a specified learning rate.\n    *   **Collocation Points**: The code generates a set of 100 random points within the unit domain $[0, 1]$ for $x, y,$ and $t$. These are known as collocation points—locations where the PDE residuals are evaluated during training.\n    *   **Execution**: A single iteration of training is performed. The optimizer resets the gradients, the PDE loss is computed at the collocation points, the error is propagated backward through the network to calculate gradients of the loss with respect to the weights, and the optimizer updates the network weights. Finally, the script prints the initial residual loss to verify the system is working.",
+    "ai_explanation_timestamp": "2026-07-25T19:50:52.336730",
+    "code_hash": "854507c788c3f810685137930ebd106a97ae08cdc1522f28caedd379ae0e6167",
+    "code_timestamp": "2026-07-25T19:50:11.379045",
+    "description_hash": "854507c788c3f810685137930ebd106a97ae08cdc1522f28caedd379ae0e6167",
+    "execution_timestamp": "2026-07-25T19:50:15.025323",
+    "explanation": "create a simple pinn to solve navier stokes equations",
+    "explanation_timestamp": "2026-07-25T19:49:55.665912",
+    "name": "qihobaxaxiji",
+    "variables": {
+     "NavierStokesPINN": {
+      "type": "type"
+     },
+     "optimizer": {
+      "type": "Adam"
+     },
+     "pinn": {
+      "type": "NavierStokesPINN"
+     },
+     "t_col": {
+      "len": 100,
+      "type": "Tensor"
+     },
+     "x_col": {
+      "len": 100,
+      "type": "Tensor"
+     },
+     "y_col": {
+      "len": 100,
+      "type": "Tensor"
+     }
+    }
+   },
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Simple PINN initialized. Initial PDE Residual Loss: 0.003538\n"
+     ]
+    }
+   ],
+   "source": [
+    "import torch\n",
+    "import torch.nn as nn\n",
+    "import numpy as np\n",
+    "\n",
+    "class NavierStokesPINN(nn.Module):\n",
+    "    def __init__(self):\n",
+    "        super(NavierStokesPINN, self).__init__()\n",
+    "        # Input: x, y, t | Output: u, v, p\n",
+    "        self.net = nn.Sequential(\n",
+    "            nn.Linear(3, 50), nn.Tanh(),\n",
+    "            nn.Linear(50, 50), nn.Tanh(),\n",
+    "            nn.Linear(50, 50), nn.Tanh(),\n",
+    "            nn.Linear(50, 3)\n",
+    "        )\n",
+    "\n",
+    "    def forward(self, x, y, t):\n",
+    "        inputs = torch.cat([x, y, t], dim=1)\n",
+    "        out = self.net(inputs)\n",
+    "        u = out[:, 0:1]\n",
+    "        v = out[:, 1:2]\n",
+    "        p = out[:, 2:3]\n",
+    "        return u, v, p\n",
+    "\n",
+    "def navier_stokes_loss(model, x, y, t, nu=0.01):\n",
+    "    \"\"\"\n",
+    "    Computes the residual loss for the Navier-Stokes equations:\n",
+    "    u_t + (u.grad)u = -grad(p) + nu*laplacian(u)\n",
+    "    div(u) = 0\n",
+    "    \"\"\"\n",
+    "    x.requires_grad_(True)\n",
+    "    y.requires_grad_(True)\n",
+    "    t.requires_grad_(True)\n",
+    "\n",
+    "    u, v, p = model(x, y, t)\n",
+    "\n",
+    "    # Derivatives for u\n",
+    "    u_t = torch.autograd.grad(u, t, torch.ones_like(u), create_graph=True)[0]\n",
+    "    u_x = torch.autograd.grad(u, x, torch.ones_like(u), create_graph=True)[0]\n",
+    "    u_y = torch.autograd.grad(u, y, torch.ones_like(u), create_graph=True)[0]\n",
+    "    u_xx = torch.autograd.grad(u_x, x, torch.ones_like(u_x), create_graph=True)[0]\n",
+    "    u_yy = torch.autograd.grad(u_y, y, torch.ones_like(u_y), create_graph=True)[0]\n",
+    "\n",
+    "    # Derivatives for v\n",
+    "    v_t = torch.autograd.grad(v, t, torch.ones_like(v), create_graph=True)[0]\n",
+    "    v_x = torch.autograd.grad(v, x, torch.ones_like(v), create_graph=True)[0]\n",
+    "    v_y = torch.autograd.grad(v, y, torch.ones_like(v), create_graph=True)[0]\n",
+    "    v_xx = torch.autograd.grad(v_x, x, torch.ones_like(v_x), create_graph=True)[0]\n",
+    "    v_yy = torch.autograd.grad(v_y, y, torch.ones_like(v_y), create_graph=True)[0]\n",
+    "\n",
+    "    # Derivatives for p\n",
+    "    p_x = torch.autograd.grad(p, x, torch.ones_like(p), create_graph=True)[0]\n",
+    "    p_y = torch.autograd.grad(p, y, torch.ones_like(p), create_graph=True)[0]\n",
+    "\n",
+    "    # Residuals\n",
+    "    f_u = u_t + u*u_x + v*u_y + p_x - nu*(u_xx + u_yy)\n",
+    "    f_v = v_t + u*v_x + v*v_y + p_y - nu*(v_xx + v_yy)\n",
+    "    f_mass = u_x + v_y\n",
+    "\n",
+    "    loss_pde = torch.mean(f_u**2 + f_v**2 + f_mass**2)\n",
+    "    return loss_pde\n",
+    "\n",
+    "# Initialization and dummy data training step\n",
+    "pinn = NavierStokesPINN()\n",
+    "optimizer = torch.optim.Adam(pinn.parameters(), lr=1e-3)\n",
+    "\n",
+    "# Random collocation points in domain [0,1]x[0,1] for t in [0,1]\n",
+    "x_col = torch.rand(100, 1)\n",
+    "y_col = torch.rand(100, 1)\n",
+    "t_col = torch.rand(100, 1)\n",
+    "\n",
+    "# Optimization step\n",
+    "optimizer.zero_grad()\n",
+    "loss = navier_stokes_loss(pinn, x_col, y_col, t_col)\n",
+    "loss.backward()\n",
+    "optimizer.step()\n",
+    "\n",
+    "print(f\"Simple PINN initialized. Initial PDE Residual Loss: {loss.item():.6f}\")"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "fd27dca9",
+   "metadata": {
+    "description_hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "explanation": "",
+    "explanation_timestamp": "2026-07-25T19:51:11.273330",
+    "name": "lirebebokore"
+   },
+   "outputs": [],
+   "source": []
+  }
+ ],
+ "metadata": {
+  "ai_instructions": "",
+  "input_files": [],
+  "is_locked": false,
+  "last_valid_code_cell": 0,
+  "last_valid_output": 0,
+  "last_valid_test_cell": -1,
+  "missing_input_files": [],
+  "share_output_with_ai": true,
+  "skip_reexecution": true
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}
