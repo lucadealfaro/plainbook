@@ -107,7 +107,7 @@ pre[class*="language-"] {
 }
 
 .explanation-toolbar .toolbar-right .button {
-  @media (max-width: 900px) {
+  @media (max-width: 600px) {
     span:not(.icon):not(.unit-test-counter) {
       display: none !important;
     }
@@ -118,7 +118,7 @@ pre[class*="language-"] {
 }
 
 .explanation-toolbar .toolbar-left .run-button {
-  @media (max-width: 900px) {
+  @media (max-width: 600px) {
     span:not(.icon) {
       display: none !important;
     }
@@ -214,6 +214,18 @@ pre[class*="language-"] {
 }
 .code-tabs .code-bar-actions .button .icon {
   height: 1.15em;
+}
+// On narrow screens collapse the action-button labels to icon-only (like the
+// ExplanationEditor toolbar, but at a slightly larger threshold).
+.code-tabs .code-bar-actions .button {
+  @media (max-width: 700px) {
+    span:not(.icon) {
+      display: none !important;
+    }
+    span.icon {
+      margin: 0 !important;
+    }
+  }
 }
 
 // ── Settings modal (SettingsModal.js) ──
