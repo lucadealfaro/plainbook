@@ -3,20 +3,21 @@ import { ref, computed, watch } from './vue.esm-browser.js';
 // NotebookCell.js
 import MarkdownCell from './MarkdownCell.js';
 import CodeCell from './CodeCell.js';
+import CodeExplanation from './CodeExplanation.js';
 import ExplanationEditor from './ExplanationEditor.js';
 import ValidationCell from './ValidationCell.js';
 import OutputRenderer from './OutputRenderer.js';
 import MissingModuleBar from './MissingModuleBar.js';
 import { outputsHaveError } from './errorUtils.js';
 export default {
-    components: { MarkdownCell, CodeCell, ExplanationEditor, ValidationCell, OutputRenderer, MissingModuleBar },
+    components: { MarkdownCell, CodeCell, CodeExplanation, ExplanationEditor, ValidationCell, OutputRenderer, MissingModuleBar },
     props: ['cell', 'isActive', 'isLocked', 'running', 'codeValid', 'outputValid', 'executed',
         'asRead', 'markdownEditKey', 'explanationEditKey', 'testCodeValid', 'moduleInstall',
         'clarifyState'],
     emits: [
         'save-markdown', 'save-explanation', 'save-code',
         'run-cell', 'save-and-run', 'save-code-and-run', 'generate-code', 'clear-code',
-        'validate-code', 'dismiss-validation',
+        'validate-code', 'explain-code', 'dismiss-validation',
         'delete', 'move-up', 'move-down',
         'activate', 'interrupt',
         'run-test', 'save-and-run-test', 'save-code-and-run-test', 'generate-test-code', 'open-test-help',
@@ -32,6 +33,18 @@ export default {
         });
 
         const outputVisible = ref(true);
+
+        // Code / explanation tab bar: at most one panel open at a time.
+        const openPanel = ref('none'); // 'code' | 'explanation' | 'none'
+        const togglePanel = (name) => {
+            openPanel.value = openPanel.value === name ? 'none' : name;
+        };
+        // Auto-open the explanation when one is freshly generated (not on load,
+        // hence no `immediate`); collapse if it is removed while shown.
+        watch(() => props.cell.metadata?.ai_code_explanation, (nv, ov) => {
+            if (nv && nv !== ov) openPanel.value = 'explanation';
+            else if (!nv && openPanel.value === 'explanation') openPanel.value = 'none';
+        });
 
         // Missing-module bar: shown when execution failed with a
         // ModuleNotFoundError. The module name is parsed from the error
@@ -61,7 +74,7 @@ export default {
         };
 
         return { hasError, outputVisible, missingModule, moduleBarDismissed,
-            onModuleRewrite, onModuleDismiss };
+            onModuleRewrite, onModuleDismiss, openPanel, togglePanel };
     },
     template: /* html */ `
         <div class="notebook-cell box p-0 mb-2 is-clipped shadow-sm"
@@ -102,6 +115,7 @@ export default {
                         @gencode="$emit('generate-code', $event)"
                         @clearcode="$emit('clear-code')"
                         @validate="$emit('validate-code')"
+                        @explain="$emit('explain-code')"
                         @run="$emit('run-cell')"
                         @interrupt="$emit('interrupt')"
                         @saveandrun="$emit('save-and-run', $event)"
@@ -119,6 +133,28 @@ export default {
                     :validation="cell.metadata.validation" 
                     @dismiss_validation="$emit('dismiss-validation')" />
 
+                <!-- Code / explanation tab bar: shown only when focused; the
+                     content panels below stay visible when the cell is unfocused. -->
+                <div v-show="isActive" class="code-tabs">
+                    <button class="button is-ghost panel-tab code-tab"
+                            :class="{ 'is-active': openPanel === 'code' }"
+                            @click.stop="togglePanel('code')">
+                        <span class="icon is-small"><i class="bx" :class="openPanel === 'code' ? 'bx-caret-down' : 'bx-caret-right'"></i></span>
+                        <span>{{ openPanel === 'code' ? 'Hide code' : 'Show code' }}</span>
+                    </button>
+                    <template v-if="cell.metadata?.ai_code_explanation">
+                        <div class="panel-divider"></div>
+                        <button class="button is-ghost panel-tab code-tab"
+                                :class="{ 'is-active': openPanel === 'explanation' }"
+                                @click.stop="togglePanel('explanation')">
+                            <span class="icon is-small"><i class="bx" :class="openPanel === 'explanation' ? 'bx-caret-down' : 'bx-caret-right'"></i></span>
+                            <span>{{ openPanel === 'explanation' ? 'Hide code explanation' : 'Show code explanation' }}</span>
+                        </button>
+                    </template>
+                    <span style="flex: 1;"></span>
+                    <!-- right region reserved for future buttons -->
+                </div>
+
                 <code-cell
                     v-model:source="cell.source"
                     :execution-count="cell.execution_count"
@@ -129,10 +165,14 @@ export default {
                     :executed="executed"
                     :hasError="hasError"
                     :asRead="asRead"
+                    :external-collapse="openPanel !== 'code'"
                     @save="$emit('save-code', $event)"
                     @saveandrun="$emit('save-code-and-run', $event)"
                     @activate="$emit('activate')" />
-                
+
+                <code-explanation v-show="openPanel === 'explanation'"
+                    :text="cell.metadata.ai_code_explanation" />
+
                 <div v-if="outputVisible && cell.outputs?.length" class="p-2 border-top bg-scheme-main">
                     <missing-module-bar
                         v-if="missingModule && !moduleBarDismissed"
@@ -168,6 +208,7 @@ export default {
                         @gencode="$emit('generate-test-code')"
                         @clearcode="$emit('clear-code')"
                         @validate="$emit('validate-code')"
+                        @explain="$emit('explain-code')"
                         @run="$emit('run-test')"
                         @interrupt="$emit('interrupt')"
                         @saveandrun="$emit('save-and-run-test', $event)"
@@ -183,6 +224,26 @@ export default {
                     :validation="cell.metadata.validation"
                     @dismiss_validation="$emit('dismiss-validation')" />
 
+                <div v-show="isActive" class="code-tabs">
+                    <button class="button is-ghost panel-tab code-tab"
+                            :class="{ 'is-active': openPanel === 'code' }"
+                            @click.stop="togglePanel('code')">
+                        <span class="icon is-small"><i class="bx" :class="openPanel === 'code' ? 'bx-caret-down' : 'bx-caret-right'"></i></span>
+                        <span>{{ openPanel === 'code' ? 'Hide code' : 'Show code' }}</span>
+                    </button>
+                    <template v-if="cell.metadata?.ai_code_explanation">
+                        <div class="panel-divider"></div>
+                        <button class="button is-ghost panel-tab code-tab"
+                                :class="{ 'is-active': openPanel === 'explanation' }"
+                                @click.stop="togglePanel('explanation')">
+                            <span class="icon is-small"><i class="bx" :class="openPanel === 'explanation' ? 'bx-caret-down' : 'bx-caret-right'"></i></span>
+                            <span>{{ openPanel === 'explanation' ? 'Hide code explanation' : 'Show code explanation' }}</span>
+                        </button>
+                    </template>
+                    <span style="flex: 1;"></span>
+                    <!-- right region reserved for future buttons -->
+                </div>
+
                 <code-cell
                     v-model:source="cell.source"
                     :execution-count="cell.execution_count"
@@ -193,9 +254,13 @@ export default {
                     :executed="false"
                     :hasError="hasError"
                     :asRead="asRead"
+                    :external-collapse="openPanel !== 'code'"
                     @save="$emit('save-code', $event)"
                     @saveandrun="$emit('save-code-and-run-test', $event)"
                     @activate="$emit('activate')" />
+
+                <code-explanation v-show="openPanel === 'explanation'"
+                    :text="cell.metadata.ai_code_explanation" />
 
                 <div v-if="outputVisible && cell.outputs?.length" class="p-2 border-top bg-scheme-main">
                     <missing-module-bar

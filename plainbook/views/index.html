@@ -178,6 +178,7 @@
                         @generate-code="ui_forceRegenerateCellCode(index, $event)"
                         @clear-code="clearCellCode(index)"
                         @validate-code="ui_validateCode(index)"
+                        @explain-code="ui_explainCode(index)"
                         @dismiss-validation="dismissValidation(index)"
                         @install-module="(module) => ui_installModule(index, module)"
                         @dismiss-module-install="dismissModuleInstall(index)"
@@ -222,6 +223,7 @@
         :has-gemini-key="hasGeminiKey"
         :has-claude-key="hasClaudeKey"
         :claude-via-bedrock="claudeViaBedrock"
+        :skip-reexecution="skipReexecution"
         @close="showSettings = false"
         @save="(keys) => {showSettings = false; saveSettings(keys); }"
     />

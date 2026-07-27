@@ -4,7 +4,7 @@ const ExplanationRenderer = {
     props: ['source', 'isActive', 'codeValid', 'outputValid', 'executed', 'hasError',
             'asRead', 'startEditKey', 'isLocked', 'running', 'hasCode', 'outputVisible', 'cellMode',
             'unitTestCount', 'clarifyState'],
-    emits: ['update:source', 'save', 'saveandrun', 'gencode', 'clearcode', 'validate',
+    emits: ['update:source', 'save', 'saveandrun', 'gencode', 'clearcode', 'validate', 'explain',
             'run', 'interrupt', 'delete', 'moveUp', 'moveDown', 'toggle-output', 'open-test-help',
             'open-unit-test', 'dismiss-error',
             'submit-clarification', 'dismiss-clarification'],
@@ -16,6 +16,7 @@ const ExplanationRenderer = {
         const showDelete = computed(() => ['normal', 'test'].includes(mode.value));
         const showTestHelp = computed(() => mode.value === 'test');
         const showUnitTest = computed(() => mode.value === 'normal');
+        const showExplain = computed(() => ['normal', 'test'].includes(mode.value));
         const showSaveAndRun = computed(() => ['normal', 'test', 'unit_setup', 'target', 'unit_test'].includes(mode.value));
         const isEditing = ref(false);
         const localSource = ref((Array.isArray(props.source) ? props.source.join('') : props.source) || '');
@@ -131,10 +132,16 @@ const ExplanationRenderer = {
             validating.value = true;
             emit('validate');
         };
+        const explaining = ref(false);
+        const onExplain = () => {
+            explaining.value = true;
+            emit('explain');
+        };
         watch(() => props.running, (val) => {
             if (!val) {
                 generating.value = false;
                 validating.value = false;
+                explaining.value = false;
             }
         });
 
@@ -194,8 +201,8 @@ const ExplanationRenderer = {
         return { isEditing, localSource, rendered, enterEditMode, saveChanges,
             cancelEdit, textareaEl, autoResize, saveAndRun, onBlur, localIsLocked,
             isTestCell, clearLabel, generateLabel, stopGenerateLabel, validateLabel,
-            generating, onGenCode, validating, onValidate, onButtonPress,
-            mode, showRun, showMoveUpDown, showDelete, showTestHelp, showUnitTest, showSaveAndRun,
+            generating, onGenCode, validating, onValidate, explaining, onExplain, onButtonPress,
+            mode, showRun, showMoveUpDown, showDelete, showTestHelp, showUnitTest, showSaveAndRun, showExplain,
             placeholderText, autoGrowField,
             clarify, clarifyAnswers, hasAnyAnswer, submitClarify, cancelClarify };
     },
@@ -330,6 +337,20 @@ const ExplanationRenderer = {
                         title="Validate code against description" @click.stop="onValidate">
                     <span class="icon"><i class="bx bx-check"></i></span> <span>{{ validateLabel }}</span>
                 </button>
+                <template v-if="showExplain">
+                    <button v-if="explaining" class="button is-small is-success"
+                            title="Stop explaining" @click.stop="$emit('interrupt')">
+                        <span class="icon"><i class="bx bx-stop-circle"></i></span>
+                        <span>Stop explaining</span>
+                    </button>
+                    <button v-else class="button is-small"
+                            :class="isTestCell ? 'is-warning' : 'is-success'"
+                            title="Explain the code in natural language"
+                            :disabled="running || localIsLocked || !hasCode" @click.stop="onExplain">
+                        <span class="icon"><i class="bx bx-message-bubble-detail"></i></span>
+                        <span>Explain code</span>
+                    </button>
+                </template>
                 <button v-if="showDelete" class="button is-small is-danger py-1 " title="Delete cell" aria-label="Delete"
                         :disabled="localIsLocked" @click.stop="$emit('delete')">
                     <span class="icon"><i class="bx bx-trash"></i></span>

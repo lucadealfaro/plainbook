@@ -310,6 +310,9 @@ def get_notebook():
         log_enabled=args.log and not args.logview,
         logview_enabled=args.logview,
         print_all_enabled=args.print_all,
+        explanation_detail=settings.get('explanation_detail', 2),
+        explanation_bullets=settings.get('explanation_bullets', False),
+        explanation_latex=settings.get('explanation_latex', False),
     )
 
 @post('/set_key')
@@ -375,6 +378,31 @@ def set_active_ai():
     with open(SETTINGS_FILE, 'w') as f:
         yaml.dump(settings, f)
     return dict(status='success', active_ai_provider=provider_id)
+
+@post('/set_explain_options')
+@action_log.logged('set_explain_options')
+@require_token
+def set_explain_options():
+    """Persist the global "Explain code" options (complexity level, bullets, LaTeX)."""
+    data = request.json
+    try:
+        detail = int(data.get('detail', 2))
+    except (TypeError, ValueError):
+        detail = 2
+    detail = max(1, min(4, detail))
+    bullets = bool(data.get('bullets', False))
+    latex = bool(data.get('latex', False))
+    for store in (settings, _saved_settings):
+        store['explanation_detail'] = detail
+        store['explanation_bullets'] = bullets
+        store['explanation_latex'] = latex
+    try:
+        with open(SETTINGS_FILE, 'w') as f:
+            yaml.dump(dict(_saved_settings), f)
+    except Exception as e:
+        return dict(status='error', message=str(e))
+    return dict(status='success', explanation_detail=detail,
+                explanation_bullets=bullets, explanation_latex=latex)
 
 @post('/edit_explanation')
 @action_log.logged('edit_explanation')
@@ -659,6 +687,36 @@ def validate_code_cell():
     return dict(status='success', validation=validation_result)
 
 
+@post('/explain_code')
+@action_log.logged('explain_code')
+@stateful
+@require_token
+def explain_code_cell():
+    data = request.json
+    cell_index = data.get('cell_index')
+    # Default to the stored settings; allow a per-request override (used by the
+    # UI in a later step).
+    level = data.get('level', settings.get('explanation_detail', 2))
+    use_bullets = data.get('use_bullets', settings.get('explanation_bullets', False))
+    use_latex = data.get('use_latex', settings.get('explanation_latex', False))
+    api_key, ai_provider, model, error = _get_ai_config()
+    if error:
+        return dict(status='error', message=error)
+    try:
+        explanation, index = notebook.explain_code_cell(
+            api_key, cell_index, level=level,
+            use_bullets=use_bullets, use_latex=use_latex,
+            ai_provider=ai_provider, model=model)
+    except Exception as e:
+        friendly = _check_billing_error(e)
+        if friendly:
+            return dict(status='error', message=friendly)
+        raise
+    if explanation is None:
+        return dict(status='cancelled')
+    return dict(status='success', explanation=explanation, index=index)
+
+
 @post('/validate_unit_test_code')
 @action_log.logged('validate_unit_test_code')
 @stateful
@@ -793,6 +851,17 @@ def set_ask_questions():
     data = request.json
     value = data.get('value', False)
     notebook.set_ask_questions(value)
+    return {}
+
+
+@post('/set_skip_reexecution')
+@action_log.logged('set_skip_reexecution')
+@stateful
+@require_token
+def set_skip_reexecution():
+    data = request.json
+    skip = data.get('skip', True)
+    notebook.set_skip_reexecution(skip)
     return {}
 
 

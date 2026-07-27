@@ -6,6 +6,7 @@ from .ai_common import (
     TEST_SYSTEM_INSTRUCTIONS,
     UNIT_TEST_SYSTEM_INSTRUCTIONS,
     CHECKING_INSTRUCTIONS,
+    EXPLAIN_INSTRUCTIONS,
     NAME_GENERATION_INSTRUCTIONS,
     AMEND_EXPLANATION_INSTRUCTIONS,
     NOTEBOOK_VERIFY_INSTRUCTIONS,
@@ -321,6 +322,67 @@ Validation Result:
     if debug:
         print("Response:", response.text)
     return parse_validation_response(response.text)
+
+
+def gemini_explain_code(api_key, previous_code, code_to_explain, instructions, variable_context=None, level=2, use_bullets=False, use_latex=False, model=None, debug=False, dump_ai_requests=False):
+    client = genai.Client(api_key=api_key)
+    model = model or GEMINI_VALIDATE_MODEL
+
+    level_instruction = {
+        1: "Provide a BRIEF, high-level summary of the code.",
+        2: "Provide a NORMAL explanation of the code, covering the main steps.",
+        3: "Provide a DETAILED explanation, covering all significant parts of the logic.",
+        4: "Provide an EXTREMELY DETAILED, line-by-line or section-by-section breakdown of everything the code does."
+    }.get(level, "Provide a normal explanation.")
+
+    if use_bullets:
+        level_instruction += " Use bullet points to organize the explanation."
+    if use_latex:
+        level_instruction += " Use LaTeX for any mathematical equations (e.g., $x^2$, $$\\frac{a}{b}$$). Do this for any mathematical equations that are NEEDED."
+    else:
+        level_instruction += " Avoid using LaTeX; use plain text for math if possible."
+
+    prompt = build_context_prompt(
+        preceding=previous_code,
+        variable_context=variable_context
+    )
+    prompt += f"""
+
+CODE TO EXPLAIN:
+{code_to_explain}
+
+INSTRUCTIONS for original cell description:
+{instructions}
+
+EXPLANATION GUIDELINE:
+{level_instruction}
+
+Explanation:
+"""
+
+    if debug:
+        log_ai_request_size("gemini explain_code", EXPLAIN_INSTRUCTIONS, prompt,
+                            preceding=previous_code, instructions=instructions,
+                            variable_context=variable_context)
+    if dump_ai_requests:
+        dump_ai_request(dump_ai_requests, "gemini explain_code", {
+            "model": model,
+            "contents": prompt,
+            "system_instruction": EXPLAIN_INSTRUCTIONS,
+        })
+
+    response = client.models.generate_content(
+        model=model,
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            system_instruction=EXPLAIN_INSTRUCTIONS
+        )
+    )
+    if response.usage_metadata:
+        add_tokens(response.usage_metadata.prompt_token_count, response.usage_metadata.candidates_token_count)
+    if debug:
+        print("Response:", response.text)
+    return response.text
 
 
 def _gemini_verify(api_key, system_instructions, payload, label, model=None,

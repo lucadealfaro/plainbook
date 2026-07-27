@@ -36,6 +36,7 @@ createApp({
         const askQuestions = ref(false);
         // Questions awaiting answers: clarifyState[index] = { questions: [...] }.
         const clarifyState = ref({});
+        const skipReexecution = ref(true);
         const aiTokens = ref({input: 0, output: 0});
         const verificationStatus = ref('none');
         const debug = ref(false);
@@ -147,6 +148,9 @@ createApp({
             isLocked.value = state.is_locked || logviewEnabled.value;
             shareOutputWithAi.value = state.share_output_with_ai;
             askQuestions.value = !!state.ask_questions;
+            if (state.skip_reexecution !== undefined) {
+                skipReexecution.value = state.skip_reexecution;
+            }
             if (state.ai_tokens) {
                 aiTokens.value = state.ai_tokens;
             }
@@ -397,6 +401,17 @@ createApp({
             }
         };
 
+        // Changing a cell's code invalidates any AI code explanation of it (the
+        // server drops it, keyed on the code hash); mirror that in memory so the
+        // rendered explanation / its tab disappear immediately.
+        const dropCodeExplanation = (cellIndex) => {
+            const c = notebook.value && notebook.value.cells[cellIndex];
+            if (!c) return;
+            delete c.metadata.ai_code_explanation;
+            delete c.metadata.ai_code_explanation_timestamp;
+            delete c.metadata.code_hash_for_code_explanation;
+        };
+
         const sendCodeToServer = async (content, cellIndex) => {
             asRead.value = false;
             const savePromise = (async () => {
@@ -407,6 +422,7 @@ createApp({
                     });
                     if (notebook.value && notebook.value.cells[cellIndex]) {
                         delete notebook.value.cells[cellIndex].metadata.validation;
+                        dropCodeExplanation(cellIndex);
                     }
                     console.log('Code saved:', cellIndex);
                 } catch (err) {
@@ -425,6 +441,7 @@ createApp({
                     notebook.value.cells[cellIndex].source = '';
                     notebook.value.cells[cellIndex].outputs = [];
                     delete notebook.value.cells[cellIndex].metadata.validation;
+                    dropCodeExplanation(cellIndex);
                 }
                 console.log('Code cleared:', cellIndex);
             } catch (err) {
@@ -475,6 +492,40 @@ createApp({
             if (!running.value) {
                 running.value = true;
                 await validateCode(cellIndex);
+                running.value = false;
+                runningActivity.value = { type: null, cellIndex: null };
+            }
+        };
+
+        const explainCode = async (cellIndex) => {
+            if (!activeAiProvider.value) {
+                throw new Error('No AI provider is active. Please set an API key in Settings.');
+            };
+            asRead.value = false;
+            const cell = notebook.value.cells[cellIndex];
+            runningActivity.value = { type: 'explaining', cellIndex, cellName: cell.metadata.name || null };
+            try {
+                const r = await apiCall('/explain_code', 'POST', { cell_index: cellIndex });
+                if (r.status === 'cancelled') {
+                    console.log('Explanation cancelled for cell:', cellIndex);
+                } else if (r.status === 'error') {
+                    throw new Error(r.message || 'Explanation failed');
+                } else if (notebook.value && notebook.value.cells[cellIndex]) {
+                    // Stored for the (later) display step; not rendered yet.
+                    notebook.value.cells[cellIndex].metadata.ai_code_explanation = r.explanation;
+                    console.log('Code explanation received for cell:', cellIndex);
+                }
+            } catch (err) {
+                throw new Error(err.message || 'Failed to explain code', { cause: err });
+            }
+        };
+
+        const ui_explainCode = async (cellIndex) => {
+            if (running.value) return;
+            running.value = true;
+            try {
+                await explainCode(cellIndex);
+            } finally {
                 running.value = false;
                 runningActivity.value = { type: null, cellIndex: null };
             }
@@ -676,6 +727,8 @@ createApp({
                     delete cell.metadata.validation;
                     // A successful generation supersedes any pending questions.
                     dismissClarify(cellIndex);
+                    // Regenerated code invalidates any AI code explanation of it.
+                    dropCodeExplanation(cellIndex);
                     // The server amended the description (Fix Code only); reflect it.
                     if (r.explanation) {
                         cell.metadata.explanation = r.explanation;
@@ -1553,6 +1606,14 @@ createApp({
             } catch (err) {
                 throw new Error('Error saving API keys', { cause: err });
             }
+            // Save the notebook execution setting (independent of API keys).
+            if (keys.skip_reexecution !== undefined) {
+                try {
+                    await apiCall('/set_skip_reexecution', 'POST', { skip: keys.skip_reexecution });
+                } catch (err) {
+                    throw new Error('Error saving execution setting', { cause: err });
+                }
+            }
         };
 
         const setActiveAiProvider = async (providerId) => {
@@ -1620,12 +1681,12 @@ createApp({
             window.removeEventListener('plainbook:files-changed', onFilesChanged);
         });
 
-        return { notebook, notebook_name, loading, error, isLocked, lockNotebook, shareOutputWithAi, aiTokens, verificationStatus, toggleShareOutput,
+        return { notebook, notebook_name, loading, error, isLocked, lockNotebook, shareOutputWithAi, skipReexecution, aiTokens, verificationStatus, toggleShareOutput,
             askQuestions, toggleAskQuestions, clarifyState, dismissClarify, ui_submitClarification,
             sendExplanationToServer, authToken,
             sendCodeToServer, clearCellCode, ui_saveExplanationAndRun, ui_saveCodeAndRun,
             sendMarkdownToServer, generateCode, activeIndex, reloadNotebook, downloadIpynb,
-            validateCode, ui_validateCode, dismissValidation, ui_verifyNotebook, dismissVerification, ui_resetAndRunAllCells, ui_forceRegenerateCellCode,
+            validateCode, ui_validateCode, explainCode, ui_explainCode, dismissValidation, ui_verifyNotebook, dismissVerification, ui_resetAndRunAllCells, ui_forceRegenerateCellCode,
             setActiveCell, ui_runCell, running, runningActivity, asRead,
             ui_interruptKernel, insertCell, markdownEditKey,
             moduleInstall, ui_installModule, dismissModuleInstall,
