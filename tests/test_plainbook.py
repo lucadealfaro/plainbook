@@ -783,12 +783,12 @@ class TestUnitTestValidationVisibility:
 # === Execution-skip (rebuild successor state without re-executing) ===
 
 def _set_generated_code(nb, index, source):
-    """Simulate a generated cell: set the source plus a matching code/description
-    hash, so the execution-skip's `output_hash == code_hash` precondition holds."""
+    """Simulate a generated cell: set the source plus a matching description hash,
+    so the execution-skip's `output_hash == code_description_hash` precondition holds."""
     nb.set_cell_source(index, source)
     h = hashlib.sha256(source.encode()).hexdigest()
     nb.nb.cells[index].metadata['description_hash'] = h
-    nb.nb.cells[index].metadata['code_hash'] = h
+    nb.nb.cells[index].metadata['code_description_hash'] = h
 
 
 def _add_generated_cell(nb, source):
@@ -961,8 +961,8 @@ class TestInputFileInvalidation:
 
     def test_delete_invalidates_only_citing_cells(self, notebook):
         """Deleting a file invalidates only the code cells whose source cites it
-        (clearing their code_hash and lowering the watermark to just before the
-        earliest citing cell); unrelated earlier cells are untouched."""
+        (clearing their code_description_hash and lowering the watermark to just
+        before the earliest citing cell); unrelated earlier cells are untouched."""
         _add_generated_cell(notebook, "setup = 1")                  # 0: no cite
         _add_generated_cell(notebook, "a = open('/p/data.csv')")    # 1: cites
         _add_generated_cell(notebook, "b = 2")                      # 2: no cite
@@ -976,33 +976,33 @@ class TestInputFileInvalidation:
 
         assert notebook.last_valid_code_cell == 0                   # first citer is index 1
         assert notebook.last_valid_output_cell == 0
-        # Citing cells: code_hash cleared -> regeneration forced.
-        assert 'code_hash' not in notebook.nb.cells[1].metadata
-        assert 'code_hash' not in notebook.nb.cells[3].metadata
+        # Citing cells: code_description_hash cleared -> regeneration forced.
+        assert 'code_description_hash' not in notebook.nb.cells[1].metadata
+        assert 'code_description_hash' not in notebook.nb.cells[3].metadata
         assert notebook._code_matches_description(notebook.nb.cells[1]) is False
-        # Non-citing cells keep their code_hash (and description-match).
-        assert 'code_hash' in notebook.nb.cells[0].metadata
-        assert 'code_hash' in notebook.nb.cells[2].metadata
+        # Non-citing cells keep their code_description_hash (and description-match).
+        assert 'code_description_hash' in notebook.nb.cells[0].metadata
+        assert 'code_description_hash' in notebook.nb.cells[2].metadata
         assert notebook._code_matches_description(notebook.nb.cells[0]) is True
 
     def test_pure_add_is_noop(self, notebook):
         """Adding a new file does not invalidate any cell."""
         _add_generated_cell(notebook, "a = 1")
         notebook.last_valid_code_cell = 0
-        h = notebook.nb.cells[0].metadata['code_hash']
+        h = notebook.nb.cells[0].metadata['code_description_hash']
         notebook.set_input_files(_file_entries('/p/new.csv'))
         assert notebook.last_valid_code_cell == 0
-        assert notebook.nb.cells[0].metadata['code_hash'] == h
+        assert notebook.nb.cells[0].metadata['code_description_hash'] == h
 
     def test_remove_unreferenced_is_noop(self, notebook):
         """Removing a file that no cell cites invalidates nothing."""
         _add_generated_cell(notebook, "a = 1")
         notebook.last_valid_code_cell = 0
         notebook.set_input_files(_file_entries('/p/x.csv'))
-        h = notebook.nb.cells[0].metadata['code_hash']
+        h = notebook.nb.cells[0].metadata['code_description_hash']
         notebook.set_input_files([])
         assert notebook.last_valid_code_cell == 0
-        assert notebook.nb.cells[0].metadata['code_hash'] == h
+        assert notebook.nb.cells[0].metadata['code_description_hash'] == h
 
     def test_replace_with_different_path_invalidates_old_citers(self, notebook):
         """Replacing a file with a different-path file invalidates cells citing
@@ -1013,8 +1013,8 @@ class TestInputFileInvalidation:
         notebook.set_input_files(_file_entries('/p/old.csv'))
         notebook.set_input_files(_file_entries('/p/new.csv'))       # replace old -> new
         assert notebook.last_valid_code_cell == -1                  # cell 0 cites old
-        assert 'code_hash' not in notebook.nb.cells[0].metadata
-        assert 'code_hash' in notebook.nb.cells[1].metadata
+        assert 'code_description_hash' not in notebook.nb.cells[0].metadata
+        assert 'code_description_hash' in notebook.nb.cells[1].metadata
 
 
 # === Session-only skip metadata is not serialized ===
@@ -1029,7 +1029,8 @@ class TestLiveCellMetaNotSerialized:
 
     def test_skip_baselines_are_not_written_to_file(self, notebook):
         """After executing, the saved .plnb contains persisted hashes
-        (code_hash/description_hash) but none of the session-only skip keys."""
+        (code_hash/code_description_hash/description_hash) but none of the
+        session-only skip keys."""
         _add_generated_cell(notebook, "a = 1")
         _add_generated_cell(notebook, "b = a + 1")
         notebook.last_valid_code_cell = 1
@@ -1047,6 +1048,7 @@ class TestLiveCellMetaNotSerialized:
             for k in _EPHEMERAL:
                 assert k not in cell.metadata
             assert 'code_hash' in cell.metadata
+            assert 'code_description_hash' in cell.metadata
             assert 'description_hash' in cell.metadata
 
     def test_load_strips_stale_ephemeral_keys(self, tmp_notebook_path):
@@ -1112,7 +1114,7 @@ class TestUnitTestCodeSkip:
         self._prepare(notebook)
         notebook.generate_unit_test_cell("k", 0, "test1", "setup", ai_provider="utstub")
         assert calls["n"] == 1
-        assert self._setup_meta(notebook).get('code_hash')
+        assert self._setup_meta(notebook).get('generation_context_hash')
 
     def test_unchanged_context_skips_ai(self, notebook):
         """Simulating a reload/flag-flip (code_valid -> False) does not call the AI
@@ -1149,3 +1151,84 @@ class TestUnitTestCodeSkip:
         before = calls["n"]
         notebook.generate_unit_test_cell("k", 0, "test1", "setup", ai_provider="utstub")
         assert calls["n"] == before + 1                              # AI called
+
+
+class TestExplainCode:
+    """Backend for the AI "Explain code" feature (no kernel needed; AI stubbed)."""
+
+    def _stub(self, text="AN EXPLANATION"):
+        calls = {"n": 0, "kwargs": None}
+        def fake_explain(api_key, previous_code, code_to_explain, instructions, **kwargs):
+            calls["n"] += 1
+            calls["kwargs"] = kwargs
+            return text
+        _pbmod.AI_PROVIDERS["explstub"] = dict(_pbmod.AI_PROVIDERS["gemini"])
+        _pbmod.AI_PROVIDERS["explstub"]["explain"] = fake_explain
+        return calls
+
+    def test_both_providers_expose_explain(self):
+        assert "explain" in _pbmod.AI_PROVIDERS["gemini"]
+        assert "explain" in _pbmod.AI_PROVIDERS["claude"]
+
+    def test_explain_stores_ai_explanation(self, notebook):
+        calls = self._stub()
+        idx = _add_code_cell(notebook, "a = 1")
+        explanation, ret_idx = notebook.explain_code_cell(
+            "key", idx, level=3, use_bullets=True, use_latex=False, ai_provider="explstub")
+        assert calls["n"] == 1
+        assert explanation == "AN EXPLANATION"
+        assert ret_idx == idx
+        cell = notebook.nb.cells[idx]
+        assert cell.metadata["ai_code_explanation"] == "AN EXPLANATION"
+        assert cell.metadata.get("ai_code_explanation_timestamp")
+        # Options are forwarded to the provider fn.
+        assert calls["kwargs"]["level"] == 3
+        assert calls["kwargs"]["use_bullets"] is True
+        assert calls["kwargs"]["use_latex"] is False
+
+    def test_explain_pins_code_hash(self, notebook):
+        self._stub()
+        idx = _add_code_cell(notebook, "a = 1")
+        notebook.explain_code_cell("key", idx, ai_provider="explstub")
+        cell = notebook.nb.cells[idx]
+        assert cell.metadata["code_hash_for_code_explanation"] == notebook._hash_text("a = 1")
+        assert cell.metadata["code_hash_for_code_explanation"] == cell.metadata["code_hash"]
+
+    def test_edit_keeps_explanation_when_code_identical(self, notebook):
+        self._stub()
+        idx = _add_code_cell(notebook, "a = 1")
+        notebook.explain_code_cell("key", idx, ai_provider="explstub")
+        # Re-saving byte-identical source keeps the explanation.
+        notebook.set_cell_source(idx, "a = 1")
+        assert notebook.nb.cells[idx].metadata.get("ai_code_explanation") == "AN EXPLANATION"
+
+    def test_edit_drops_explanation_when_code_changes(self, notebook):
+        self._stub()
+        idx = _add_code_cell(notebook, "a = 1")
+        notebook.explain_code_cell("key", idx, ai_provider="explstub")
+        notebook.set_cell_source(idx, "a = 2")
+        meta = notebook.nb.cells[idx].metadata
+        for k in ("ai_code_explanation", "ai_code_explanation_timestamp",
+                  "code_hash_for_code_explanation"):
+            assert k not in meta
+
+    def test_clear_code_drops_explanation(self, notebook):
+        self._stub()
+        idx = _add_code_cell(notebook, "a = 1")
+        notebook.explain_code_cell("key", idx, ai_provider="explstub")
+        notebook.clear_cell_code(idx)
+        assert "ai_code_explanation" not in notebook.nb.cells[idx].metadata
+
+    def test_regenerate_drops_explanation(self, notebook):
+        # Stub both explain and code generation so no kernel/API is needed.
+        self._stub()
+        def fake_generate(api_key, **kwargs):
+            return "a = 2"
+        _pbmod.AI_PROVIDERS["explstub"]["generate"] = fake_generate
+        idx = _add_code_cell(notebook, "a = 1")
+        notebook.explain_code_cell("key", idx, ai_provider="explstub")
+        assert notebook.nb.cells[idx].metadata.get("ai_code_explanation")
+        notebook.generate_code_cell("key", idx, ai_provider="explstub")
+        assert "ai_code_explanation" not in notebook.nb.cells[idx].metadata
+        # New source hash recorded.
+        assert notebook.nb.cells[idx].metadata["code_hash"] == notebook._hash_text("a = 2")

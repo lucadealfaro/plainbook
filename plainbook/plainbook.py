@@ -19,12 +19,12 @@ import requests
 
 from .ai_common import get_session_tokens
 from .utilities import PIP_INSTALL_CODE, parse_pip_install_result, resolve_package_name
-from .gemini import gemini_generate_code, gemini_validate_code, gemini_generate_cell_name, gemini_generate_test_code, gemini_generate_unit_test_code, gemini_verify_notebook, gemini_verify_tests, gemini_amend_explanation
-from .claude import claude_generate_code, claude_validate_code, claude_generate_cell_name, claude_generate_test_code, claude_generate_unit_test_code, claude_verify_notebook, claude_verify_tests, claude_amend_explanation
+from .gemini import gemini_generate_code, gemini_validate_code, gemini_explain_code, gemini_generate_cell_name, gemini_generate_test_code, gemini_generate_unit_test_code, gemini_verify_notebook, gemini_verify_tests, gemini_amend_explanation
+from .claude import claude_generate_code, claude_validate_code, claude_explain_code, claude_generate_cell_name, claude_generate_test_code, claude_generate_unit_test_code, claude_verify_notebook, claude_verify_tests, claude_amend_explanation
 
 AI_PROVIDERS = {
-    "gemini": {"generate": gemini_generate_code, "validate": gemini_validate_code, "name": gemini_generate_cell_name, "generate_test": gemini_generate_test_code, "generate_unit_test": gemini_generate_unit_test_code, "verify_notebook": gemini_verify_notebook, "verify_tests": gemini_verify_tests, "amend_explanation": gemini_amend_explanation},
-    "claude": {"generate": claude_generate_code, "validate": claude_validate_code, "name": claude_generate_cell_name, "generate_test": claude_generate_test_code, "generate_unit_test": claude_generate_unit_test_code, "verify_notebook": claude_verify_notebook, "verify_tests": claude_verify_tests, "amend_explanation": claude_amend_explanation},
+    "gemini": {"generate": gemini_generate_code, "validate": gemini_validate_code, "explain": gemini_explain_code, "name": gemini_generate_cell_name, "generate_test": gemini_generate_test_code, "generate_unit_test": gemini_generate_unit_test_code, "verify_notebook": gemini_verify_notebook, "verify_tests": gemini_verify_tests, "amend_explanation": gemini_amend_explanation},
+    "claude": {"generate": claude_generate_code, "validate": claude_validate_code, "explain": claude_explain_code, "name": claude_generate_cell_name, "generate_test": claude_generate_test_code, "generate_unit_test": claude_generate_unit_test_code, "verify_notebook": claude_verify_notebook, "verify_tests": claude_verify_tests, "amend_explanation": claude_amend_explanation},
 }
 
 MAX_OUTPUT_CHARS_FOR_AI = 2000
@@ -254,10 +254,25 @@ class Plainbook:
 
     def _code_matches_description(self, cell):
         """True if the cell's code was generated from its current description
-        (the stored code_hash equals the current description_hash)."""
+        (the stored code_description_hash equals the current description_hash)."""
         dh = cell.metadata.get('description_hash')
-        ch = cell.metadata.get('code_hash')
+        ch = cell.metadata.get('code_description_hash')
         return bool(dh) and dh == ch
+
+    def _refresh_code_hash(self, cell):
+        """Store the hash of the cell's current source code, and drop the AI code
+        explanation if the code it was written for has changed. Called wherever
+        new source is produced (AI generation, manual edit, clear). Returns True
+        iff an explanation was cleared."""
+        cell.metadata['code_hash'] = self._hash_text(cell.source)
+        if cell.metadata.get('ai_code_explanation') is None:
+            return False
+        if cell.metadata.get('code_hash_for_code_explanation') == cell.metadata['code_hash']:
+            return False              # explanation still describes the current code
+        for k in ('ai_code_explanation', 'ai_code_explanation_timestamp',
+                  'code_hash_for_code_explanation'):
+            cell.metadata.pop(k, None)
+        return True
 
     def _accessed_vars_unchanged(self, cell, index):
         """True iff every symbol the cell read still hashes to the stored value in
@@ -287,7 +302,7 @@ class Plainbook:
         output stays valid (so the execution-skip can preserve it) and
         last_valid_output_cell / last_executed_cell are left untouched. Only the
         code-valid watermark advances. cell.source is left unchanged."""
-        cell.metadata['code_hash'] = cell.metadata.get('description_hash')
+        cell.metadata['code_description_hash'] = cell.metadata.get('description_hash')
         cell.metadata['code_timestamp'] = datetime.datetime.now().isoformat()
         self.last_valid_code_cell = index
         self._write()
@@ -445,7 +460,7 @@ class Plainbook:
             lm.accessed_symbols = accessed
             lm.modified_symbols = result.get("modified_symbols") or []
             lm.deleted_symbols = result.get("deleted_symbols") or []
-            lm.output_hash = cell.metadata.get('code_hash')
+            lm.output_hash = cell.metadata.get('code_description_hash')
             lm.accessed_symbol_hashes = self._read_hashes(input_state, accessed)
             lm.input_group_fingerprints = self._input_fingerprints(input_state)
             self._write()
@@ -485,7 +500,7 @@ class Plainbook:
         """
         lm = self._live(cell)
         # The stored output must have been produced by the current code.
-        if not lm.output_hash or lm.output_hash != cell.metadata.get('code_hash'):
+        if not lm.output_hash or lm.output_hash != cell.metadata.get('code_description_hash'):
             return None
         # The cell must have run successfully before (baseline present) and its
         # previous successor state must still be live in the kernel.
@@ -602,7 +617,7 @@ class Plainbook:
         live-state maps (including the per-cell execution-skip baselines), resets
         the execution pointers, and clears outputs, so that after a restart every
         cell is genuinely re-executed (nothing is reconstructed). Persisted code
-        metadata (code_hash/description_hash) is preserved."""
+        metadata (code_hash/code_description_hash/description_hash) is preserved."""
         self._sk_request("POST", "/reset")
         self.last_executed_cell = -1
         self.last_valid_output_cell = -1
@@ -708,10 +723,19 @@ class Plainbook:
                         if cell.metadata.get('explanation_timestamp') is None:
                             cell.metadata['explanation_timestamp'] = datetime.datetime.now().isoformat()
                         # Backfill the description hash so unchanged explanations
-                        # can be recognized. code_hash is intentionally NOT
-                        # backfilled (we can't assume old code matches).
+                        # can be recognized. code_description_hash is intentionally
+                        # NOT backfilled (we can't assume old code matches its
+                        # description, so it should regenerate on demand).
                         cell.metadata.setdefault(
                             'description_hash', self._hash_text(cell.metadata.get('explanation')))
+                        # code_hash tracks the actual source (overwrite any legacy
+                        # value that used this key for the description hash). Treat
+                        # an existing explanation as valid for the loaded code
+                        # (explanation + code were saved together).
+                        cell.metadata['code_hash'] = self._hash_text(cell.source)
+                        if cell.metadata.get('ai_code_explanation') is not None:
+                            cell.metadata.setdefault(
+                                'code_hash_for_code_explanation', cell.metadata['code_hash'])
                         if cell.cell_type == 'code':
                             # Present as null until the cell is first executed.
                             cell.metadata.setdefault('execution_timestamp', None)
@@ -772,8 +796,8 @@ class Plainbook:
     def _invalidate_cells_for_removed_files(self, removed_paths):
         """Force-regenerate the code cells that cite any removed input-file path.
 
-        For each citing cell, clears code_hash (so the generation-skip fast path
-        cannot keep the now-stale code) and output_hash (an execution artifact),
+        For each citing cell, clears code_description_hash (so the generation-skip
+        fast path cannot keep the now-stale code) and output_hash (an execution artifact),
         then lowers the code/output/test watermarks to just before the earliest
         citing cell. No-op if no cell cites a removed file (e.g. a pure file add,
         or a removed file that no cell references). Caller holds self._lock and
@@ -783,7 +807,7 @@ class Plainbook:
         if not citing:
             return
         for i in citing:
-            self.nb.cells[i].metadata.pop('code_hash', None)
+            self.nb.cells[i].metadata.pop('code_description_hash', None)
             self._live(self.nb.cells[i]).output_hash = None
         boundary = min(citing) - 1
         self.last_valid_code_cell = min(self.last_valid_code_cell, boundary)
@@ -1066,6 +1090,9 @@ class Plainbook:
             assert 0 <= index < len(self.nb.cells)
             cell = self.nb.cells[index]
             cell.source = source
+            if cell.cell_type in ('code', 'test'):
+                # New source: refresh the code hash and drop a now-stale explanation.
+                self._refresh_code_hash(cell)
             self._clear_validation(cell)  # Clear any cached validation results
             cell.metadata['code_timestamp'] = datetime.datetime.now().isoformat()
             if cell.cell_type == 'test':
@@ -1098,6 +1125,8 @@ class Plainbook:
             cell = self.nb.cells[index]
             assert cell.cell_type in ('code', 'test')
             cell.source = ''
+            # Clearing the code invalidates any explanation of it.
+            self._refresh_code_hash(cell)
             self._clear_validation(cell)  # Clear any cached validation results
             cell.outputs = []
             if cell.cell_type == 'test':
@@ -1673,9 +1702,12 @@ class Plainbook:
                 if self.ai_request_pending:
                     cell.source = new_code
                     # Pin the code to the description it was generated from.
-                    cell.metadata['code_hash'] = gen_description_hash
+                    cell.metadata['code_description_hash'] = gen_description_hash
                     cell.metadata.setdefault(
                         'description_hash', self._hash_text(cell.metadata.get('explanation')))
+                    # Record the hash of the new source and drop any AI code
+                    # explanation that no longer matches the code it described.
+                    self._refresh_code_hash(cell)
                     self._clear_validation(cell)
                     cell.metadata['code_timestamp'] = datetime.datetime.now().isoformat()
                     cell.outputs = []
@@ -1721,10 +1753,10 @@ class Plainbook:
                                 # the fix we just made).
                                 cell.metadata['explanation_timestamp'] = cell.metadata['code_timestamp']
                                 # The amended description now describes the current
-                                # code, so keep description_hash == code_hash.
+                                # code, so keep description_hash == code_description_hash.
                                 amended_hash = self._hash_text(amended)
                                 cell.metadata['description_hash'] = amended_hash
-                                cell.metadata['code_hash'] = amended_hash
+                                cell.metadata['code_description_hash'] = amended_hash
                                 self._write()
                             else:
                                 amended = None
@@ -1859,7 +1891,7 @@ class Plainbook:
             ]))
             if (validation_feedback is None and not error_context
                     and (sub_cell.get('source') or '').strip()
-                    and sub_cell['metadata'].get('code_hash') == gen_sig):
+                    and sub_cell['metadata'].get('generation_context_hash') == gen_sig):
                 test_validity[f'{role}_code_valid'] = True
                 self._invalidate_unit_test(
                     cell_index, test_name,
@@ -1922,7 +1954,7 @@ class Plainbook:
                     dump_ai_requests=self.dump_ai_requests)
                 if self.ai_request_pending:
                     sub_cell['source'] = new_code
-                    sub_cell['metadata']['code_hash'] = gen_sig
+                    sub_cell['metadata']['generation_context_hash'] = gen_sig
                     sub_cell['metadata']['code_timestamp'] = datetime.datetime.now().isoformat()
                     sub_cell['outputs'] = []
                     test_validity = self._get_ut_validity(cell_index, test_name)
@@ -1969,6 +2001,44 @@ class Plainbook:
                     return validation_result
                 else:
                     return None
+            finally:
+                self.ai_request_pending = False
+
+
+    def explain_code_cell(self, api_key, index, level=2, use_bullets=False, use_latex=False, ai_provider="gemini", model=None):
+        """Generates a natural-language explanation of the code in the cell at
+        index, stored separately from the user's description."""
+        with self._lock:
+            if self.ai_request_pending:
+                raise RuntimeError("An AI request is already pending.")
+            self.ai_request_pending = True
+            assert 0 <= index < len(self.nb.cells)
+            cell = self.nb.cells[index]
+            assert cell.cell_type in ('code', 'test')
+            code_to_explain = cell.source
+            instructions = self._get_instructions(cell.metadata.get('explanation'))
+            previous_code = self._get_preceding_code_for_ai(index)
+            previous_code_cell = self._get_preceding_code_cell(index)
+            variable_context = self._get_variables_for_ai(previous_code_cell) if previous_code_cell else ""
+            try:
+                explain_fn = AI_PROVIDERS[ai_provider]["explain"]
+                explanation = explain_fn(api_key, previous_code, code_to_explain,
+                                         instructions, variable_context=variable_context,
+                                         level=level, use_bullets=use_bullets, use_latex=use_latex,
+                                         model=model, debug=self.debug,
+                                         dump_ai_requests=self.dump_ai_requests)
+                if self.ai_request_pending:
+                    explanation = explanation.strip()
+                    # Store in a separate field so we don't override the user's prompt.
+                    cell.metadata['ai_code_explanation'] = explanation
+                    cell.metadata['ai_code_explanation_timestamp'] = datetime.datetime.now().isoformat()
+                    # Pin the explanation to the exact code it describes, so it is
+                    # dropped when the code later changes.
+                    cell.metadata['code_hash_for_code_explanation'] = self._hash_text(code_to_explain)
+                    self._write()
+                    return explanation, index
+                else:
+                    return None, None
             finally:
                 self.ai_request_pending = False
 
