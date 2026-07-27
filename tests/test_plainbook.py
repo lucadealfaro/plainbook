@@ -1,3 +1,5 @@
+import hashlib
+
 import pytest
 from plainbook.plainbook import CellExecutionError, ExecutionError, Plainbook
 
@@ -55,7 +57,8 @@ class TestNotebookLifecycle:
             'name', 'path', 'num_cells',
             'last_executed_cell', 'last_valid_code_cell',
             'last_valid_output_cell', 'last_valid_test_cell', 'is_locked',
-            'share_output_with_ai', 'ai_tokens', 'verification_status',
+            'share_output_with_ai', 'skip_reexecution', 'ai_tokens',
+            'verification_status',
         }
         assert set(state.keys()) == expected_keys
         assert state['num_cells'] == 0
@@ -775,3 +778,457 @@ class TestUnitTestValidationVisibility:
         notebook.set_unit_test_validation_visibility(idx, 'test1', 'setup', True)
         v = notebook.nb.cells[idx].metadata['unit_tests']['test1']['cells']['setup']['metadata']['validation']
         assert v['is_hidden'] is True
+
+
+# === Execution-skip (rebuild successor state without re-executing) ===
+
+def _set_generated_code(nb, index, source):
+    """Simulate a generated cell: set the source plus a matching description hash,
+    so the execution-skip's `output_hash == code_description_hash` precondition holds."""
+    nb.set_cell_source(index, source)
+    h = hashlib.sha256(source.encode()).hexdigest()
+    nb.nb.cells[index].metadata['description_hash'] = h
+    nb.nb.cells[index].metadata['code_description_hash'] = h
+
+
+def _add_generated_cell(nb, source):
+    """Insert a code cell and give it a matching code/description hash."""
+    idx = _add_code_cell(nb, source)
+    _set_generated_code(nb, idx, source)
+    return idx
+
+
+class TestExecutionSkip:
+
+    def _spy_rebuilds(self, notebook):
+        counts = {"rebuild": 0}
+        orig = notebook._sk_request
+
+        def spy(method, path, json_body=None):
+            if path == "/rebuild_state":
+                counts["rebuild"] += 1
+            return orig(method, path, json_body)
+
+        notebook._sk_request = spy
+        return counts
+
+    def _probe(self, notebook, index, code):
+        state = notebook._cell_states[notebook.nb.cells[index].id]
+        r = notebook._sk_request("POST", "/execute", {
+            "code": code, "exec_id": "probe", "state_name": state})
+        return "".join(o["text"] for o in r.get("output", [])
+                       if o.get("output_type") == "stream").strip()
+
+    def test_independent_downstream_cell_is_rebuilt(self, notebook):
+        """After an upstream value changes, a downstream cell that does not read
+        the changed variable is rebuilt (not executed), and stays correct."""
+        _add_generated_cell(notebook, "x = 1\nw = 1")
+        _add_generated_cell(notebook, "y = x + 1")         # reads x only
+        _add_generated_cell(notebook, "z = w + 1")         # reads w only
+        notebook.last_valid_code_cell = 2
+        for i in range(3):
+            notebook.execute_cell(i)
+
+        counts = self._spy_rebuilds(notebook)
+        # Upstream edit: w changes 1 -> 100 (x unchanged).
+        _set_generated_code(notebook, 0, "x = 1\nw = 100")
+        notebook.last_valid_code_cell = 2
+        for i in range(3):
+            notebook.execute_cell(i)
+
+        # Cell 1 (reads only x) must be rebuilt; the chain stays correct.
+        assert counts["rebuild"] >= 1
+        assert self._probe(notebook, 1, "print(y, w)") == "2 100"
+        assert self._probe(notebook, 2, "print(z)") == "101"
+
+    def test_changed_read_forces_execution(self, notebook):
+        """A cell whose read variable actually changed is not skipped."""
+        _add_generated_cell(notebook, "a = 1")
+        _add_generated_cell(notebook, "b = a + 1")         # reads a
+        notebook.last_valid_code_cell = 1
+        for i in range(2):
+            notebook.execute_cell(i)
+
+        counts = self._spy_rebuilds(notebook)
+        _set_generated_code(notebook, 0, "a = 50")         # a changes
+        notebook.last_valid_code_cell = 1
+        for i in range(2):
+            notebook.execute_cell(i)
+
+        assert counts["rebuild"] == 0                       # cell 1 re-executed
+        assert self._probe(notebook, 1, "print(b)") == "51"
+
+    def test_output_preserved_across_skip(self, notebook):
+        """A skipped cell keeps its previously produced output."""
+        _add_generated_cell(notebook, "a = 1\nw = 1")
+        _add_generated_cell(notebook, "print('KEEP', a)")      # reads a only
+        _add_generated_cell(notebook, "z = w + 1")
+        notebook.last_valid_code_cell = 2
+        for i in range(3):
+            notebook.execute_cell(i)
+
+        counts = self._spy_rebuilds(notebook)
+        _set_generated_code(notebook, 0, "a = 1\nw = 100")     # w changes, a unchanged
+        notebook.last_valid_code_cell = 2
+        for i in range(3):
+            notebook.execute_cell(i)
+
+        assert counts["rebuild"] >= 1
+        text = "".join(o.get("text", "") for o in notebook.nb.cells[1].outputs
+                       if o.get("output_type") == "stream").strip()
+        assert text == "KEEP 1"
+
+    def test_flag_off_disables_skip(self, notebook):
+        """With skip_reexecution off, cells are always re-executed."""
+        notebook.set_skip_reexecution(False)
+        _add_generated_cell(notebook, "x = 1\nw = 1")
+        _add_generated_cell(notebook, "y = x + 1")
+        _add_generated_cell(notebook, "z = w + 1")
+        notebook.last_valid_code_cell = 2
+        for i in range(3):
+            notebook.execute_cell(i)
+
+        counts = self._spy_rebuilds(notebook)
+        _set_generated_code(notebook, 0, "x = 1\nw = 100")
+        notebook.last_valid_code_cell = 2
+        for i in range(3):
+            notebook.execute_cell(i)
+
+        assert counts["rebuild"] == 0                       # nothing skipped
+        assert self._probe(notebook, 2, "print(z)") == "101"
+
+    def test_restart_clears_all_kernel_states_and_forces_execution(self, notebook):
+        """reset_kernel clears every kernel snapshot; the next run re-executes."""
+        _add_generated_cell(notebook, "a = 1")
+        _add_generated_cell(notebook, "b = a + 1")
+        notebook.last_valid_code_cell = 1
+        for i in range(2):
+            notebook.execute_cell(i)
+
+        # Kernel holds per-cell snapshots before restart.
+        states = notebook._sk_request("GET", "/states")["states"]
+        assert len(states) > 1                              # more than just 'initial'
+
+        notebook.reset_kernel()
+
+        # All snapshots gone; only 'initial' remains; bookkeeping cleared.
+        states = notebook._sk_request("GET", "/states")["states"]
+        assert states == ["initial"]
+        assert notebook._live_states == set()
+        assert notebook._cell_states == {}
+        assert notebook.last_executed_cell == -1
+
+        # The next run re-executes (no rebuild) and is correct.
+        counts = self._spy_rebuilds(notebook)
+        notebook.last_valid_code_cell = 1
+        for i in range(2):
+            notebook.execute_cell(i)
+        assert counts["rebuild"] == 0
+        assert self._probe(notebook, 1, "print(b)") == "2"
+
+    def test_no_skip_after_reload(self, tmp_notebook_path):
+        """After reopening (fresh kernel), nothing is skipped; the chain rebuilds
+        by real execution."""
+        nb = Plainbook(tmp_notebook_path)
+        try:
+            _add_generated_cell(nb, "a = 1")
+            _add_generated_cell(nb, "b = a + 1")
+            nb.last_valid_code_cell = 1
+            for i in range(2):
+                nb.execute_cell(i)
+        finally:
+            nb._shutdown()
+
+        nb2 = Plainbook(tmp_notebook_path)
+        counts = self._spy_rebuilds(nb2)
+        try:
+            nb2.last_valid_code_cell = 1
+            for i in range(2):
+                nb2.execute_cell(i)
+            assert counts["rebuild"] == 0
+        finally:
+            nb2._shutdown()
+
+
+# === Targeted code invalidation on input-file delete/replace ===
+
+def _file_entries(*paths):
+    return [{'name': p.rsplit('/', 1)[-1], 'path': p, 'type': 'file'}
+            for p in paths]
+
+
+class TestInputFileInvalidation:
+
+    def test_delete_invalidates_only_citing_cells(self, notebook):
+        """Deleting a file invalidates only the code cells whose source cites it
+        (clearing their code_description_hash and lowering the watermark to just
+        before the earliest citing cell); unrelated earlier cells are untouched."""
+        _add_generated_cell(notebook, "setup = 1")                  # 0: no cite
+        _add_generated_cell(notebook, "a = open('/p/data.csv')")    # 1: cites
+        _add_generated_cell(notebook, "b = 2")                      # 2: no cite
+        _add_generated_cell(notebook, "c = open('/p/data.csv')")    # 3: cites
+        notebook.last_valid_code_cell = 3
+        notebook.last_valid_output_cell = 3
+        notebook.set_input_files(_file_entries('/p/data.csv'))      # register (add: no-op)
+        assert notebook.last_valid_code_cell == 3
+
+        notebook.set_input_files([])                                # delete the file
+
+        assert notebook.last_valid_code_cell == 0                   # first citer is index 1
+        assert notebook.last_valid_output_cell == 0
+        # Citing cells: code_description_hash cleared -> regeneration forced.
+        assert 'code_description_hash' not in notebook.nb.cells[1].metadata
+        assert 'code_description_hash' not in notebook.nb.cells[3].metadata
+        assert notebook._code_matches_description(notebook.nb.cells[1]) is False
+        # Non-citing cells keep their code_description_hash (and description-match).
+        assert 'code_description_hash' in notebook.nb.cells[0].metadata
+        assert 'code_description_hash' in notebook.nb.cells[2].metadata
+        assert notebook._code_matches_description(notebook.nb.cells[0]) is True
+
+    def test_pure_add_is_noop(self, notebook):
+        """Adding a new file does not invalidate any cell."""
+        _add_generated_cell(notebook, "a = 1")
+        notebook.last_valid_code_cell = 0
+        h = notebook.nb.cells[0].metadata['code_description_hash']
+        notebook.set_input_files(_file_entries('/p/new.csv'))
+        assert notebook.last_valid_code_cell == 0
+        assert notebook.nb.cells[0].metadata['code_description_hash'] == h
+
+    def test_remove_unreferenced_is_noop(self, notebook):
+        """Removing a file that no cell cites invalidates nothing."""
+        _add_generated_cell(notebook, "a = 1")
+        notebook.last_valid_code_cell = 0
+        notebook.set_input_files(_file_entries('/p/x.csv'))
+        h = notebook.nb.cells[0].metadata['code_description_hash']
+        notebook.set_input_files([])
+        assert notebook.last_valid_code_cell == 0
+        assert notebook.nb.cells[0].metadata['code_description_hash'] == h
+
+    def test_replace_with_different_path_invalidates_old_citers(self, notebook):
+        """Replacing a file with a different-path file invalidates cells citing
+        the old path, but not unrelated cells."""
+        _add_generated_cell(notebook, "a = open('/p/old.csv')")     # 0: cites old
+        _add_generated_cell(notebook, "b = 2")                      # 1: no cite
+        notebook.last_valid_code_cell = 1
+        notebook.set_input_files(_file_entries('/p/old.csv'))
+        notebook.set_input_files(_file_entries('/p/new.csv'))       # replace old -> new
+        assert notebook.last_valid_code_cell == -1                  # cell 0 cites old
+        assert 'code_description_hash' not in notebook.nb.cells[0].metadata
+        assert 'code_description_hash' in notebook.nb.cells[1].metadata
+
+
+# === Session-only skip metadata is not serialized ===
+
+import nbformat as _nbf
+
+_EPHEMERAL = ('output_hash', 'input_group_fingerprints', 'accessed_symbols',
+              'accessed_symbol_hashes', 'modified_symbols', 'deleted_symbols')
+
+
+class TestLiveCellMetaNotSerialized:
+
+    def test_skip_baselines_are_not_written_to_file(self, notebook):
+        """After executing, the saved .plnb contains persisted hashes
+        (code_hash/code_description_hash/description_hash) but none of the
+        session-only skip keys."""
+        _add_generated_cell(notebook, "a = 1")
+        _add_generated_cell(notebook, "b = a + 1")
+        notebook.last_valid_code_cell = 1
+        for i in range(2):
+            notebook.execute_cell(i)
+        # In memory, the baselines live off cell.metadata.
+        assert notebook._live(notebook.nb.cells[1]).modified_symbols is not None
+        for cell in notebook.nb.cells:
+            for k in _EPHEMERAL:
+                assert k not in cell.metadata
+
+        # On disk: ephemeral keys absent, persisted content hashes present.
+        saved = _nbf.read(notebook.path, as_version=4)
+        for cell in saved.cells:
+            for k in _EPHEMERAL:
+                assert k not in cell.metadata
+            assert 'code_hash' in cell.metadata
+            assert 'code_description_hash' in cell.metadata
+            assert 'description_hash' in cell.metadata
+
+    def test_load_strips_stale_ephemeral_keys(self, tmp_notebook_path):
+        """Opening a notebook whose cells carry stale skip keys (from an older
+        version) drops them from cell.metadata."""
+        nb = _nbf.v4.new_notebook()
+        cell = _nbf.v4.new_code_cell("x = 1")
+        cell.metadata['output_hash'] = 'stale'
+        cell.metadata['input_group_fingerprints'] = ['stale']
+        cell.metadata['accessed_symbols'] = ['x']
+        nb.cells = [cell]
+        with open(tmp_notebook_path, 'w') as f:
+            _nbf.write(nb, f)
+
+        pb = Plainbook(tmp_notebook_path)
+        try:
+            md = pb.nb.cells[0].metadata
+            for k in _EPHEMERAL:
+                assert k not in md
+        finally:
+            pb._shutdown()
+
+
+# === Unit-test code regeneration is skipped when the context is unchanged ===
+
+import plainbook.plainbook as _pbmod
+
+
+class TestUnitTestCodeSkip:
+
+    def _stub(self):
+        calls = {"n": 0}
+        def fake_generate_unit_test(api_key, **kwargs):
+            calls["n"] += 1
+            return "assert True  # generated"
+        _pbmod.AI_PROVIDERS["utstub"] = dict(_pbmod.AI_PROVIDERS["gemini"])
+        _pbmod.AI_PROVIDERS["utstub"]["generate_unit_test"] = fake_generate_unit_test
+        return calls
+
+    def _setup_meta(self, notebook, cell_index=0, test_name='test1'):
+        return (notebook.nb.cells[cell_index]
+                .metadata['unit_tests'][test_name]['cells']['setup']['metadata'])
+
+    def _validity(self, notebook, cell_index=0, test_name='test1'):
+        return notebook.nb.cells[cell_index].metadata['unit_tests'][test_name]['validity']
+
+    def _prepare(self, notebook, source="x = process(data)"):
+        idx = _add_code_cell(notebook, source)
+        notebook.last_valid_code_cell = idx
+        cell = notebook.nb.cells[idx]
+        # Build sub-cells as nbformat nodes (attribute access), like the real ones.
+        def sub(expl=''):
+            return _nbf.from_dict({'cell_type': 'code', 'source': '', 'outputs': [],
+                                   'metadata': {'explanation': expl}})
+        cell.metadata['unit_tests'] = {'test1': {
+            'validity': _all_valid(),
+            'cells': {'setup': sub('set up the input data'), 'test': sub()},
+        }}
+        return idx
+
+    def test_first_generation_calls_ai_and_stores_hash(self, notebook):
+        calls = self._stub()
+        self._prepare(notebook)
+        notebook.generate_unit_test_cell("k", 0, "test1", "setup", ai_provider="utstub")
+        assert calls["n"] == 1
+        assert self._setup_meta(notebook).get('generation_context_hash')
+
+    def test_unchanged_context_skips_ai(self, notebook):
+        """Simulating a reload/flag-flip (code_valid -> False) does not call the AI
+        when nothing that determines the code has changed."""
+        calls = self._stub()
+        self._prepare(notebook)
+        notebook.generate_unit_test_cell("k", 0, "test1", "setup", ai_provider="utstub")
+        src = notebook.nb.cells[0].metadata['unit_tests']['test1']['cells']['setup']['source']
+
+        self._validity(notebook)['setup_code_valid'] = False        # cascade / clobber
+        before = calls["n"]
+        notebook.generate_unit_test_cell("k", 0, "test1", "setup", ai_provider="utstub")
+        assert calls["n"] == before                                  # AI NOT called
+        assert notebook.nb.cells[0].metadata['unit_tests']['test1']['cells']['setup']['source'] == src
+        assert self._validity(notebook)['setup_code_valid'] is True
+
+    def test_target_change_forces_regeneration(self, notebook):
+        calls = self._stub()
+        self._prepare(notebook)
+        notebook.generate_unit_test_cell("k", 0, "test1", "setup", ai_provider="utstub")
+        self._validity(notebook)['setup_code_valid'] = False
+        notebook.set_cell_source(0, "x = process(data) + 1")         # target source changes
+        notebook.last_valid_code_cell = 0
+        before = calls["n"]
+        notebook.generate_unit_test_cell("k", 0, "test1", "setup", ai_provider="utstub")
+        assert calls["n"] == before + 1                              # AI called
+
+    def test_explanation_change_forces_regeneration(self, notebook):
+        calls = self._stub()
+        self._prepare(notebook)
+        notebook.generate_unit_test_cell("k", 0, "test1", "setup", ai_provider="utstub")
+        self._validity(notebook)['setup_code_valid'] = False
+        self._setup_meta(notebook)['explanation'] = "set up DIFFERENT input data"
+        before = calls["n"]
+        notebook.generate_unit_test_cell("k", 0, "test1", "setup", ai_provider="utstub")
+        assert calls["n"] == before + 1                              # AI called
+
+
+class TestExplainCode:
+    """Backend for the AI "Explain code" feature (no kernel needed; AI stubbed)."""
+
+    def _stub(self, text="AN EXPLANATION"):
+        calls = {"n": 0, "kwargs": None}
+        def fake_explain(api_key, previous_code, code_to_explain, instructions, **kwargs):
+            calls["n"] += 1
+            calls["kwargs"] = kwargs
+            return text
+        _pbmod.AI_PROVIDERS["explstub"] = dict(_pbmod.AI_PROVIDERS["gemini"])
+        _pbmod.AI_PROVIDERS["explstub"]["explain"] = fake_explain
+        return calls
+
+    def test_both_providers_expose_explain(self):
+        assert "explain" in _pbmod.AI_PROVIDERS["gemini"]
+        assert "explain" in _pbmod.AI_PROVIDERS["claude"]
+
+    def test_explain_stores_ai_explanation(self, notebook):
+        calls = self._stub()
+        idx = _add_code_cell(notebook, "a = 1")
+        explanation, ret_idx = notebook.explain_code_cell(
+            "key", idx, level=3, use_bullets=True, use_latex=False, ai_provider="explstub")
+        assert calls["n"] == 1
+        assert explanation == "AN EXPLANATION"
+        assert ret_idx == idx
+        cell = notebook.nb.cells[idx]
+        assert cell.metadata["ai_code_explanation"] == "AN EXPLANATION"
+        assert cell.metadata.get("ai_code_explanation_timestamp")
+        # Options are forwarded to the provider fn.
+        assert calls["kwargs"]["level"] == 3
+        assert calls["kwargs"]["use_bullets"] is True
+        assert calls["kwargs"]["use_latex"] is False
+
+    def test_explain_pins_code_hash(self, notebook):
+        self._stub()
+        idx = _add_code_cell(notebook, "a = 1")
+        notebook.explain_code_cell("key", idx, ai_provider="explstub")
+        cell = notebook.nb.cells[idx]
+        assert cell.metadata["code_hash_for_code_explanation"] == notebook._hash_text("a = 1")
+        assert cell.metadata["code_hash_for_code_explanation"] == cell.metadata["code_hash"]
+
+    def test_edit_keeps_explanation_when_code_identical(self, notebook):
+        self._stub()
+        idx = _add_code_cell(notebook, "a = 1")
+        notebook.explain_code_cell("key", idx, ai_provider="explstub")
+        # Re-saving byte-identical source keeps the explanation.
+        notebook.set_cell_source(idx, "a = 1")
+        assert notebook.nb.cells[idx].metadata.get("ai_code_explanation") == "AN EXPLANATION"
+
+    def test_edit_drops_explanation_when_code_changes(self, notebook):
+        self._stub()
+        idx = _add_code_cell(notebook, "a = 1")
+        notebook.explain_code_cell("key", idx, ai_provider="explstub")
+        notebook.set_cell_source(idx, "a = 2")
+        meta = notebook.nb.cells[idx].metadata
+        for k in ("ai_code_explanation", "ai_code_explanation_timestamp",
+                  "code_hash_for_code_explanation"):
+            assert k not in meta
+
+    def test_clear_code_drops_explanation(self, notebook):
+        self._stub()
+        idx = _add_code_cell(notebook, "a = 1")
+        notebook.explain_code_cell("key", idx, ai_provider="explstub")
+        notebook.clear_cell_code(idx)
+        assert "ai_code_explanation" not in notebook.nb.cells[idx].metadata
+
+    def test_regenerate_drops_explanation(self, notebook):
+        # Stub both explain and code generation so no kernel/API is needed.
+        self._stub()
+        def fake_generate(api_key, **kwargs):
+            return "a = 2"
+        _pbmod.AI_PROVIDERS["explstub"]["generate"] = fake_generate
+        idx = _add_code_cell(notebook, "a = 1")
+        notebook.explain_code_cell("key", idx, ai_provider="explstub")
+        assert notebook.nb.cells[idx].metadata.get("ai_code_explanation")
+        notebook.generate_code_cell("key", idx, ai_provider="explstub")
+        assert "ai_code_explanation" not in notebook.nb.cells[idx].metadata
+        # New source hash recorded.
+        assert notebook.nb.cells[idx].metadata["code_hash"] == notebook._hash_text("a = 2")

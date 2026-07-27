@@ -151,6 +151,9 @@ export default {
                             <span v-else-if="runningActivity && runningActivity.type === 'validating'">
                                 Validating cell {{ runningActivity.cellIndex + 1 }}<template v-if="runningActivity.cellName">: {{ runningActivity.cellName }}</template>
                             </span>
+                            <span v-else-if="runningActivity && runningActivity.type === 'explaining'">
+                                Explaining code in cell {{ runningActivity.cellName || (runningActivity.cellIndex + 1) }}
+                            </span>
                             <span v-else-if="runningActivity && runningActivity.type === 'verifying'">
                                 Verifying notebook&hellip;
                             </span>

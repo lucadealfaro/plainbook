@@ -87,6 +87,8 @@ OP_LOG_CONFIG = {
     "generate_test_code": {"snapshot": True, "truncate_result_fields": {"code": 8192}},
     "generate_unit_test_cell_code": {"snapshot": True, "truncate_result_fields": {"code": 8192}},
     "validate_code": {"snapshot": True},
+    "explain_code": {"snapshot": True, "truncate_result_fields": {"explanation": 8192}},
+    "set_explain_options": {"snapshot": False},
     "validate_unit_test_code": {"snapshot": True},
     "set_validation_visibility": {"snapshot": True},
     "set_unit_test_validation_visibility": {"snapshot": True},

@@ -137,6 +137,57 @@ class TestUnfold:
         assert notebook.last_valid_code_cell == idx - 1
 
 
+class TestFoldingDrivesTheGenerationSkip:
+    """The generator skips regeneration when a cell's code was already produced
+    from its current description. Folding rewrites the description, so it has to
+    keep those hashes honest or the amendment never reaches the code."""
+
+    def _mark_code_generated_from_explanation(self, notebook, idx):
+        cell = notebook.nb.cells[idx]
+        cell.metadata['code_description_hash'] = cell.metadata['description_hash']
+
+    def test_commit_amend_forces_regeneration(self, notebook):
+        idx = _add_action_cell(notebook, "Plot revenue.", source="plot(df)")
+        self._mark_code_generated_from_explanation(notebook, idx)
+        notebook.commit_amend(idx, "Plot revenue on log axes.")
+        # The code came from the pre-fold text, so the skip must decline.
+        assert not notebook._code_matches_description(notebook.nb.cells[idx])
+
+    def test_unfold_restores_a_matching_pair(self, notebook):
+        idx = _add_action_cell(notebook, "Plot revenue.", source="plot(df)")
+        self._mark_code_generated_from_explanation(notebook, idx)
+        notebook.commit_amend(idx, "Plot revenue on log axes.")
+        notebook.set_cell_source(idx, "plot(df, logy=True)")
+        notebook.unfold(idx)
+        # Explanation and code were generated together, so no AI call is owed.
+        assert notebook._code_matches_description(notebook.nb.cells[idx])
+
+    def test_unfold_retires_the_output_recorded_for_the_folded_code(self, notebook):
+        idx = _add_action_cell(notebook, "Plot revenue.", source="plot(df)")
+        self._mark_code_generated_from_explanation(notebook, idx)
+        notebook.commit_amend(idx, "Plot revenue on log axes.")
+        notebook.set_cell_source(idx, "plot(df, logy=True)")
+        cell = notebook.nb.cells[idx]
+        cell.metadata['code_description_hash'] = cell.metadata['description_hash']
+        # Stand in for a run of the folded code: the execution-skip trusts the
+        # stored output only while this hash still matches the cell.
+        notebook._live(cell).output_hash = cell.metadata['code_description_hash']
+        notebook.unfold(idx)
+        assert notebook._live(cell).output_hash != cell.metadata['code_description_hash']
+
+    def test_legacy_unfold_forces_regeneration(self, notebook):
+        idx = _add_action_cell(notebook, "Folded text.", source="plot(df)")
+        self._mark_code_generated_from_explanation(notebook, idx)
+        notebook.nb.cells[idx].metadata['explanation_prefold'] = {
+            'explanation': "Plot revenue.",
+            'additions': [{'id': 'a1', 'text': "log scale"}],
+        }
+        notebook.unfold(idx)
+        # No code was saved, so the restored text must regenerate rather than
+        # keep the code the folded text produced.
+        assert not notebook._code_matches_description(notebook.nb.cells[idx])
+
+
 class TestGeneratorReadsExplanationDirectly:
 
     def test_no_additions_machinery_remains(self, notebook):

@@ -1,11 +1,12 @@
 import { ref, watch } from './vue.esm-browser.js';
 
 export default {
-    props: ['isActive', 'isCodespace', 'hasGeminiKey', 'hasClaudeKey', 'claudeViaBedrock'],
+    props: ['isActive', 'isCodespace', 'hasGeminiKey', 'hasClaudeKey', 'claudeViaBedrock', 'skipReexecution'],
     emits: ['close', 'save'],
     setup(props, { emit }) {
         const localGeminiKey = ref('');
         const localClaudeKey = ref('');
+        const localSkipReexecution = ref(true);
         // Track whether the user has clicked to edit each field
         const geminiEditing = ref(false);
         const claudeEditing = ref(false);
@@ -22,6 +23,8 @@ export default {
                 claudeEditing.value = false;
                 geminiRemoved.value = false;
                 claudeRemoved.value = false;
+                // Default to on when the setting is not yet defined.
+                localSkipReexecution.value = props.skipReexecution !== false;
             }
         });
 
@@ -45,10 +48,11 @@ export default {
             emit('save', {
                 gemini_api_key: geminiRemoved.value ? null : ((geminiEditing.value || !props.hasGeminiKey) ? localGeminiKey.value : ''),
                 claude_api_key: claudeRemoved.value ? null : ((claudeEditing.value || !props.hasClaudeKey) ? localClaudeKey.value : ''),
+                skip_reexecution: localSkipReexecution.value,
             });
         };
 
-        return { localGeminiKey, localClaudeKey, geminiEditing, claudeEditing, geminiRemoved, claudeRemoved, startEditing, removeKey, handleSave };
+        return { localGeminiKey, localClaudeKey, geminiEditing, claudeEditing, geminiRemoved, claudeRemoved, localSkipReexecution, startEditing, removeKey, handleSave };
     },
     template: /* html */ `
     <div class="modal" :class="{'is-active': isActive}">
@@ -116,6 +120,19 @@ export default {
                         <a href="https://aistudio.google.com/app/apikey" target="_blank" class="button is-small is-link is-light" style="margin-top: 0.5rem;">
                             {{ hasGeminiKey ? 'Manage Gemini API Key' : 'Get Gemini API Key' }}
                         </a>
+                    </p>
+                </div>
+                <hr>
+                <div class="field">
+                    <label class="label">Execution</label>
+                    <label class="checkbox">
+                        <input type="checkbox" v-model="localSkipReexecution">
+                        Skip re-execution of unchanged cells
+                    </label>
+                    <p class="help">
+                        When on (default), a cell whose code and inputs have not changed is not
+                        re-run — its result is reconstructed instead. Turn this off if cells depend on
+                        untracked inputs such as the current time, random numbers, or external files.
                     </p>
                 </div>
             </section>
