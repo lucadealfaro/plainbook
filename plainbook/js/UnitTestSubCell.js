@@ -1,12 +1,13 @@
 import { ref, computed, watch, onMounted, nextTick } from './vue.esm-browser.js';
 import ExplanationEditor from './ExplanationEditor.js';
 import CodeCell from './CodeCell.js';
+import CellCodeBar from './CellCodeBar.js';
 import ValidationCell from './ValidationCell.js';
 import OutputRenderer from './OutputRenderer.js';
 import { outputsHaveError } from './errorUtils.js';
 
 export default {
-    components: { ExplanationEditor, CodeCell, ValidationCell, OutputRenderer },
+    components: { ExplanationEditor, CodeCell, CellCodeBar, ValidationCell, OutputRenderer },
     props: ['cell', 'role', 'isActive', 'isLocked', 'running', 'codeValid', 'outputValid'],
     emits: ['save-explanation', 'save-code', 'save-and-run', 'save-code-and-run', 'gencode', 'clearcode', 'validate', 'dismiss-validation', 'run', 'interrupt', 'activate'],
     setup(props) {
@@ -16,6 +17,8 @@ export default {
         const explanation = computed(() => props.cell.metadata?.explanation || '');
         const outputVisible = ref(true);
         const startEditKey = ref(undefined);
+        const openPanel = ref('none');   // 'code' | 'none' (no explanation in unit tests)
+        const descEditing = ref(false);
 
         // Auto-enter edit mode when cell becomes active with empty explanation
         watch(() => props.isActive, (active) => {
@@ -35,7 +38,8 @@ export default {
             startEditKey.value = Date.now();
         };
 
-        return { mode, hasError, hasCode, explanation, outputVisible, startEditKey, triggerEdit };
+        return { mode, hasError, hasCode, explanation, outputVisible, startEditKey, triggerEdit,
+            openPanel, descEditing };
     },
     template: /* html */ `
         <div class="unit-test-sub-cell notebook-cell box p-0 mb-5 is-clipped shadow-sm"
@@ -63,9 +67,7 @@ export default {
                     :startEditKey="startEditKey"
                     @save="$emit('save-explanation', $event)"
                     @toggle-output="outputVisible = !outputVisible"
-                    @gencode="$emit('gencode')"
-                    @clearcode="$emit('clearcode')"
-                    @validate="$emit('validate')"
+                    @update:editing="descEditing = $event"
                     @run="$emit('run')"
                     @interrupt="$emit('interrupt')"
                     @saveandrun="$emit('save-and-run', $event)"
@@ -79,6 +81,23 @@ export default {
                 :validation="cell.metadata.validation"
                 @dismiss_validation="$emit('dismiss-validation')" />
 
+            <cell-code-bar v-show="isActive"
+                v-model:open-panel="openPanel"
+                :has-explanation="false"
+                :has-code="hasCode"
+                :can-generate="(cell.metadata.explanation || '').trim().length > 0"
+                :code-valid="codeValid"
+                :running="running"
+                :has-error="hasError"
+                :is-locked="isLocked"
+                :is-test-cell="false"
+                :show-explain="false"
+                :editing="descEditing"
+                @gencode="$emit('gencode')"
+                @clearcode="$emit('clearcode')"
+                @validate="$emit('validate')"
+                @interrupt="$emit('interrupt')" />
+
             <code-cell
                 v-model:source="cell.source"
                 :execution-count="cell.execution_count"
@@ -89,6 +108,7 @@ export default {
                 :executed="false"
                 :hasError="hasError"
                 :asRead="false"
+                :external-collapse="openPanel !== 'code'"
                 @save="$emit('save-code', $event)"
                 @saveandrun="$emit('save-code-and-run', $event)"
                 @activate="" />

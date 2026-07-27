@@ -3,6 +3,7 @@ import UnitTestTabBar from './UnitTestTabBar.js';
 import UnitTestSubCell from './UnitTestSubCell.js';
 import ExplanationEditor from './ExplanationEditor.js';
 import CodeCell from './CodeCell.js';
+import CellCodeBar from './CellCodeBar.js';
 import ValidationCell from './ValidationCell.js';
 import OutputRenderer from './OutputRenderer.js';
 import CellLabel from './CellLabel.js';
@@ -10,7 +11,7 @@ import UnitTestHelpModal from './UnitTestHelpModal.js';
 import { outputsHaveError } from './errorUtils.js';
 
 export default {
-    components: { UnitTestTabBar, UnitTestSubCell, ExplanationEditor, CodeCell, ValidationCell, OutputRenderer, CellLabel, UnitTestHelpModal },
+    components: { UnitTestTabBar, UnitTestSubCell, ExplanationEditor, CodeCell, CellCodeBar, ValidationCell, OutputRenderer, CellLabel, UnitTestHelpModal },
     props: ['notebook', 'targetCellIndex', 'authToken', 'running', 'runningActivity',
             'isLocked', 'lastValidCodeCellIndex', 'lastValidOutputCellIndex', 'unitTestValidity',
             'activeSubCell', 'activeTestName'],
@@ -51,6 +52,8 @@ export default {
 
         const targetCodeValid = computed(() => props.lastValidCodeCellIndex >= props.targetCellIndex);
         const targetOutputVisible = ref(true);
+        const targetOpenPanel = ref('none');   // 'code' | 'none' (no explanation in unit tests)
+        const targetDescEditing = ref(false);
 
         const activeTestValidity = computed(() => {
             if (!props.unitTestValidity || !activeTestName.value) return null;
@@ -135,6 +138,7 @@ export default {
         return {
             activeTestName, activeSubCell, targetCell, unitTests, activeTest,
             hasTargetError, targetCodeValid, targetOutputValid, targetOutputVisible,
+            targetOpenPanel, targetDescEditing,
             activeTestValidity, setupCodeValid, setupOutputValid, testCodeValid, testOutputValid,
             targetTestOutputs, handleAdd, handleDelete, clearOutputs,
             rootEl, focusRoot, showHelp
@@ -229,9 +233,7 @@ export default {
                             cellMode="target"
                             @save="(content) => $emit('save-explanation', content)"
                             @toggle-output="targetOutputVisible = !targetOutputVisible"
-                            @gencode="$emit('gencode')"
-                            @clearcode="$emit('clearcode')"
-                            @validate="$emit('validate')"
+                            @update:editing="targetDescEditing = $event"
                             @run="$emit('run-unit-test-subcell', targetCellIndex, activeTestName, 'target')"
                             @interrupt="$emit('interrupt')"
                             @saveandrun="(content) => { $emit('save-explanation', content); $emit('run-unit-test-subcell', targetCellIndex, activeTestName, 'target'); activeSubCell = 'test'; }"
@@ -245,6 +247,23 @@ export default {
                         :validation="targetCell.metadata.validation"
                         @dismiss_validation="$emit('dismiss-validation')" />
 
+                    <cell-code-bar v-show="activeSubCell === 'target'"
+                        v-model:open-panel="targetOpenPanel"
+                        :has-explanation="false"
+                        :has-code="(targetCell.source || '').trim().length > 0"
+                        :can-generate="(targetCell.metadata.explanation || '').trim().length > 0"
+                        :code-valid="targetCodeValid"
+                        :running="running"
+                        :has-error="hasTargetError"
+                        :is-locked="isLocked"
+                        :is-test-cell="false"
+                        :show-explain="false"
+                        :editing="targetDescEditing"
+                        @gencode="$emit('gencode')"
+                        @clearcode="$emit('clearcode')"
+                        @validate="$emit('validate')"
+                        @interrupt="$emit('interrupt')" />
+
                     <code-cell
                         v-model:source="targetCell.source"
                         :execution-count="targetCell.execution_count"
@@ -255,6 +274,7 @@ export default {
                         :executed="false"
                         :hasError="hasTargetError"
                         :asRead="false"
+                        :external-collapse="targetOpenPanel !== 'code'"
                         @save="(content) => $emit('save-code', content)"
                         @saveandrun="(content) => { $emit('save-code', content); $emit('run-unit-test-subcell', targetCellIndex, activeTestName, 'target'); activeSubCell = 'test'; }"
                         @activate="" />
