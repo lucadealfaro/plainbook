@@ -8,6 +8,9 @@ from .ai_common import (
     UNIT_TEST_SYSTEM_INSTRUCTIONS,
     CHECKING_INSTRUCTIONS,
     EXPLAIN_INSTRUCTIONS,
+    DEFAULT_EXPLANATION_DETAIL_LEVEL,
+    DEFAULT_EXPLANATION_USE_BULLETS,
+    DEFAULT_EXPLANATION_USE_LATEX,
     NAME_GENERATION_INSTRUCTIONS,
     AMEND_EXPLANATION_INSTRUCTIONS,
     NOTEBOOK_VERIFY_INSTRUCTIONS,
@@ -350,7 +353,7 @@ Validation Result:
     return parse_validation_response(response_text)
 
 
-def claude_explain_code(api_key, previous_code, code_to_explain, instructions, variable_context=None, level=2, use_bullets=False, use_latex=False, model=None, debug=False, dump_ai_requests=False):
+def claude_explain_code(api_key, previous_code, code_to_explain, instructions, variable_context=None, level=DEFAULT_EXPLANATION_DETAIL_LEVEL, use_bullets=DEFAULT_EXPLANATION_USE_BULLETS, use_latex=DEFAULT_EXPLANATION_USE_LATEX, model=None, debug=False, dump_ai_requests=False):
     client = _get_client(api_key)
     model = model or CLAUDE_MODEL
 

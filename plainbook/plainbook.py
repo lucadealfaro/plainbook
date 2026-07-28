@@ -17,7 +17,8 @@ import machineid
 import nbformat
 import requests
 
-from .ai_common import get_session_tokens
+from .ai_common import (get_session_tokens, DEFAULT_EXPLANATION_DETAIL_LEVEL,
+                        DEFAULT_EXPLANATION_USE_BULLETS, DEFAULT_EXPLANATION_USE_LATEX)
 from .utilities import PIP_INSTALL_CODE, parse_pip_install_result, resolve_package_name
 from .gemini import gemini_generate_code, gemini_validate_code, gemini_explain_code, gemini_generate_cell_name, gemini_generate_test_code, gemini_generate_unit_test_code, gemini_verify_notebook, gemini_verify_tests, gemini_amend_explanation
 from .claude import claude_generate_code, claude_validate_code, claude_explain_code, claude_generate_cell_name, claude_generate_test_code, claude_generate_unit_test_code, claude_verify_notebook, claude_verify_tests, claude_amend_explanation
@@ -2005,7 +2006,7 @@ class Plainbook:
                 self.ai_request_pending = False
 
 
-    def explain_code_cell(self, api_key, index, level=2, use_bullets=False, use_latex=False, ai_provider="gemini", model=None):
+    def explain_code_cell(self, api_key, index, level=DEFAULT_EXPLANATION_DETAIL_LEVEL, use_bullets=DEFAULT_EXPLANATION_USE_BULLETS, use_latex=DEFAULT_EXPLANATION_USE_LATEX, ai_provider="gemini", model=None):
         """Generates a natural-language explanation of the code in the cell at
         index, stored separately from the user's description."""
         with self._lock:

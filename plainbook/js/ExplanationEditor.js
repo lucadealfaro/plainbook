@@ -204,7 +204,7 @@ const ExplanationRenderer = {
                         @click.stop="$emit('open-unit-test')">
                     <span v-if="unitTestCount" class="unit-test-counter mr-1" style="font-weight: 600;">{{ unitTestCount }}</span>
                     <span class="icon"><i class="bx bx-medical-flask"></i></span>
-                    <span>Test this cell</span>
+                    <span>Test1</span>
                 </button>
                 <button v-if="showDelete" class="button is-small is-danger py-1 " title="Delete cell" aria-label="Delete"
                         :disabled="localIsLocked" @click.stop="$emit('delete')">

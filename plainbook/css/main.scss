@@ -136,6 +136,9 @@ pre[class*="language-"] {
 /* Add scroll margin to cells so they don't hide under the navbar when scrolling */
 .notebook-cell {
   scroll-margin-top: 1rem;
+  // Keep an entirely empty cell tall enough to see and click; non-empty cells
+  // are already taller so this only affects empty ones.
+  min-height: 2.75rem;
 }
 
 /* Insert cell button hover zone */

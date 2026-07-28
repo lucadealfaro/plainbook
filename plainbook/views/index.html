@@ -218,6 +218,9 @@
         :has-claude-key="hasClaudeKey"
         :claude-via-bedrock="claudeViaBedrock"
         :skip-reexecution="skipReexecution"
+        :explanation-detail="explanationDetail"
+        :explanation-bullets="explanationBullets"
+        :explanation-latex="explanationLatex"
         @close="showSettings = false"
         @save="(keys) => {showSettings = false; saveSettings(keys); }"
     />

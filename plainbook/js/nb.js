@@ -33,6 +33,10 @@ createApp({
         const isLocked = ref(false);
         const shareOutputWithAi = ref(true);
         const skipReexecution = ref(true);
+        // Global "Explain code" options (stored in settings.yaml on the server).
+        const explanationDetail = ref(1);      // 1 Brief .. 4 Expert
+        const explanationBullets = ref(false);
+        const explanationLatex = ref(false);
         const aiTokens = ref({input: 0, output: 0});
         const verificationStatus = ref('none');
         const debug = ref(false);
@@ -218,6 +222,9 @@ createApp({
                 hasGeminiKey.value = r.has_gemini_key || false;
                 hasClaudeKey.value = r.has_claude_key || false;
                 claudeViaBedrock.value = r.claude_via_bedrock || false;
+                if (r.explanation_detail !== undefined) explanationDetail.value = r.explanation_detail;
+                explanationBullets.value = !!r.explanation_bullets;
+                explanationLatex.value = !!r.explanation_latex;
                 logEnabled.value = !!r.log_enabled;
                 logviewEnabled.value = !!r.logview_enabled;
                 printAllEnabled.value = !!r.print_all_enabled;
@@ -1562,6 +1569,21 @@ createApp({
                     throw new Error('Error saving execution setting', { cause: err });
                 }
             }
+            // Save the global "Explain code" options.
+            if (keys.explanation_detail !== undefined) {
+                try {
+                    const r = await apiCall('/set_explain_options', 'POST', {
+                        detail: keys.explanation_detail,
+                        bullets: keys.explanation_bullets,
+                        latex: keys.explanation_latex,
+                    });
+                    if (r.explanation_detail !== undefined) explanationDetail.value = r.explanation_detail;
+                    if (r.explanation_bullets !== undefined) explanationBullets.value = r.explanation_bullets;
+                    if (r.explanation_latex !== undefined) explanationLatex.value = r.explanation_latex;
+                } catch (err) {
+                    throw new Error('Error saving explanation options', { cause: err });
+                }
+            }
         };
 
         const setActiveAiProvider = async (providerId) => {
@@ -1629,7 +1651,7 @@ createApp({
             window.removeEventListener('plainbook:files-changed', onFilesChanged);
         });
 
-        return { notebook, notebook_name, loading, error, isLocked, lockNotebook, shareOutputWithAi, skipReexecution, aiTokens, verificationStatus, toggleShareOutput,
+        return { notebook, notebook_name, loading, error, isLocked, lockNotebook, shareOutputWithAi, skipReexecution, explanationDetail, explanationBullets, explanationLatex, aiTokens, verificationStatus, toggleShareOutput,
             sendExplanationToServer, authToken,
             sendCodeToServer, clearCellCode, ui_saveExplanationAndRun, ui_saveCodeAndRun,
             sendMarkdownToServer, generateCode, activeIndex, reloadNotebook, downloadIpynb,

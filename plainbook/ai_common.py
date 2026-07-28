@@ -114,6 +114,13 @@ the logic and implementation details without needing to read the code themselves
 Do not include markdown code fences in your response, just the natural language explanation.
 """
 
+# Defaults for the "Explain code" options — the single source of truth. Referenced
+# by the /explain_code and /set_explain_options endpoints (main.py) and by the
+# explain-code functions/method (gemini.py, claude.py, plainbook.py). Change here only.
+DEFAULT_EXPLANATION_DETAIL_LEVEL = 1   # 1 Brief .. 4 Expert
+DEFAULT_EXPLANATION_USE_BULLETS = False
+DEFAULT_EXPLANATION_USE_LATEX = False
+
 NOTEBOOK_VERIFY_INSTRUCTIONS = """
 You are auditing a Jupyter notebook on behalf of a user who needs assurance that the
 notebook is both correct and safe to run.

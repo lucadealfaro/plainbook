@@ -1,12 +1,16 @@
 import { ref, watch } from './vue.esm-browser.js';
 
 export default {
-    props: ['isActive', 'isCodespace', 'hasGeminiKey', 'hasClaudeKey', 'claudeViaBedrock', 'skipReexecution'],
+    props: ['isActive', 'isCodespace', 'hasGeminiKey', 'hasClaudeKey', 'claudeViaBedrock', 'skipReexecution',
+            'explanationDetail', 'explanationBullets', 'explanationLatex'],
     emits: ['close', 'save'],
     setup(props, { emit }) {
         const localGeminiKey = ref('');
         const localClaudeKey = ref('');
         const localSkipReexecution = ref(true);
+        const localExplanationDetail = ref(1);
+        const localExplanationBullets = ref(false);
+        const localExplanationLatex = ref(false);
         // Track whether the user has clicked to edit each field
         const geminiEditing = ref(false);
         const claudeEditing = ref(false);
@@ -25,6 +29,9 @@ export default {
                 claudeRemoved.value = false;
                 // Default to on when the setting is not yet defined.
                 localSkipReexecution.value = props.skipReexecution !== false;
+                localExplanationDetail.value = props.explanationDetail || 1;
+                localExplanationBullets.value = !!props.explanationBullets;
+                localExplanationLatex.value = !!props.explanationLatex;
             }
         });
 
@@ -49,10 +56,14 @@ export default {
                 gemini_api_key: geminiRemoved.value ? null : ((geminiEditing.value || !props.hasGeminiKey) ? localGeminiKey.value : ''),
                 claude_api_key: claudeRemoved.value ? null : ((claudeEditing.value || !props.hasClaudeKey) ? localClaudeKey.value : ''),
                 skip_reexecution: localSkipReexecution.value,
+                explanation_detail: localExplanationDetail.value,
+                explanation_bullets: localExplanationBullets.value,
+                explanation_latex: localExplanationLatex.value,
             });
         };
 
-        return { localGeminiKey, localClaudeKey, geminiEditing, claudeEditing, geminiRemoved, claudeRemoved, localSkipReexecution, startEditing, removeKey, handleSave };
+        return { localGeminiKey, localClaudeKey, geminiEditing, claudeEditing, geminiRemoved, claudeRemoved, localSkipReexecution,
+            localExplanationDetail, localExplanationBullets, localExplanationLatex, startEditing, removeKey, handleSave };
     },
     template: /* html */ `
     <div class="modal" :class="{'is-active': isActive}">
@@ -133,6 +144,35 @@ export default {
                         When on (default), a cell whose code and inputs have not changed is not
                         re-run — its result is reconstructed instead. Turn this off if cells depend on
                         untracked inputs such as the current time, random numbers, or external files.
+                    </p>
+                </div>
+                <hr>
+                <div class="field">
+                    <label class="label">Code explanations</label>
+                    <div class="field">
+                        <label class="label is-small">Level of detail</label>
+                        <div class="control">
+                            <div class="select is-small">
+                                <select v-model.number="localExplanationDetail">
+                                    <option :value="1">Brief</option>
+                                    <option :value="2">Normal</option>
+                                    <option :value="3">Detailed</option>
+                                    <option :value="4">Expert</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+                    <label class="checkbox">
+                        <input type="checkbox" v-model="localExplanationBullets">
+                        Use bullet points
+                    </label>
+                    <br>
+                    <label class="checkbox">
+                        <input type="checkbox" v-model="localExplanationLatex">
+                        Use LaTeX for equations
+                    </label>
+                    <p class="help">
+                        Controls how the "Explain code" button writes the explanation.
                     </p>
                 </div>
             </section>

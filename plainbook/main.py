@@ -5,7 +5,8 @@ import datetime
 from functools import wraps
 import json
 from . import __version__
-from .ai_common import reset_session_tokens
+from .ai_common import (reset_session_tokens, DEFAULT_EXPLANATION_DETAIL_LEVEL,
+                        DEFAULT_EXPLANATION_USE_BULLETS, DEFAULT_EXPLANATION_USE_LATEX)
 from .plainbook import CellExecutionError
 import os
 from pathlib import Path
@@ -310,9 +311,9 @@ def get_notebook():
         log_enabled=args.log and not args.logview,
         logview_enabled=args.logview,
         print_all_enabled=args.print_all,
-        explanation_detail=settings.get('explanation_detail', 2),
-        explanation_bullets=settings.get('explanation_bullets', False),
-        explanation_latex=settings.get('explanation_latex', False),
+        explanation_detail=settings.get('explanation_detail', DEFAULT_EXPLANATION_DETAIL_LEVEL),
+        explanation_bullets=settings.get('explanation_bullets', DEFAULT_EXPLANATION_USE_BULLETS),
+        explanation_latex=settings.get('explanation_latex', DEFAULT_EXPLANATION_USE_LATEX),
     )
 
 @post('/set_key')
@@ -386,12 +387,12 @@ def set_explain_options():
     """Persist the global "Explain code" options (complexity level, bullets, LaTeX)."""
     data = request.json
     try:
-        detail = int(data.get('detail', 2))
+        detail = int(data.get('detail', DEFAULT_EXPLANATION_DETAIL_LEVEL))
     except (TypeError, ValueError):
-        detail = 2
+        detail = DEFAULT_EXPLANATION_DETAIL_LEVEL
     detail = max(1, min(4, detail))
-    bullets = bool(data.get('bullets', False))
-    latex = bool(data.get('latex', False))
+    bullets = bool(data.get('bullets', DEFAULT_EXPLANATION_USE_BULLETS))
+    latex = bool(data.get('latex', DEFAULT_EXPLANATION_USE_LATEX))
     for store in (settings, _saved_settings):
         store['explanation_detail'] = detail
         store['explanation_bullets'] = bullets
@@ -693,9 +694,9 @@ def explain_code_cell():
     cell_index = data.get('cell_index')
     # Default to the stored settings; allow a per-request override (used by the
     # UI in a later step).
-    level = data.get('level', settings.get('explanation_detail', 2))
-    use_bullets = data.get('use_bullets', settings.get('explanation_bullets', False))
-    use_latex = data.get('use_latex', settings.get('explanation_latex', False))
+    level = data.get('level', settings.get('explanation_detail', DEFAULT_EXPLANATION_DETAIL_LEVEL))
+    use_bullets = data.get('use_bullets', settings.get('explanation_bullets', DEFAULT_EXPLANATION_USE_BULLETS))
+    use_latex = data.get('use_latex', settings.get('explanation_latex', DEFAULT_EXPLANATION_USE_LATEX))
     api_key, ai_provider, model, error = _get_ai_config()
     if error:
         return dict(status='error', message=error)
