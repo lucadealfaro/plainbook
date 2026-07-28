@@ -31,6 +31,14 @@ export default {
             return outputsHaveError(props.cell.outputs);
         });
 
+        // The description (explanation) may be stored as an array of lines
+        // (nbformat) — a new cell starts as []. Normalize before testing content.
+        const canGenerate = computed(() => {
+            const e = props.cell.metadata?.explanation;
+            const s = Array.isArray(e) ? e.join('') : (e || '');
+            return s.trim().length > 0;
+        });
+
         const outputVisible = ref(true);
 
         // Code / explanation tab bar: at most one panel open at a time.
@@ -72,7 +80,7 @@ export default {
             emit('dismiss-module-install');
         };
 
-        return { hasError, outputVisible, missingModule, moduleBarDismissed,
+        return { hasError, canGenerate, outputVisible, missingModule, moduleBarDismissed,
             onModuleRewrite, onModuleDismiss, openPanel, descEditing };
     },
     template: /* html */ `
@@ -132,7 +140,7 @@ export default {
                     v-model:open-panel="openPanel"
                     :has-explanation="!!cell.metadata?.ai_code_explanation"
                     :has-code="(cell.source || '').trim().length > 0"
-                    :can-generate="(cell.metadata.explanation || '').trim().length > 0"
+                    :can-generate="canGenerate"
                     :code-valid="codeValid"
                     :running="running"
                     :has-error="hasError"
@@ -217,7 +225,7 @@ export default {
                     v-model:open-panel="openPanel"
                     :has-explanation="!!cell.metadata?.ai_code_explanation"
                     :has-code="(cell.source || '').trim().length > 0"
-                    :can-generate="(cell.metadata.explanation || '').trim().length > 0"
+                    :can-generate="canGenerate"
                     :code-valid="testCodeValid"
                     :running="running"
                     :has-error="hasError"

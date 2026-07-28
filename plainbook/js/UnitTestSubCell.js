@@ -14,6 +14,12 @@ export default {
         const mode = computed(() => props.role === 'setup' ? 'unit_setup' : 'unit_test');
         const hasError = computed(() => outputsHaveError(props.cell && props.cell.outputs));
         const hasCode = computed(() => (props.cell.source || '').trim().length > 0);
+        // Description may be an array of lines (new cells start as []); normalize.
+        const canGenerate = computed(() => {
+            const e = props.cell.metadata?.explanation;
+            const s = Array.isArray(e) ? e.join('') : (e || '');
+            return s.trim().length > 0;
+        });
         const explanation = computed(() => props.cell.metadata?.explanation || '');
         const outputVisible = ref(true);
         const startEditKey = ref(undefined);
@@ -38,7 +44,7 @@ export default {
             startEditKey.value = Date.now();
         };
 
-        return { mode, hasError, hasCode, explanation, outputVisible, startEditKey, triggerEdit,
+        return { mode, hasError, hasCode, canGenerate, explanation, outputVisible, startEditKey, triggerEdit,
             openPanel, descEditing };
     },
     template: /* html */ `
@@ -85,7 +91,7 @@ export default {
                 v-model:open-panel="openPanel"
                 :has-explanation="false"
                 :has-code="hasCode"
-                :can-generate="(cell.metadata.explanation || '').trim().length > 0"
+                :can-generate="canGenerate"
                 :code-valid="codeValid"
                 :running="running"
                 :has-error="hasError"

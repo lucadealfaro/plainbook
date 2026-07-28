@@ -50,6 +50,13 @@ export default {
 
         const hasTargetError = computed(() => outputsHaveError(targetCell.value && targetCell.value.outputs));
 
+        // Description may be an array of lines (new cells start as []); normalize.
+        const targetCanGenerate = computed(() => {
+            const e = targetCell.value && targetCell.value.metadata && targetCell.value.metadata.explanation;
+            const s = Array.isArray(e) ? e.join('') : (e || '');
+            return s.trim().length > 0;
+        });
+
         const targetCodeValid = computed(() => props.lastValidCodeCellIndex >= props.targetCellIndex);
         const targetOutputVisible = ref(true);
         const targetOpenPanel = ref('none');   // 'code' | 'none' (no explanation in unit tests)
@@ -137,7 +144,7 @@ export default {
 
         return {
             activeTestName, activeSubCell, targetCell, unitTests, activeTest,
-            hasTargetError, targetCodeValid, targetOutputValid, targetOutputVisible,
+            hasTargetError, targetCanGenerate, targetCodeValid, targetOutputValid, targetOutputVisible,
             targetOpenPanel, targetDescEditing,
             activeTestValidity, setupCodeValid, setupOutputValid, testCodeValid, testOutputValid,
             targetTestOutputs, handleAdd, handleDelete, clearOutputs,
@@ -251,7 +258,7 @@ export default {
                         v-model:open-panel="targetOpenPanel"
                         :has-explanation="false"
                         :has-code="(targetCell.source || '').trim().length > 0"
-                        :can-generate="(targetCell.metadata.explanation || '').trim().length > 0"
+                        :can-generate="targetCanGenerate"
                         :code-valid="targetCodeValid"
                         :running="running"
                         :has-error="hasTargetError"
