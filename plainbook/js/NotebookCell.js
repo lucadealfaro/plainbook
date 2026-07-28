@@ -13,7 +13,8 @@ import { outputsHaveError } from './errorUtils.js';
 export default {
     components: { MarkdownCell, CodeCell, CodeExplanation, CellCodeBar, ExplanationEditor, ValidationCell, OutputRenderer, MissingModuleBar },
     props: ['cell', 'isActive', 'isLocked', 'running', 'codeValid', 'outputValid', 'executed',
-        'asRead', 'markdownEditKey', 'explanationEditKey', 'testCodeValid', 'moduleInstall'],
+        'asRead', 'markdownEditKey', 'explanationEditKey', 'testCodeValid', 'moduleInstall',
+        'foldState'],
     emits: [
         'save-markdown', 'save-explanation', 'save-code',
         'run-cell', 'save-and-run', 'save-code-and-run', 'generate-code', 'clear-code',
@@ -23,7 +24,8 @@ export default {
         'run-test', 'save-and-run-test', 'save-code-and-run-test', 'generate-test-code', 'open-test-help',
         'open-unit-test',
         'install-module', 'dismiss-module-install',
-        'dismiss-error'
+        'dismiss-error',
+        'amend-and-fold', 'accept-amend', 'save-amend', 'dismiss-fold', 'unfold'
     ],
     setup(props, { emit }) {
         const hasError = computed(() => {
@@ -116,6 +118,8 @@ export default {
                         :outputVisible="outputVisible"
                         :start-edit-key="explanationEditKey"
                         :unit-test-count="Object.keys(cell.metadata.unit_tests || {}).length"
+                        :fold-state="foldState"
+                        :has-prefold="!!cell.metadata.explanation_prefold"
                         @save="$emit('save-explanation', $event)"
                         @toggle-output="outputVisible = !outputVisible"
                         @update:editing="descEditing = $event"
@@ -126,7 +130,12 @@ export default {
                         @moveUp="$emit('move-up')"
                         @moveDown="$emit('move-down')"
                         @dismiss-error="$emit('dismiss-error')"
-                        @open-unit-test="$emit('open-unit-test')" />
+                        @open-unit-test="$emit('open-unit-test')"
+                        @amend-and-fold="(text) => $emit('amend-and-fold', text)"
+                        @accept-amend="(text) => $emit('accept-amend', text)"
+                        @save-amend="(text) => $emit('save-amend', text)"
+                        @dismiss-fold="$emit('dismiss-fold')"
+                        @unfold="$emit('unfold')" />
                 </div>
 
                 <validation-cell

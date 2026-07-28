@@ -958,6 +958,94 @@ createApp({
         };
 
 
+        // Folds awaiting review: foldState[index] = { status, original, proposed }.
+        const foldState = ref({});
+
+        const dismissFold = (cellIndex) => {
+            const next = { ...foldState.value };
+            delete next[cellIndex];
+            foldState.value = next;
+        };
+
+        // Nothing is stored until the user accepts the review.
+        const ui_amendAndFold = async (cellIndex, text) => {
+            if (!text || !text.trim() || running.value) return;
+            const cell = notebook.value?.cells?.[cellIndex];
+            flushActiveEdits();
+            await waitForPendingSaves();
+            running.value = true;
+            runningActivity.value = { type: 'folding', cellIndex,
+                cellName: cell?.metadata?.name || null };
+            try {
+                const r = await apiCall('/propose_amend', 'POST', {
+                    cell_index: cellIndex, text: text.trim() });
+                if (r.status !== 'success') throw new Error(r.message || 'Amend failed');
+                const original = Array.isArray(cell.metadata.explanation)
+                    ? cell.metadata.explanation.join('')
+                    : (cell.metadata.explanation || '');
+                foldState.value = { ...foldState.value,
+                    [cellIndex]: { status: 'review', original, proposed: r.proposed } };
+            } finally {
+                running.value = false;
+                runningActivity.value = { type: null, cellIndex: null };
+            }
+        };
+
+        // "Save": commit the amended description only (no regeneration/run). The
+        // code becomes stale until the cell is regenerated.
+        const ui_saveAmend = async (cellIndex, editedText) => {
+            if (running.value) return;
+            const r = await apiCall('/commit_amend', 'POST', {
+                cell_index: cellIndex, explanation: editedText });
+            if (r.status !== 'success') throw new Error(r.message || 'Commit failed');
+            const cell = notebook.value?.cells?.[cellIndex];
+            if (cell) {
+                cell.metadata.explanation = editedText;
+                // Marker so Unfold appears; the snapshot itself is server-side.
+                cell.metadata.explanation_prefold = { committed: true };
+            }
+            dismissFold(cellIndex);
+            asRead.value = false;
+        };
+
+        // "Save and Run": commit, then regenerate through the normal pipeline and
+        // run, so the stored code is always code this explanation produced.
+        const ui_acceptAmend = async (cellIndex, editedText) => {
+            if (running.value) return;
+            await ui_saveAmend(cellIndex, editedText);
+            running.value = true;
+            try {
+                await generateCodeOneCell(cellIndex, true, null);
+                await runCells(cellIndex);
+            } finally {
+                running.value = false;
+                runningActivity.value = { type: null, cellIndex: null };
+            }
+        };
+
+        // Restores a pair that already ran together, so it needs no AI call.
+        const ui_unfold = async (cellIndex) => {
+            if (running.value) return;
+            const r = await apiCall('/unfold', 'POST', { cell_index: cellIndex });
+            if (r.status !== 'success') return;
+            const cell = notebook.value?.cells?.[cellIndex];
+            if (cell) {
+                cell.metadata.explanation = r.explanation;
+                delete cell.metadata.explanation_prefold;
+                if (r.source !== null) cell.source = r.source;
+            }
+            asRead.value = false;
+            running.value = true;
+            try {
+                // A legacy snapshot carries no code, so it must be regenerated.
+                if (r.source === null) await generateCodeOneCell(cellIndex, true, null);
+                await runCells(cellIndex);
+            } finally {
+                running.value = false;
+                runningActivity.value = { type: null, cellIndex: null };
+            }
+        };
+
         // Missing-module installation state, keyed by cell index:
         // undefined | { status: 'installing' } | { status: 'done', success, output }.
         // Displayed by the MissingModuleBar of the corresponding cell.
@@ -1658,6 +1746,7 @@ createApp({
             validateCode, ui_validateCode, explainCode, ui_explainCode, dismissValidation, ui_verifyNotebook, dismissVerification, ui_resetAndRunAllCells, ui_forceRegenerateCellCode,
             setActiveCell, ui_runCell, running, runningActivity, asRead,
             ui_interruptKernel, insertCell, markdownEditKey,
+            foldState, ui_amendAndFold, ui_acceptAmend, ui_saveAmend, dismissFold, ui_unfold,
             moduleInstall, ui_installModule, dismissModuleInstall,
             last_executed_cell_index, last_valid_code_cell_index, last_valid_output_cell_index,
             last_valid_test_cell_index,

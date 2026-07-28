@@ -427,6 +427,51 @@ def edit_explanation():
                 print(f"Warning: failed to generate cell name: {e}")
     return dict(status='success', cell_name=cell_name)
 
+@post('/propose_amend')
+@action_log.logged('propose_amend')
+@stateful
+@require_token
+def propose_amend():
+    data = request.json
+    cell_index = data.get('cell_index')
+    text = data.get('text')
+    api_key, ai_provider, model, error = _get_ai_config()
+    if error:
+        return dict(status='error', message=error)
+    try:
+        proposed = notebook.propose_amend(
+            api_key, cell_index, text, ai_provider=ai_provider, model=model)
+    except Exception as e:
+        friendly = _check_billing_error(e)
+        if friendly:
+            return dict(status='error', message=friendly)
+        raise
+    return dict(status='success', proposed=proposed)
+
+@post('/commit_amend')
+@action_log.logged('commit_amend')
+@stateful
+@require_token
+def commit_amend():
+    data = request.json
+    cell_index = data.get('cell_index')
+    explanation = data.get('explanation')
+    notebook.commit_amend(cell_index, explanation)
+    return dict(status='success')
+
+@post('/unfold')
+@action_log.logged('unfold')
+@stateful
+@require_token
+def unfold():
+    data = request.json
+    cell_index = data.get('cell_index')
+    result = notebook.unfold(cell_index)
+    if result is None:
+        return dict(status='error', message='Nothing to unfold.')
+    return dict(status='success', explanation=result['explanation'],
+                source=result['source'])
+
 @post('/edit_code')
 @action_log.logged('edit_code')
 @stateful
