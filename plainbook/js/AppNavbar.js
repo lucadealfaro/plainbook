@@ -106,14 +106,14 @@ export default {
                         <span class="icon"><i class="bx bx-lock-open"></i></span>
                         </button>
 
-                        <button v-if="!running && hasNotebook"
+                        <!-- <button v-if="!running && hasNotebook"
                             :disabled="cellCount === 0"
                             @click="$emit('clear-outputs')"
                             title="Clear all outputs"
                             class="button is-light">
                             <span class="icon"><i class="bx bx-broom"></i></span>
                             <span>Clear outputs</span>
-                        </button>
+                        </button> -->
 
                         <a v-if="logviewEnabled"
                            :href="'/log_view?token=' + authToken"
