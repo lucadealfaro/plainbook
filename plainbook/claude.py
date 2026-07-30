@@ -108,6 +108,9 @@ def claude_generate_code(
     debug=False,
     dump_ai_requests=False,
     ask_questions=False):
+    """Returns (code, questions).  Normally the AI returns the code, and
+    questions is None; if ask_questions is enabled, the AI may instead return a
+    list of questions for the user, in which case code is None."""
     client = _get_client(api_key)
     model = model or CLAUDE_MODEL
 
@@ -153,10 +156,8 @@ Code:
     if debug:
         print("Response:", response_text)
     if ask_questions:
-        # Returns (code, questions); questions is set only if it asked.
         return parse_generate_response(response_text)
-    code = strip_markdown_code_fences(response_text)
-    return code
+    return strip_markdown_code_fences(response_text), None
 
 
 def claude_amend_explanation(

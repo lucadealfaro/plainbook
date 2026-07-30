@@ -1,12 +1,13 @@
 import { ref, watch } from './vue.esm-browser.js';
 
 export default {
-    props: ['isActive', 'isCodespace', 'hasGeminiKey', 'hasClaudeKey', 'claudeViaBedrock', 'skipReexecution'],
+    props: ['isActive', 'isCodespace', 'hasGeminiKey', 'hasClaudeKey', 'claudeViaBedrock', 'skipReexecution', 'askQuestions'],
     emits: ['close', 'save'],
     setup(props, { emit }) {
         const localGeminiKey = ref('');
         const localClaudeKey = ref('');
         const localSkipReexecution = ref(true);
+        const localAskQuestions = ref(false);
         // Track whether the user has clicked to edit each field
         const geminiEditing = ref(false);
         const claudeEditing = ref(false);
@@ -25,6 +26,7 @@ export default {
                 claudeRemoved.value = false;
                 // Default to on when the setting is not yet defined.
                 localSkipReexecution.value = props.skipReexecution !== false;
+                localAskQuestions.value = !!props.askQuestions;
             }
         });
 
@@ -49,10 +51,11 @@ export default {
                 gemini_api_key: geminiRemoved.value ? null : ((geminiEditing.value || !props.hasGeminiKey) ? localGeminiKey.value : ''),
                 claude_api_key: claudeRemoved.value ? null : ((claudeEditing.value || !props.hasClaudeKey) ? localClaudeKey.value : ''),
                 skip_reexecution: localSkipReexecution.value,
+                ask_questions: localAskQuestions.value,
             });
         };
 
-        return { localGeminiKey, localClaudeKey, geminiEditing, claudeEditing, geminiRemoved, claudeRemoved, localSkipReexecution, startEditing, removeKey, handleSave };
+        return { localGeminiKey, localClaudeKey, geminiEditing, claudeEditing, geminiRemoved, claudeRemoved, localSkipReexecution, localAskQuestions, startEditing, removeKey, handleSave };
     },
     template: /* html */ `
     <div class="modal" :class="{'is-active': isActive}">
@@ -120,6 +123,20 @@ export default {
                         <a href="https://aistudio.google.com/app/apikey" target="_blank" class="button is-small is-link is-light" style="margin-top: 0.5rem;">
                             {{ hasGeminiKey ? 'Manage Gemini API Key' : 'Get Gemini API Key' }}
                         </a>
+                    </p>
+                </div>
+                <hr>
+                <div class="field">
+                    <label class="label">Code generation</label>
+                    <label class="checkbox">
+                        <input type="checkbox" v-model="localAskQuestions">
+                        Enable asking questions
+                    </label>
+                    <p class="help">
+                        When on, the AI may reply to an action cell with a few questions instead
+                        of code, whenever the description leaves it in doubt about what the cell
+                        should do. It is the AI that decides: when the description is clear, it
+                        simply writes the code.
                     </p>
                 </div>
                 <hr>

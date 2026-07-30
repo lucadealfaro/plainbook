@@ -63,6 +63,9 @@ def gemini_generate_code(
     debug=False,
     dump_ai_requests=False,
     ask_questions=False):
+    """Returns (code, questions).  Normally the AI returns the code, and
+    questions is None; if ask_questions is enabled, the AI may instead return a
+    list of questions for the user, in which case code is None."""
     # 1. Initialize the Gemini client
     client = genai.Client(api_key=api_key)
     model = model or GEMINI_GENERATE_MODEL
@@ -113,10 +116,8 @@ Code:
         print("Response:", response.text)
     # 4. Process the response
     if ask_questions:
-        # Returns (code, questions); questions is set only if it asked.
         return parse_generate_response(response.text)
-    code = strip_markdown_code_fences(response.text)
-    return code
+    return strip_markdown_code_fences(response.text), None
 
 
 def gemini_amend_explanation(

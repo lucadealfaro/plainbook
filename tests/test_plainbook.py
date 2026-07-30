@@ -1223,7 +1223,8 @@ class TestExplainCode:
         # Stub both explain and code generation so no kernel/API is needed.
         self._stub()
         def fake_generate(api_key, **kwargs):
-            return "a = 2"
+            # Generation returns (code, questions).
+            return "a = 2", None
         _pbmod.AI_PROVIDERS["explstub"]["generate"] = fake_generate
         idx = _add_code_cell(notebook, "a = 1")
         notebook.explain_code_cell("key", idx, ai_provider="explstub")

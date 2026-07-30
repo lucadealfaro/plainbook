@@ -29,7 +29,7 @@ class TestAskQuestions:
         idx = _add_action_cell(notebook, "Compute the revenue.")
         notebook.set_ask_questions(True)
 
-        # The provider replies with a clarification instead of code.
+        # The AI chooses to reply with questions rather than code.
         def fake_generate(api_key, ask_questions=False, **kwargs):
             assert ask_questions is True
             return parse_generate_response(
@@ -43,13 +43,30 @@ class TestAskQuestions:
         # The cell source is left untouched.
         assert notebook.nb.cells[idx].source == "print(1)"
 
-    def test_no_clarification_when_toggle_off(self, notebook, monkeypatch):
+    def test_code_is_used_when_the_ai_asks_nothing(self, notebook, monkeypatch):
         idx = _add_action_cell(notebook, "Compute the revenue.")
-        # ask_questions defaults to off; the provider returns code normally.
+        notebook.set_ask_questions(True)
+
+        # Questions are enabled, but the AI has no doubts and returns code.
+        def fake_generate(api_key, ask_questions=False, **kwargs):
+            assert ask_questions is True
+            return parse_generate_response("revenue = 42")
+
+        monkeypatch.setitem(pb.AI_PROVIDERS['gemini'], 'generate', fake_generate)
+
+        new_code, success, amended = notebook.generate_code_cell(
+            "key", idx, ai_provider='gemini')
+        assert success is True
+        assert new_code == "revenue = 42"
+        assert notebook.nb.cells[idx].source == "revenue = 42"
+
+    def test_no_clarification_when_setting_off(self, notebook, monkeypatch):
+        idx = _add_action_cell(notebook, "Compute the revenue.")
+        # ask_questions defaults to off; the AI is not offered the choice.
 
         def fake_generate(api_key, ask_questions=False, **kwargs):
             assert ask_questions is False
-            return "revenue = 42"
+            return "revenue = 42", None
 
         monkeypatch.setitem(pb.AI_PROVIDERS['gemini'], 'generate', fake_generate)
 

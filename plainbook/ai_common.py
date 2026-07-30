@@ -28,40 +28,41 @@ and the notebook will render it appropriately.
 # Marks a response that asks questions instead of returning code.
 CLARIFY_SENTINEL = "NEEDS_CLARIFICATION"
 
-def _clarify_instructions(task, produce):
-    """Builds the clarifying-questions addendum for a system prompt. `task` names
-    what is being decided, `produce` what to return when nothing is unclear."""
-    return f"""
+# Appended to SYSTEM_INSTRUCTIONS when the notebook allows asking questions.
+# You decide which of the two responses to give; the notebook handles both.
+CLARIFY_INSTRUCTIONS = f"""
 
-CLARIFYING-QUESTIONS MODE IS ENABLED.
-If anything about {task} is unclear, ASK the user instead of guessing. This mode
-exists so the user can steer, so when in doubt, prefer asking over guessing.
+You may give one of TWO responses, and it is up to you to choose which:
 
-Do NOT ask about:
+1. THE CODE. If you know what the cell should do, just write the code, as
+   described above. This is the normal case, and what you should do whenever the
+   instructions and the context leave you without real doubts.
+
+2. QUESTIONS. If the instructions are genuinely ambiguous, so that a wrong guess
+   would produce the wrong result, ask the user instead of guessing.
+
+Choose questions only for doubts that actually change the code you would write.
+In particular, do NOT ask about:
 - Anything the context already answers. The preceding code, FILE CONTEXT, and
   VARIABLE CONTEXT are available to you; if they settle the point, use them.
 - Anything the user has already addressed. If the instructions (including any
   "Clarifications:" notes or previously answered questions) give you enough to
   proceed, you MUST NOT ask again.
+- Refinements you can reasonably decide yourself, such as variable naming,
+  formatting, or the choice among equivalent implementations.
 
-When something is unclear, respond with EXACTLY this format and NOTHING else (no
-preamble, no explanations):
+To ask questions, respond with EXACTLY this format and NOTHING else (no
+preamble, no explanations, no code):
 {CLARIFY_SENTINEL}
 - <your first question>
 - <your second question>
 
-Rules:
+Rules for questions:
 - One question per line, each line starting with "- ".
 - Ask at most 3 questions.
 - Make each question specific and easy to answer (offer the likely options when
   you can).
-- If nothing is unclear, ignore all of the above and {produce}.
 """
-
-
-# Appended to SYSTEM_INSTRUCTIONS when ask_questions mode is on.
-CLARIFY_INSTRUCTIONS = _clarify_instructions(
-    "what this cell should do", "simply return the code as usual")
 
 TEST_SYSTEM_INSTRUCTIONS = """
 You are an assistant that writes Python test code for Jupyter notebook test cells.

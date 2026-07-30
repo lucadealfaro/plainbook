@@ -32,7 +32,7 @@ createApp({
         const explanationEditKey = ref({});
         const isLocked = ref(false);
         const shareOutputWithAi = ref(true);
-        // When true, the AI may ask questions instead of guessing.
+        // When true (Settings), the AI may reply with questions instead of code.
         const askQuestions = ref(false);
         // Questions awaiting answers: clarifyState[index] = { questions: [...] }.
         const clarifyState = ref({});
@@ -388,16 +388,6 @@ createApp({
                 await apiCall('/set_share_output', 'POST', { share: newVal });
             } catch (err) {
                 throw new Error('Failed to toggle output sharing', { cause: err });
-            }
-        };
-
-        const toggleAskQuestions = async () => {
-            try {
-                const newVal = !askQuestions.value;
-                // apiCall applies the returned state, which updates askQuestions.
-                await apiCall('/set_ask_questions', 'POST', { value: newVal });
-            } catch (err) {
-                throw new Error('Failed to toggle agent questions', { cause: err });
             }
         };
 
@@ -1614,6 +1604,15 @@ createApp({
                     throw new Error('Error saving execution setting', { cause: err });
                 }
             }
+            // Save the code-generation setting (independent of API keys).
+            if (keys.ask_questions !== undefined) {
+                try {
+                    // apiCall applies the returned state, which updates askQuestions.
+                    await apiCall('/set_ask_questions', 'POST', { value: keys.ask_questions });
+                } catch (err) {
+                    throw new Error('Error saving code generation setting', { cause: err });
+                }
+            }
         };
 
         const setActiveAiProvider = async (providerId) => {
@@ -1682,7 +1681,7 @@ createApp({
         });
 
         return { notebook, notebook_name, loading, error, isLocked, lockNotebook, shareOutputWithAi, skipReexecution, aiTokens, verificationStatus, toggleShareOutput,
-            askQuestions, toggleAskQuestions, clarifyState, dismissClarify, ui_submitClarification,
+            askQuestions, clarifyState, dismissClarify, ui_submitClarification,
             sendExplanationToServer, authToken,
             sendCodeToServer, clearCellCode, ui_saveExplanationAndRun, ui_saveCodeAndRun,
             sendMarkdownToServer, generateCode, activeIndex, reloadNotebook, downloadIpynb,

@@ -48,7 +48,6 @@
         :active-ai-provider="activeAiProvider"
         :available-ai-providers="availableAiProviders"
         :share-output-with-ai="shareOutputWithAi"
-        :ask-questions="askQuestions"
         :ai-tokens="aiTokens"
         :verification="notebook?.metadata?.verification"
         :verification-status="verificationStatus"
@@ -59,7 +58,6 @@
         @lock="lockNotebook"
         @restart="ui_restart"
         @toggle-share-output="toggleShareOutput"
-        @toggle-ask-questions="toggleAskQuestions"
         @refresh="reloadNotebook"
         @interrupt="ui_interruptKernel"
         @reset-run-all="ui_resetAndRunAllCells"
@@ -224,6 +222,7 @@
         :has-claude-key="hasClaudeKey"
         :claude-via-bedrock="claudeViaBedrock"
         :skip-reexecution="skipReexecution"
+        :ask-questions="askQuestions"
         @close="showSettings = false"
         @save="(keys) => {showSettings = false; saveSettings(keys); }"
     />

@@ -1697,7 +1697,8 @@ class Plainbook:
             # Mark that an AI request is pending
             if self.ai_request_pending:
                 raise RuntimeError("An AI request is already pending.")
-            # Only action cells can ask questions; test cells always generate.
+            # Only action cells may ask questions; test cells always generate.
+            # Whether questions are actually asked is up to the AI.
             ask_questions = (not is_test) and self.nb.metadata.get('ask_questions', False)
             try:
                 self.ai_request_pending = True
@@ -1713,14 +1714,15 @@ class Plainbook:
                     model=model,
                     debug=self.debug,
                     dump_ai_requests=self.dump_ai_requests)
-                if ask_questions:
-                    gen_kwargs['ask_questions'] = True
-                    new_code, questions = generate_fn(api_key, **gen_kwargs)
+                if is_test:
+                    new_code = generate_fn(api_key, **gen_kwargs)
+                else:
+                    # The AI returns either the code, or questions for the user.
+                    new_code, questions = generate_fn(
+                        api_key, ask_questions=ask_questions, **gen_kwargs)
                     # A cancelled request must not raise.
                     if questions and self.ai_request_pending:
                         raise ClarificationNeeded(questions)
-                else:
-                    new_code = generate_fn(api_key, **gen_kwargs)
                 # If we are still in a request, update the cell.
                 if self.ai_request_pending:
                     cell.source = new_code
