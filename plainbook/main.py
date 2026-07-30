@@ -5,12 +5,15 @@ import datetime
 from functools import wraps
 import json
 from . import __version__
-from .ai_common import reset_session_tokens
+from .ai_common import (reset_session_tokens, DEFAULT_EXPLANATION_DETAIL_LEVEL,
+                        DEFAULT_EXPLANATION_USE_BULLETS, DEFAULT_EXPLANATION_USE_LATEX)
 from .plainbook import CellExecutionError
 import os
 from pathlib import Path
 import secrets
+import shutil
 import socket
+import subprocess
 import yaml
 import sys
 import webbrowser
@@ -60,6 +63,8 @@ parser.add_argument('--logview', action='store_true', default=False,
 parser.add_argument('--print-all', '--print_all', dest='print_all',
                     action='store_true', default=False,
                     help='Include the navbar and files/instructions panel in the browser print/PDF output.')
+parser.add_argument('--use-browser', action='store_true', default=False,
+                    help='Open the UI in a normal browser tab instead of a dedicated app window.')
 args = parser.parse_args()
 
 try:
@@ -310,9 +315,9 @@ def get_notebook():
         log_enabled=args.log and not args.logview,
         logview_enabled=args.logview,
         print_all_enabled=args.print_all,
-        explanation_detail=settings.get('explanation_detail', 2),
-        explanation_bullets=settings.get('explanation_bullets', False),
-        explanation_latex=settings.get('explanation_latex', False),
+        explanation_detail=settings.get('explanation_detail', DEFAULT_EXPLANATION_DETAIL_LEVEL),
+        explanation_bullets=settings.get('explanation_bullets', DEFAULT_EXPLANATION_USE_BULLETS),
+        explanation_latex=settings.get('explanation_latex', DEFAULT_EXPLANATION_USE_LATEX),
     )
 
 @post('/set_key')
@@ -386,12 +391,12 @@ def set_explain_options():
     """Persist the global "Explain code" options (complexity level, bullets, LaTeX)."""
     data = request.json
     try:
-        detail = int(data.get('detail', 2))
+        detail = int(data.get('detail', DEFAULT_EXPLANATION_DETAIL_LEVEL))
     except (TypeError, ValueError):
-        detail = 2
+        detail = DEFAULT_EXPLANATION_DETAIL_LEVEL
     detail = max(1, min(4, detail))
-    bullets = bool(data.get('bullets', False))
-    latex = bool(data.get('latex', False))
+    bullets = bool(data.get('bullets', DEFAULT_EXPLANATION_USE_BULLETS))
+    latex = bool(data.get('latex', DEFAULT_EXPLANATION_USE_LATEX))
     for store in (settings, _saved_settings):
         store['explanation_detail'] = detail
         store['explanation_bullets'] = bullets
@@ -425,6 +430,51 @@ def edit_explanation():
             except Exception as e:
                 print(f"Warning: failed to generate cell name: {e}")
     return dict(status='success', cell_name=cell_name)
+
+@post('/propose_amend')
+@action_log.logged('propose_amend')
+@stateful
+@require_token
+def propose_amend():
+    data = request.json
+    cell_index = data.get('cell_index')
+    text = data.get('text')
+    api_key, ai_provider, model, error = _get_ai_config()
+    if error:
+        return dict(status='error', message=error)
+    try:
+        proposed = notebook.propose_amend(
+            api_key, cell_index, text, ai_provider=ai_provider, model=model)
+    except Exception as e:
+        friendly = _check_billing_error(e)
+        if friendly:
+            return dict(status='error', message=friendly)
+        raise
+    return dict(status='success', proposed=proposed)
+
+@post('/commit_amend')
+@action_log.logged('commit_amend')
+@stateful
+@require_token
+def commit_amend():
+    data = request.json
+    cell_index = data.get('cell_index')
+    explanation = data.get('explanation')
+    notebook.commit_amend(cell_index, explanation)
+    return dict(status='success')
+
+@post('/unfold')
+@action_log.logged('unfold')
+@stateful
+@require_token
+def unfold():
+    data = request.json
+    cell_index = data.get('cell_index')
+    result = notebook.unfold(cell_index)
+    if result is None:
+        return dict(status='error', message='Nothing to unfold.')
+    return dict(status='success', explanation=result['explanation'],
+                source=result['source'])
 
 @post('/edit_code')
 @action_log.logged('edit_code')
@@ -696,9 +746,9 @@ def explain_code_cell():
     cell_index = data.get('cell_index')
     # Default to the stored settings; allow a per-request override (used by the
     # UI in a later step).
-    level = data.get('level', settings.get('explanation_detail', 2))
-    use_bullets = data.get('use_bullets', settings.get('explanation_bullets', False))
-    use_latex = data.get('use_latex', settings.get('explanation_latex', False))
+    level = data.get('level', settings.get('explanation_detail', DEFAULT_EXPLANATION_DETAIL_LEVEL))
+    use_bullets = data.get('use_bullets', settings.get('explanation_bullets', DEFAULT_EXPLANATION_USE_BULLETS))
+    use_latex = data.get('use_latex', settings.get('explanation_latex', DEFAULT_EXPLANATION_USE_LATEX))
     api_key, ai_provider, model, error = _get_ai_config()
     if error:
         return dict(status='error', message=error)
@@ -1139,6 +1189,120 @@ def logger_middleware(app):
     return wrapper
     
     
+def _default_chromium_browser():
+    """If the system default browser is Chromium-based, return its executable; else None.
+    Best-effort and defensive — any failure returns None so we fall back to a scan."""
+    try:
+        if sys.platform == "darwin":
+            import plistlib
+            plist = os.path.expanduser(
+                "~/Library/Preferences/com.apple.LaunchServices/com.apple.launchservices.secure.plist")
+            with open(plist, "rb") as f:
+                data = plistlib.load(f)
+            handlers = {}
+            for h in data.get("LSHandlers", []):
+                scheme = h.get("LSHandlerURLScheme")
+                if scheme in ("http", "https") and h.get("LSHandlerRoleAll"):
+                    handlers[scheme] = h["LSHandlerRoleAll"].lower()
+            bundle_id = handlers.get("https") or handlers.get("http")
+            mac_map = {
+                "com.google.chrome": "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+                "com.brave.browser": "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+                "com.microsoft.edgemac": "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+                "org.chromium.chromium": "/Applications/Chromium.app/Contents/MacOS/Chromium",
+                "com.vivaldi.vivaldi": "/Applications/Vivaldi.app/Contents/MacOS/Vivaldi",
+                "com.operasoftware.opera": "/Applications/Opera.app/Contents/MacOS/Opera",
+            }
+            p = mac_map.get(bundle_id)
+            return p if p and os.path.exists(p) else None
+        elif sys.platform.startswith("win"):
+            import winreg, shlex
+            with winreg.OpenKey(winreg.HKEY_CURRENT_USER,
+                    r"Software\Microsoft\Windows\Shell\Associations\UrlAssociations\https\UserChoice") as k:
+                prog_id = (winreg.QueryValueEx(k, "ProgId")[0] or "").lower()
+            if not any(x in prog_id for x in
+                       ("chrome", "brave", "edge", "chromium", "vivaldi", "opera")):
+                return None
+            with winreg.OpenKey(winreg.HKEY_CLASSES_ROOT, rf"{prog_id}\shell\open\command") as k:
+                cmd = winreg.QueryValueEx(k, "")[0]
+            exe = shlex.split(cmd, posix=False)[0].strip('"')
+            return exe if os.path.exists(exe) else None
+        else:  # linux/bsd
+            out = subprocess.run(["xdg-settings", "get", "default-web-browser"],
+                                 capture_output=True, text=True, timeout=3).stdout.strip().lower()
+            if not any(x in out for x in
+                       ("chrome", "chromium", "brave", "edge", "vivaldi", "opera")):
+                return None
+            for name in ("brave-browser", "google-chrome", "google-chrome-stable", "chromium",
+                         "chromium-browser", "microsoft-edge", "vivaldi", "vivaldi-stable", "opera"):
+                if name in out:
+                    p = shutil.which(name)
+                    if p:
+                        return p
+            return None
+    except Exception:
+        return None
+    return None
+
+
+def _first_installed_chromium():
+    """Return the first Chromium-based browser found in standard locations, or None."""
+    if sys.platform == "darwin":
+        for p in (
+            "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            "/Applications/Chromium.app/Contents/MacOS/Chromium",
+            "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge",
+            "/Applications/Brave Browser.app/Contents/MacOS/Brave Browser",
+            os.path.expanduser("~/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
+        ):
+            if os.path.exists(p):
+                return p
+    elif sys.platform.startswith("win"):
+        for b in filter(None, (os.environ.get("PROGRAMFILES"),
+                               os.environ.get("PROGRAMFILES(X86)"),
+                               os.environ.get("LOCALAPPDATA"))):
+            for sub in (r"Google\Chrome\Application\chrome.exe",
+                        r"Microsoft\Edge\Application\msedge.exe",
+                        r"Chromium\Application\chrome.exe"):
+                p = os.path.join(b, sub)
+                if os.path.exists(p):
+                    return p
+    else:  # linux/bsd
+        for name in ("google-chrome", "google-chrome-stable", "chromium",
+                     "chromium-browser", "microsoft-edge", "brave-browser"):
+            p = shutil.which(name)
+            if p:
+                return p
+    return None
+
+
+def find_chromium_browser():
+    """Return a Chromium-based browser executable: the system default if it is
+    Chromium-based, otherwise the first one found installed. None if none exist."""
+    return _default_chromium_browser() or _first_installed_chromium()
+
+
+def open_browser_tab(url):
+    """Open the URL in a normal browser tab (the pre-existing behavior)."""
+    try:
+        webbrowser.open(url)
+    except Exception:
+        print(f"If the browser does not open, please load this URL: {url}")
+
+
+def open_ui(url):
+    """Open a chromeless app window via a Chromium-based browser if available,
+    else fall back to a normal browser tab."""
+    exe = find_chromium_browser()
+    if exe:
+        try:
+            subprocess.Popen([exe, f"--app={url}"])
+            return
+        except Exception:
+            pass
+    open_browser_tab(url)
+
+
 def main():
     print(f"Plainbook {__version__}")
     port = find_free_port()
@@ -1146,11 +1310,10 @@ def main():
     print(f"Authentication token: {AUTH_TOKEN}")
     if args.debug:
         print(f"Please load this URL: {url}")
+    elif args.use_browser:
+        open_browser_tab(url)   # forced normal tab
     else:
-        try:
-            webbrowser.open(url)
-        except Exception:
-            print(f"If the browser does not open, please load this URL: {url}")
+        open_ui(url)            # chromeless app window if a Chromium browser exists, else a tab
     app_with_logging = logger_middleware(default_app()) if args.debug else default_app()
     # Do not use reloader=True.
     try:

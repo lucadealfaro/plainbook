@@ -154,6 +154,13 @@ the logic and implementation details without needing to read the code themselves
 Do not include markdown code fences in your response, just the natural language explanation.
 """
 
+# Defaults for the "Explain code" options — the single source of truth. Referenced
+# by the /explain_code and /set_explain_options endpoints (main.py) and by the
+# explain-code functions/method (gemini.py, claude.py, plainbook.py). Change here only.
+DEFAULT_EXPLANATION_DETAIL_LEVEL = 1   # 1 Brief .. 4 Expert
+DEFAULT_EXPLANATION_USE_BULLETS = False
+DEFAULT_EXPLANATION_USE_LATEX = False
+
 NOTEBOOK_VERIFY_INSTRUCTIONS = """
 You are auditing a Jupyter notebook on behalf of a user who needs assurance that the
 notebook is both correct and safe to run.
@@ -249,6 +256,39 @@ The corrected code, which now runs without the error:
 
 Revise the original description, following the rules, so that regenerating code from it
 would avoid this error. Return only the revised description:"""
+
+
+FOLD_SYSTEM_INSTRUCTIONS = """
+You are consolidating the plain-language description of a single notebook cell.
+You are given an ORIGINAL description, followed by a list of ADDITIONAL GUIDANCE
+items that were appended incrementally to refine what the cell should do.
+
+Rewrite the ORIGINAL description so that it fully incorporates every item of
+ADDITIONAL GUIDANCE, as if the whole thing had been written that way from the
+start. The result must read as one coherent, natural description authored by a
+single person for another reader.
+
+Rules:
+- Do NOT add, remove, or infer any behavior beyond what is stated in the
+  original description and the guidance items.
+- Where a guidance item conflicts with the original (or with an earlier
+  guidance item), the LATER instruction wins; drop the superseded wording.
+- Preserve the original voice and level of detail. Do not add commentary,
+  headings, preambles, or explanations of your changes.
+- Return ONLY the rewritten description text, nothing else.
+"""
+
+
+def build_fold_prompt(explanation, additions):
+    """Builds the prompt to fold `additions` (oldest first) into the explanation."""
+    guidance = "\n".join(f"- {a}" for a in additions)
+    return f"""ORIGINAL description:
+{explanation}
+
+ADDITIONAL GUIDANCE (in the order it was added, oldest first; later items win on conflict):
+{guidance}
+
+Rewritten description:"""
 
 
 # Session-level token accumulator

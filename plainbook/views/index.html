@@ -162,6 +162,7 @@
                         :explanation-edit-key="explanationEditKey[index]"
                         :module-install="moduleInstall[index]"
                         :clarify-state="clarifyState[index]"
+                        :fold-state="foldState[index]"
                         @activate="setActiveCell(index)"
 
                         @save-markdown="(content) => sendMarkdownToServer(content, index)"
@@ -183,6 +184,12 @@
 
                         @submit-clarification="(answers) => ui_submitClarification(index, answers)"
                         @dismiss-clarification="dismissClarify(index)"
+
+                        @amend-and-fold="(text) => ui_amendAndFold(index, text)"
+                        @accept-amend="(text) => ui_acceptAmend(index, text)"
+                        @save-amend="(text) => ui_saveAmend(index, text)"
+                        @dismiss-fold="dismissFold(index)"
+                        @unfold="ui_unfold(index)"
 
                         @run-test="ui_runTestCell(index)"
                         @save-and-run-test="(content) => ui_saveExplanationAndRunTest(content, index)"
@@ -223,6 +230,9 @@
         :claude-via-bedrock="claudeViaBedrock"
         :skip-reexecution="skipReexecution"
         :ask-questions="askQuestions"
+        :explanation-detail="explanationDetail"
+        :explanation-bullets="explanationBullets"
+        :explanation-latex="explanationLatex"
         @close="showSettings = false"
         @save="(keys) => {showSettings = false; saveSettings(keys); }"
     />

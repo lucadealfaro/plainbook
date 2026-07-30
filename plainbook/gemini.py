@@ -7,16 +7,21 @@ from .ai_common import (
     UNIT_TEST_SYSTEM_INSTRUCTIONS,
     CHECKING_INSTRUCTIONS,
     EXPLAIN_INSTRUCTIONS,
+    DEFAULT_EXPLANATION_DETAIL_LEVEL,
+    DEFAULT_EXPLANATION_USE_BULLETS,
+    DEFAULT_EXPLANATION_USE_LATEX,
     NAME_GENERATION_INSTRUCTIONS,
     AMEND_EXPLANATION_INSTRUCTIONS,
     NOTEBOOK_VERIFY_INSTRUCTIONS,
     TEST_VERIFY_INSTRUCTIONS,
     CLARIFY_INSTRUCTIONS,
+    FOLD_SYSTEM_INSTRUCTIONS,
     add_tokens,
     build_context_prompt,
     build_unit_test_prompt,
     build_name_prompt,
     build_amend_explanation_prompt,
+    build_fold_prompt,
     dump_ai_request,
     log_ai_request_size,
     parse_generate_response,
@@ -325,7 +330,7 @@ Validation Result:
     return parse_validation_response(response.text)
 
 
-def gemini_explain_code(api_key, previous_code, code_to_explain, instructions, variable_context=None, level=2, use_bullets=False, use_latex=False, model=None, debug=False, dump_ai_requests=False):
+def gemini_explain_code(api_key, previous_code, code_to_explain, instructions, variable_context=None, level=DEFAULT_EXPLANATION_DETAIL_LEVEL, use_bullets=DEFAULT_EXPLANATION_USE_BULLETS, use_latex=DEFAULT_EXPLANATION_USE_LATEX, model=None, debug=False, dump_ai_requests=False):
     client = genai.Client(api_key=api_key)
     model = model or GEMINI_VALIDATE_MODEL
 
@@ -422,6 +427,40 @@ def gemini_verify_tests(api_key, payload, model=None, debug=False, dump_ai_reque
     return _gemini_verify(api_key, TEST_VERIFY_INSTRUCTIONS, payload,
                           "verify_tests", model=model, debug=debug,
                           dump_ai_requests=dump_ai_requests)
+
+
+def gemini_fold_additions(api_key, explanation=None, additions=None, model=None,
+                          debug=False, dump_ai_requests=False):
+    """Rewrites `explanation` to absorb `additions`. Returns the rewritten text."""
+    client = genai.Client(api_key=api_key)
+    model = model or GEMINI_GENERATE_MODEL
+
+    system_instructions = FOLD_SYSTEM_INSTRUCTIONS
+
+    prompt = build_fold_prompt(explanation or '', additions or [])
+    if debug:
+        log_ai_request_size("gemini fold_additions", system_instructions, prompt,
+                            instructions=explanation)
+    if dump_ai_requests:
+        dump_ai_request(dump_ai_requests, "gemini fold_additions", {
+            "model": model,
+            "contents": prompt,
+            "system_instruction": system_instructions,
+            "max_output_tokens": 2048,
+        })
+    response = client.models.generate_content(
+        model=model,
+        contents=prompt,
+        config=types.GenerateContentConfig(
+            system_instruction=system_instructions,
+            max_output_tokens=2048,
+        ),
+    )
+    if response.usage_metadata:
+        add_tokens(response.usage_metadata.prompt_token_count, response.usage_metadata.candidates_token_count)
+    if debug:
+        print("Response to fold_additions:", response.text)
+    return (response.text or '').strip()
 
 
 def gemini_generate_cell_name(api_key, explanation, model=None, debug=False, dump_ai_requests=False):

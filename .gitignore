@@ -17,3 +17,6 @@ raceplan.md
 .claude/
 notes/
 .vscode/
+
+# Session transcript logs: may contain credentials
+*.jsonl

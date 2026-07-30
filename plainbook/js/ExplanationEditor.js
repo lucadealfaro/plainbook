@@ -3,11 +3,12 @@ import { ref, computed, watch, nextTick, onMounted, onBeforeUnmount } from './vu
 const ExplanationRenderer = {
     props: ['source', 'isActive', 'codeValid', 'outputValid', 'executed', 'hasError',
             'asRead', 'startEditKey', 'isLocked', 'running', 'hasCode', 'outputVisible', 'cellMode',
-            'unitTestCount', 'clarifyState'],
-    emits: ['update:source', 'save', 'saveandrun', 'gencode', 'clearcode', 'validate', 'explain',
+            'unitTestCount', 'clarifyState', 'foldState', 'hasPrefold'],
+    emits: ['update:source', 'save', 'saveandrun', 'update:editing',
             'run', 'interrupt', 'delete', 'moveUp', 'moveDown', 'toggle-output', 'open-test-help',
             'open-unit-test', 'dismiss-error',
-            'submit-clarification', 'dismiss-clarification'],
+            'submit-clarification', 'dismiss-clarification',
+            'amend-and-fold', 'accept-amend', 'save-amend', 'dismiss-fold', 'unfold'],
     setup(props, { emit }) {
         const mode = computed(() => props.cellMode || 'normal');
         const isTestCell = computed(() => mode.value === 'test');
@@ -16,9 +17,10 @@ const ExplanationRenderer = {
         const showDelete = computed(() => ['normal', 'test'].includes(mode.value));
         const showTestHelp = computed(() => mode.value === 'test');
         const showUnitTest = computed(() => mode.value === 'normal');
-        const showExplain = computed(() => ['normal', 'test'].includes(mode.value));
         const showSaveAndRun = computed(() => ['normal', 'test', 'unit_setup', 'target', 'unit_test'].includes(mode.value));
         const isEditing = ref(false);
+        // Let the host hide the code bar's buttons while the description is edited.
+        watch(isEditing, (v) => emit('update:editing', v));
         const localSource = ref((Array.isArray(props.source) ? props.source.join('') : props.source) || '');
         const originalSource = ref(localSource.value);
         const md = new markdownit({ html: true });
@@ -120,43 +122,6 @@ const ExplanationRenderer = {
             isEditing.value = false;
         };
 
-        const generating = ref(false);
-        const onGenCode = () => {
-            generating.value = true;
-            // hasError is true exactly when the button reads "Fix Code": signal
-            // the parent to also amend the description, not just regenerate code.
-            emit('gencode', props.hasError);
-        };
-        const validating = ref(false);
-        const onValidate = () => {
-            validating.value = true;
-            emit('validate');
-        };
-        const explaining = ref(false);
-        const onExplain = () => {
-            explaining.value = true;
-            emit('explain');
-        };
-        watch(() => props.running, (val) => {
-            if (!val) {
-                generating.value = false;
-                validating.value = false;
-                explaining.value = false;
-            }
-        });
-
-        const clearLabel = computed(() => isTestCell.value ? 'Clear code' : 'Clear code');
-        const generateLabel = computed(() => {
-            if (props.hasError) return 'Fix Code';
-            if (props.hasCode) return 'Regenerate code';
-            return 'Generate code';
-        });
-        const stopGenerateLabel = computed(() => {
-            if (props.hasError) return 'Stop fixing';
-            return 'Stop generating';
-        });
-        const validateLabel = computed(() => isTestCell.value ? 'Validate code' : 'Validate code');
-
         const placeholderText = computed(() => {
             if (mode.value === 'unit_setup') return 'Describe how to prepare the data before running the target cell. For help on testing a cell, click on the green info button above.';
             if (mode.value === 'unit_test') return 'Describe what should be checked after the target cell runs.';
@@ -198,13 +163,65 @@ const ExplanationRenderer = {
         };
         const cancelClarify = () => emit('dismiss-clarification');
 
+        // Only action cells get the amend workflow.
+        const showFolding = computed(() => mode.value === 'normal');
+        const foldReview = computed(() =>
+            (props.foldState && props.foldState.status === 'review') ? props.foldState : null);
+
+        const amendText = ref('');
+        const foldEdit = ref('');
+        const foldEl = ref(null);
+        const amendEl = ref(null);
+        const isAmending = ref(false);
+
+        watch(foldReview, (fr) => {
+            if (fr) {
+                foldEdit.value = fr.proposed || '';
+                nextTick(() => { if (foldEl.value) { foldEl.value.style.height = 'auto'; foldEl.value.style.height = `${foldEl.value.scrollHeight}px`; } });
+            }
+        });
+
+        watch(() => props.isActive, (newVal) => {
+            if (!newVal) isAmending.value = false;
+        });
+        watch(() => props.isLocked, (newVal) => {
+            if (newVal) isAmending.value = false;
+        });
+
+        const startAmend = () => {
+            if (localIsLocked.value) return;
+            amendText.value = '';
+            isAmending.value = true;
+            nextTick(() => { if (amendEl.value) amendEl.value.focus(); });
+        };
+        const cancelAmend = () => {
+            isAmending.value = false;
+            amendText.value = '';
+        };
+        const submitAmend = () => {
+            const t = amendText.value.trim();
+            if (!t) return;
+            emit('amend-and-fold', t);
+            amendText.value = '';
+            isAmending.value = false;
+        };
+        const onUnfold = () => emit('unfold');
+        const acceptFold = () => emit('accept-amend', foldEdit.value);
+        const saveFold = () => emit('save-amend', foldEdit.value);
+        const dismissFoldReview = () => emit('dismiss-fold');
+        const autoResizeFold = (e) => {
+            const el = e.target; el.style.height = 'auto'; el.style.height = `${el.scrollHeight}px`;
+        };
+
         return { isEditing, localSource, rendered, enterEditMode, saveChanges,
             cancelEdit, textareaEl, autoResize, saveAndRun, onBlur, localIsLocked,
-            isTestCell, clearLabel, generateLabel, stopGenerateLabel, validateLabel,
-            generating, onGenCode, validating, onValidate, explaining, onExplain, onButtonPress,
-            mode, showRun, showMoveUpDown, showDelete, showTestHelp, showUnitTest, showSaveAndRun, showExplain,
+            isTestCell, onButtonPress,
+            mode, showRun, showMoveUpDown, showDelete, showTestHelp, showUnitTest, showSaveAndRun,
             placeholderText, autoGrowField,
-            clarify, clarifyAnswers, hasAnyAnswer, submitClarify, cancelClarify };
+            clarify, clarifyAnswers, hasAnyAnswer, submitClarify, cancelClarify,
+            showFolding, foldReview, amendText, foldEdit, foldEl, submitAmend,
+            amendEl, isAmending, startAmend, cancelAmend,
+            onUnfold, acceptFold, saveFold, dismissFoldReview, autoResizeFold };
     },
 
     template: /* html */ `
@@ -237,7 +254,46 @@ const ExplanationRenderer = {
             </div>
         </div>
 
-        <div v-if="!isEditing && isActive"
+        <!-- Amend mode -->
+        <div v-if="showFolding && !isEditing && isAmending && isActive && hasCode && !foldReview"
+             class="explanation-edit-mode px-2 pb-2">
+            <textarea ref="amendEl" v-model="amendText" class="textarea is-small mb-2" rows="2"
+                placeholder="Amend this cell, e.g. also drop rows with null revenue."
+                @keydown.enter.exact.prevent="submitAmend"></textarea>
+            <div style="display: flex; justify-content: flex-end; gap: 0.5rem;">
+                <button class="button is-small" @mousedown.prevent @click.stop="cancelAmend">Cancel</button>
+                <button class="button is-small is-info"
+                        :disabled="!amendText.trim() || running || localIsLocked"
+                        @mousedown.prevent @click.stop="submitAmend">
+                    <span class="icon"><i class="bx bx-merge"></i></span><span>Fold</span>
+                </button>
+            </div>
+        </div>
+
+        <!-- Fold review -->
+        <div v-if="showFolding && !isEditing && foldReview" class="px-4 pb-2">
+            <div class="fold-review p-3">
+                <p class="is-size-7 has-text-weight-semibold mb-2">
+                    <span class="icon is-small"><i class="bx bx-merge"></i></span>
+                    Review the amended description. Accepting regenerates the code from it.
+                </p>
+                <p class="is-size-7 has-text-grey mb-1">Current:</p>
+                <div class="fold-original p-2 mb-2 is-size-7">{{ foldReview.original }}</div>
+                <p class="is-size-7 has-text-grey mb-1">Amended (editable):</p>
+                <textarea ref="foldEl" v-model="foldEdit" class="textarea is-small mb-2" rows="3" @input="autoResizeFold"></textarea>
+                <div class="is-flex is-justify-content-flex-end" style="gap:0.5rem;">
+                    <button class="button is-small" @click.stop="dismissFoldReview">Cancel</button>
+                    <button class="button is-small is-info" :disabled="!foldEdit.trim()" @click.stop="saveFold">
+                        <span>Save</span>
+                    </button>
+                    <button class="button is-small is-primary" :disabled="!foldEdit.trim()" @click.stop="acceptFold">
+                        <span class="icon"><i class="bx bx-play"></i></span><span>Save and Run</span>
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <div v-if="!isEditing && !isAmending && isActive && !foldReview"
                 class="explanation-toolbar pl-3 pr-3"
                 style="flex-wrap: wrap;"
                 @click.capture="onButtonPress">
@@ -254,19 +310,6 @@ const ExplanationRenderer = {
                         <span class="icon"><i class="bx bx-play"></i></span>
                         <span v-if="!isTestCell">Run</span>
                         <span v-else>Run test</span>
-                    </button>
-                </template>
-                <template v-if="hasError">
-                    <button v-if="generating" class="button is-small is-success mr-1"
-                            title="Stop fixing the code" @click.stop="$emit('interrupt')">
-                        <span class="icon"><i class="bx bx-stop-circle"></i></span>
-                        <span>{{ stopGenerateLabel }}</span>
-                    </button>
-                    <button v-else class="button is-small is-warning has-text-weight-bold mr-1"
-                            title="Fix the code so it runs without errors"
-                            :disabled="running || localIsLocked || !localSource.trim()" @click.stop="onGenCode">
-                        <span class="icon"><i class="bx bx-cognition"></i></span>
-                        <span>{{ generateLabel }}</span>
                     </button>
                 </template>
                 <button v-if="showTestHelp" class="button is-success is-small mr-1" title="Test Help" @click.stop="$emit('open-test-help')">
@@ -290,6 +333,10 @@ const ExplanationRenderer = {
                         :disabled="localIsLocked" @click.stop="enterEditMode">
                     <span class="icon"><i class="bx bx-pencil"></i></span><span>Edit</span>
                 </button>
+                <button v-if="showFolding && hasCode" class="button is-small is-info" title="Amend this cell"
+                        :disabled="running || localIsLocked" @click.stop="startAmend">
+                    <span class="icon"><i class="bx bx-merge"></i></span><span>Amend</span>
+                </button>
                 <button v-if="showMoveUpDown" class="button is-small is-info py-1 "
                         :disabled="localIsLocked"
                         title="Move cell up" aria-label="Move Up" @click.stop="$emit('moveUp')">
@@ -304,53 +351,13 @@ const ExplanationRenderer = {
                         @click.stop="$emit('open-unit-test')">
                     <span v-if="unitTestCount" class="unit-test-counter mr-1" style="font-weight: 600;">{{ unitTestCount }}</span>
                     <span class="icon"><i class="bx bx-medical-flask"></i></span>
-                    <span>Test this cell</span>
+                    <span>Test1</span>
                 </button>
-                <button class="button is-small"
-                        :class="isTestCell ? 'is-warning' : 'is-success'"
-                        :title="clearLabel"
-                        :disabled="localIsLocked || !hasCode" @click.stop="$emit('clearcode')">
-                    <span class="icon"><i class="bx bx-eraser"></i></span>
-                    <span>{{ clearLabel }}</span>
+                <button v-if="showFolding && hasPrefold" class="button is-small is-link is-light"
+                        title="Undo the last amendment, restoring the description and code"
+                        :disabled="running || localIsLocked" @click.stop="onUnfold">
+                    <span class="icon"><i class="bx bx-expand"></i></span><span>Unfold</span>
                 </button>
-                <template v-if="!hasError">
-                    <button v-if="generating" class="button is-small is-success"
-                            title="Stop code generation" @click.stop="$emit('interrupt')">
-                        <span class="icon"><i class="bx bx-stop-circle"></i></span>
-                        <span>{{ stopGenerateLabel }}</span>
-                    </button>
-                    <button v-else class="button is-small"
-                            :class="isTestCell ? 'is-warning' : 'is-success'"
-                            title="Generate or regenerate the code"
-                            :disabled="running || localIsLocked || !localSource.trim()" @click.stop="onGenCode">
-                        <span class="icon"><i class="bx bx-cognition"></i></span>
-                        <span>{{ generateLabel }}</span>
-                    </button>
-                </template>
-                <button v-if="validating" class="button is-small is-success"
-                        title="Stop validation" @click.stop="$emit('interrupt')">
-                    <span class="icon"><i class="bx bx-stop-circle"></i></span>
-                    <span>Stop validation</span>
-                </button>
-                <button v-else :disabled="running || !codeValid" class="button is-small"
-                        :class="isTestCell ? 'is-warning' : 'is-success'"
-                        title="Validate code against description" @click.stop="onValidate">
-                    <span class="icon"><i class="bx bx-check"></i></span> <span>{{ validateLabel }}</span>
-                </button>
-                <template v-if="showExplain">
-                    <button v-if="explaining" class="button is-small is-success"
-                            title="Stop explaining" @click.stop="$emit('interrupt')">
-                        <span class="icon"><i class="bx bx-stop-circle"></i></span>
-                        <span>Stop explaining</span>
-                    </button>
-                    <button v-else class="button is-small"
-                            :class="isTestCell ? 'is-warning' : 'is-success'"
-                            title="Explain the code in natural language"
-                            :disabled="running || localIsLocked || !hasCode" @click.stop="onExplain">
-                        <span class="icon"><i class="bx bx-message-bubble-detail"></i></span>
-                        <span>Explain code</span>
-                    </button>
-                </template>
                 <button v-if="showDelete" class="button is-small is-danger py-1 " title="Delete cell" aria-label="Delete"
                         :disabled="localIsLocked" @click.stop="$emit('delete')">
                     <span class="icon"><i class="bx bx-trash"></i></span>

@@ -37,6 +37,10 @@ createApp({
         // Questions awaiting answers: clarifyState[index] = { questions: [...] }.
         const clarifyState = ref({});
         const skipReexecution = ref(true);
+        // Global "Explain code" options (stored in settings.yaml on the server).
+        const explanationDetail = ref(1);      // 1 Brief .. 4 Expert
+        const explanationBullets = ref(false);
+        const explanationLatex = ref(false);
         const aiTokens = ref({input: 0, output: 0});
         const verificationStatus = ref('none');
         const debug = ref(false);
@@ -223,6 +227,9 @@ createApp({
                 hasGeminiKey.value = r.has_gemini_key || false;
                 hasClaudeKey.value = r.has_claude_key || false;
                 claudeViaBedrock.value = r.claude_via_bedrock || false;
+                if (r.explanation_detail !== undefined) explanationDetail.value = r.explanation_detail;
+                explanationBullets.value = !!r.explanation_bullets;
+                explanationLatex.value = !!r.explanation_latex;
                 logEnabled.value = !!r.log_enabled;
                 logviewEnabled.value = !!r.logview_enabled;
                 printAllEnabled.value = !!r.print_all_enabled;
@@ -993,6 +1000,94 @@ createApp({
         };
 
 
+        // Folds awaiting review: foldState[index] = { status, original, proposed }.
+        const foldState = ref({});
+
+        const dismissFold = (cellIndex) => {
+            const next = { ...foldState.value };
+            delete next[cellIndex];
+            foldState.value = next;
+        };
+
+        // Nothing is stored until the user accepts the review.
+        const ui_amendAndFold = async (cellIndex, text) => {
+            if (!text || !text.trim() || running.value) return;
+            const cell = notebook.value?.cells?.[cellIndex];
+            flushActiveEdits();
+            await waitForPendingSaves();
+            running.value = true;
+            runningActivity.value = { type: 'folding', cellIndex,
+                cellName: cell?.metadata?.name || null };
+            try {
+                const r = await apiCall('/propose_amend', 'POST', {
+                    cell_index: cellIndex, text: text.trim() });
+                if (r.status !== 'success') throw new Error(r.message || 'Amend failed');
+                const original = Array.isArray(cell.metadata.explanation)
+                    ? cell.metadata.explanation.join('')
+                    : (cell.metadata.explanation || '');
+                foldState.value = { ...foldState.value,
+                    [cellIndex]: { status: 'review', original, proposed: r.proposed } };
+            } finally {
+                running.value = false;
+                runningActivity.value = { type: null, cellIndex: null };
+            }
+        };
+
+        // "Save": commit the amended description only (no regeneration/run). The
+        // code becomes stale until the cell is regenerated.
+        const ui_saveAmend = async (cellIndex, editedText) => {
+            if (running.value) return;
+            const r = await apiCall('/commit_amend', 'POST', {
+                cell_index: cellIndex, explanation: editedText });
+            if (r.status !== 'success') throw new Error(r.message || 'Commit failed');
+            const cell = notebook.value?.cells?.[cellIndex];
+            if (cell) {
+                cell.metadata.explanation = editedText;
+                // Marker so Unfold appears; the snapshot itself is server-side.
+                cell.metadata.explanation_prefold = { committed: true };
+            }
+            dismissFold(cellIndex);
+            asRead.value = false;
+        };
+
+        // "Save and Run": commit, then regenerate through the normal pipeline and
+        // run, so the stored code is always code this explanation produced.
+        const ui_acceptAmend = async (cellIndex, editedText) => {
+            if (running.value) return;
+            await ui_saveAmend(cellIndex, editedText);
+            running.value = true;
+            try {
+                await generateCodeOneCell(cellIndex, true, null);
+                await runCells(cellIndex);
+            } finally {
+                running.value = false;
+                runningActivity.value = { type: null, cellIndex: null };
+            }
+        };
+
+        // Restores a pair that already ran together, so it needs no AI call.
+        const ui_unfold = async (cellIndex) => {
+            if (running.value) return;
+            const r = await apiCall('/unfold', 'POST', { cell_index: cellIndex });
+            if (r.status !== 'success') return;
+            const cell = notebook.value?.cells?.[cellIndex];
+            if (cell) {
+                cell.metadata.explanation = r.explanation;
+                delete cell.metadata.explanation_prefold;
+                if (r.source !== null) cell.source = r.source;
+            }
+            asRead.value = false;
+            running.value = true;
+            try {
+                // A legacy snapshot carries no code, so it must be regenerated.
+                if (r.source === null) await generateCodeOneCell(cellIndex, true, null);
+                await runCells(cellIndex);
+            } finally {
+                running.value = false;
+                runningActivity.value = { type: null, cellIndex: null };
+            }
+        };
+
         // Missing-module installation state, keyed by cell index:
         // undefined | { status: 'installing' } | { status: 'done', success, output }.
         // Displayed by the MissingModuleBar of the corresponding cell.
@@ -1613,6 +1708,21 @@ createApp({
                     throw new Error('Error saving code generation setting', { cause: err });
                 }
             }
+            // Save the global "Explain code" options.
+            if (keys.explanation_detail !== undefined) {
+                try {
+                    const r = await apiCall('/set_explain_options', 'POST', {
+                        detail: keys.explanation_detail,
+                        bullets: keys.explanation_bullets,
+                        latex: keys.explanation_latex,
+                    });
+                    if (r.explanation_detail !== undefined) explanationDetail.value = r.explanation_detail;
+                    if (r.explanation_bullets !== undefined) explanationBullets.value = r.explanation_bullets;
+                    if (r.explanation_latex !== undefined) explanationLatex.value = r.explanation_latex;
+                } catch (err) {
+                    throw new Error('Error saving explanation options', { cause: err });
+                }
+            }
         };
 
         const setActiveAiProvider = async (providerId) => {
@@ -1680,7 +1790,7 @@ createApp({
             window.removeEventListener('plainbook:files-changed', onFilesChanged);
         });
 
-        return { notebook, notebook_name, loading, error, isLocked, lockNotebook, shareOutputWithAi, skipReexecution, aiTokens, verificationStatus, toggleShareOutput,
+        return { notebook, notebook_name, loading, error, isLocked, lockNotebook, shareOutputWithAi, skipReexecution, explanationDetail, explanationBullets, explanationLatex, aiTokens, verificationStatus, toggleShareOutput,
             askQuestions, clarifyState, dismissClarify, ui_submitClarification,
             sendExplanationToServer, authToken,
             sendCodeToServer, clearCellCode, ui_saveExplanationAndRun, ui_saveCodeAndRun,
@@ -1688,6 +1798,7 @@ createApp({
             validateCode, ui_validateCode, explainCode, ui_explainCode, dismissValidation, ui_verifyNotebook, dismissVerification, ui_resetAndRunAllCells, ui_forceRegenerateCellCode,
             setActiveCell, ui_runCell, running, runningActivity, asRead,
             ui_interruptKernel, insertCell, markdownEditKey,
+            foldState, ui_amendAndFold, ui_acceptAmend, ui_saveAmend, dismissFold, ui_unfold,
             moduleInstall, ui_installModule, dismissModuleInstall,
             last_executed_cell_index, last_valid_code_cell_index, last_valid_output_cell_index,
             last_valid_test_cell_index,

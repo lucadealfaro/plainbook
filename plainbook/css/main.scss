@@ -107,7 +107,7 @@ pre[class*="language-"] {
 }
 
 .explanation-toolbar .toolbar-right .button {
-  @media (max-width: 900px) {
+  @media (max-width: 600px) {
     span:not(.icon):not(.unit-test-counter) {
       display: none !important;
     }
@@ -118,7 +118,7 @@ pre[class*="language-"] {
 }
 
 .explanation-toolbar .toolbar-left .run-button {
-  @media (max-width: 900px) {
+  @media (max-width: 600px) {
     span:not(.icon) {
       display: none !important;
     }
@@ -126,6 +126,22 @@ pre[class*="language-"] {
       margin: 0 !important;
     }
   } 
+}
+
+// Fold review panel
+.fold-review {
+  border: 1px solid var(--bulma-link);
+  border-radius: 6px;
+  background: var(--bulma-scheme-main-bis);
+}
+
+.fold-review .fold-original {
+  border: 1px solid var(--bulma-border);
+  border-radius: 4px;
+  background: var(--bulma-scheme-main);
+  white-space: pre-wrap;
+  word-break: break-word;
+  color: var(--bulma-text-weak);
 }
 
 // Muted utility for subtle buttons
@@ -136,6 +152,9 @@ pre[class*="language-"] {
 /* Add scroll margin to cells so they don't hide under the navbar when scrolling */
 .notebook-cell {
   scroll-margin-top: 1rem;
+  // Keep an entirely empty cell tall enough to see and click; non-empty cells
+  // are already taller so this only affects empty ones.
+  min-height: 2.75rem;
 }
 
 /* Insert cell button hover zone */
@@ -190,17 +209,43 @@ pre[class*="language-"] {
 .panel-badge { display: inline-block; background: var(--bulma-text-weak); color: var(--bulma-scheme-main); border-radius: 999px; padding: 0.12rem 0.45rem; margin-left: 0.4rem; font-size: 0.8rem; font-weight: 600; }
 .panel-section { border-top: 1px solid var(--bulma-border); }
 
-// ── Code / explanation tab bar (NotebookCell.js) ──
-// Reuses .panel-tab / .panel-divider. The right side is a flex spacer + the
-// output freshness signal, leaving room for future buttons.
+// ── Code bar: show/hide tabs + code action buttons (CellCodeBar.js) ──
+// Reuses .panel-tab / .panel-divider on the left; the right side holds the
+// Clear / Generate / Validate / Explain buttons after a flex spacer.
 .code-tabs {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 0.25rem;
-  padding: 0.15rem 0.5rem 0;
+  padding: 0.25rem 0.5rem;
   border-bottom: 1px solid var(--bulma-border);
 }
 .code-tabs .code-tab.button { padding-left: 0.5rem; padding-right: 0.5rem; }
+// The lower-bar action buttons are made vertically thinner than a normal
+// small button (tighter padding + line-height; the icon no longer sets a tall
+// floor). Only these buttons — the tabs are unaffected.
+.code-tabs .code-bar-actions .button {
+  height: auto;
+  min-height: 0;
+  padding-top: 0.25rem;
+  padding-bottom: 0.25rem;
+  line-height: 1.15;
+}
+.code-tabs .code-bar-actions .button .icon {
+  height: 1.15em;
+}
+// On narrow screens collapse the action-button labels to icon-only (like the
+// ExplanationEditor toolbar, but at a slightly larger threshold).
+.code-tabs .code-bar-actions .button {
+  @media (max-width: 700px) {
+    span:not(.icon) {
+      display: none !important;
+    }
+    span.icon {
+      margin: 0 !important;
+    }
+  }
+}
 
 // ── Settings modal (SettingsModal.js) ──
 .settings-key-status { color: var(--bulma-text-weak); background-color: var(--bulma-scheme-main-bis); font-style: italic; }
