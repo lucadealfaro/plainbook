@@ -687,6 +687,9 @@ createApp({
                 if (!running.value) return; // Stop if running has been cancelled
                 if (notebook.value.cells[i].cell_type !== 'code') continue; // Skip non-code cells
                 await generateCodeOneCell(i);
+                // The AI asked the user a question: stop rather than generate
+                // later cells on top of a cell whose code is not settled.
+                if (clarifyState.value[i]) return;
             }
         };
         
@@ -700,6 +703,9 @@ createApp({
             // Those outputs are needed as context for code generation.
             if (last_valid_output_cell_index.value < cellIndex - 1 && cellIndex > 0) {
                 await runCells(cellIndex - 1);
+                // An earlier cell is waiting on the user, and its outputs are
+                // context for this one: stop instead of generating without them.
+                if (clarificationPending(cellIndex - 1)) return;
             }
             if (!running.value) return; // Stop if running has been cancelled
             runningActivity.value = { type: 'generating', cellIndex, cellName: cell.metadata.name || null };
@@ -757,6 +763,9 @@ createApp({
             // First, to execute this cell we need to have valid code for it.
             if (last_valid_code_cell_index.value < cellIndex) {
                 await generateCode(cellIndex);
+                // Code generation stopped to ask the user a question; do not
+                // execute anything until the question is answered.
+                if (clarificationPending(cellIndex)) return;
             }
             if (last_executed_cell_index.value === cellIndex) {
                 // We can be asked to rerun the same cell again. 
@@ -773,6 +782,7 @@ createApp({
                     // If the code is not valid, generate it first.
                     if (last_valid_code_cell_index.value < i) {
                         await generateCode(i);
+                        if (clarificationPending(i)) return; // Waiting on the user
                     }
                     if (!running.value) return; // Stop if running has been cancelled
                     // Runs this specific cell. 
@@ -834,6 +844,8 @@ createApp({
                 await runCells(cellIndex);
                 running.value = false;
                 runningActivity.value = { type: null, cellIndex: null };
+                // Stay on the cell whose questions the user is answering.
+                if (clarificationPending(cellIndex)) return;
                 const total = notebook.value?.cells?.length ?? 0;
                 const next = Math.min(cellIndex + 1, total - 1);
                 if (next !== cellIndex) setActiveCell(next, true);
@@ -847,6 +859,8 @@ createApp({
                 await runCells(cellIndex);
                 running.value = false;
                 runningActivity.value = { type: null, cellIndex: null };
+                // Stay on the cell whose questions the user is answering.
+                if (clarificationPending(cellIndex)) return;
                 const total = notebook.value?.cells?.length ?? 0;
                 const next = Math.min(cellIndex + 1, total - 1);
                 if (next !== cellIndex) setActiveCell(next, true);
@@ -976,8 +990,16 @@ createApp({
             clarifyState.value = next;
         };
 
-        // Answers are appended to the cell's description (so they persist and a
-        // later regeneration does not ask again), then the code is regenerated.
+        // True when a cell at or before cellIndex is waiting on unanswered
+        // questions. Such a cell has no code the user approved, so the run must
+        // stop there instead of executing stale code or moving past it.
+        const clarificationPending = (cellIndex) =>
+            Object.keys(clarifyState.value).some((i) => Number(i) <= cellIndex);
+
+        // The answers are handed to the amend -> fold pipeline as guidance, so the
+        // AI rewrites the description to incorporate them. The question-and-answer
+        // text is prompt input only: it is never stored in the description, and the
+        // user reviews the rewritten description before it replaces the old one.
         const ui_submitClarification = async (cellIndex, answers) => {
             if (running.value) return;
             const cs = clarifyState.value[cellIndex];
@@ -987,16 +1009,9 @@ createApp({
                 return a ? `Q: ${q}\nA: ${a}` : null;
             }).filter(Boolean);
             if (!lines.length) return;
-            const clarifications = 'Clarifications:\n' + lines.join('\n');
-            const cell = notebook.value.cells[cellIndex];
-            const current = ((cell.metadata.explanation || '')).trim();
-            const newExplanation = current
-                ? `${current}\n\n${clarifications}`
-                : clarifications;
             dismissClarify(cellIndex);
-            // Persist the enriched description, then regenerate from it.
-            await sendExplanationToServer(newExplanation, cellIndex);
-            await ui_forceRegenerateCellCode(cellIndex);
+            await ui_amendAndFold(cellIndex,
+                'Answers to clarifying questions about this cell:\n' + lines.join('\n'));
         };
 
 
