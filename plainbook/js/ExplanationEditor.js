@@ -248,7 +248,7 @@ const ExplanationRenderer = {
                     <button class="button is-small" @click.stop="cancelClarify">Cancel</button>
                     <button class="button is-small is-success"
                             :disabled="running || localIsLocked || !hasAnyAnswer" @click.stop="submitClarify">
-                        <span class="icon"><i class="bx bx-cog"></i></span><span>Answer &amp; regenerate</span>
+                        <span class="icon"><i class="bx bx-merge"></i></span><span>Answer &amp; fold</span>
                     </button>
                 </div>
             </div>

@@ -45,8 +45,8 @@ Choose questions only for doubts that actually change the code you would write.
 In particular, do NOT ask about:
 - Anything the context already answers. The preceding code, FILE CONTEXT, and
   VARIABLE CONTEXT are available to you; if they settle the point, use them.
-- Anything the user has already addressed. If the instructions (including any
-  "Clarifications:" notes or previously answered questions) give you enough to
+- Anything the user has already addressed. Answers to earlier questions are
+  folded into the instructions, so if the instructions give you enough to
   proceed, you MUST NOT ask again.
 - Refinements you can reasonably decide yourself, such as variable naming,
   formatting, or the choice among equivalent implementations.
