@@ -244,6 +244,7 @@ export default {
                             @run="$emit('run-unit-test-subcell', targetCellIndex, activeTestName, 'target')"
                             @interrupt="$emit('interrupt')"
                             @saveandrun="(content) => { $emit('save-explanation', content); $emit('run-unit-test-subcell', targetCellIndex, activeTestName, 'target'); activeSubCell = 'test'; }"
+                            @gencode="$emit('gencode')"
                             @delete=""
                             @moveUp=""
                             @moveDown="" />

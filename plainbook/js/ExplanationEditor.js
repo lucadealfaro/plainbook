@@ -4,7 +4,7 @@ const ExplanationRenderer = {
     props: ['source', 'isActive', 'codeValid', 'outputValid', 'executed', 'hasError',
             'asRead', 'startEditKey', 'isLocked', 'running', 'hasCode', 'outputVisible', 'cellMode',
             'unitTestCount', 'clarifyState', 'foldState', 'hasPrefold'],
-    emits: ['update:source', 'save', 'saveandrun', 'update:editing',
+    emits: ['update:source', 'save', 'saveandrun', 'update:editing', 'gencode',
             'run', 'interrupt', 'delete', 'moveUp', 'moveDown', 'toggle-output', 'open-test-help',
             'open-unit-test', 'dismiss-error',
             'submit-clarification', 'dismiss-clarification',
@@ -129,6 +129,16 @@ const ExplanationRenderer = {
             return 'Explain what the cell should do...';
         });
 
+        // "Fix Code": shown in place of the code bar's Generate button while the
+        // cell is in error. The `true` asks the parent to also amend the
+        // description, not just regenerate the code from the current one.
+        const generating = ref(false);
+        const onGenCode = () => {
+            generating.value = true;
+            emit('gencode', true);
+        };
+        watch(() => props.running, (val) => { if (!val) generating.value = false; });
+
         // Pressing any toolbar or edit-mode button implies the user is acting
         // on the cell, so dismiss the top-level error bar. Use the capture phase
         // so this still fires for buttons that stop click propagation
@@ -215,7 +225,7 @@ const ExplanationRenderer = {
 
         return { isEditing, localSource, rendered, enterEditMode, saveChanges,
             cancelEdit, textareaEl, autoResize, saveAndRun, onBlur, localIsLocked,
-            isTestCell, onButtonPress,
+            isTestCell, onButtonPress, generating, onGenCode,
             mode, showRun, showMoveUpDown, showDelete, showTestHelp, showUnitTest, showSaveAndRun,
             placeholderText, autoGrowField,
             clarify, clarifyAnswers, hasAnyAnswer, submitClarify, cancelClarify,
@@ -329,6 +339,20 @@ const ExplanationRenderer = {
                 </button>
             </div>
             <div class="toolbar-right" style="display: flex; flex-wrap: wrap; gap: 0.25rem;">
+                <template v-if="hasError">
+                    <button v-if="generating" class="button is-small is-danger"
+                            title="Stop fixing the code" @click.stop="$emit('interrupt')">
+                        <span class="icon"><i class="bx bx-stop-circle"></i></span>
+                        <span>Stop fixing</span>
+                    </button>
+                    <button v-else class="button is-small is-danger"
+                            title="Fix the code so it runs without errors"
+                            :disabled="running || localIsLocked || !localSource.trim()"
+                            @click.stop="onGenCode">
+                        <span class="icon"><i class="bx bx-cognition"></i></span>
+                        <span>Fix Code</span>
+                    </button>
+                </template>
                 <button class="button is-small is-info" title="Edit action description"
                         :disabled="localIsLocked" @click.stop="enterEditMode">
                     <span class="icon"><i class="bx bx-pencil"></i></span><span>Edit</span>

@@ -132,6 +132,7 @@ export default {
                         @moveUp="$emit('move-up')"
                         @moveDown="$emit('move-down')"
                         @dismiss-error="$emit('dismiss-error')"
+                        @gencode="$emit('generate-code', $event)"
                         @open-unit-test="$emit('open-unit-test')"
                         @submit-clarification="(answers) => $emit('submit-clarification', answers)"
                         @dismiss-clarification="$emit('dismiss-clarification')"
@@ -226,6 +227,7 @@ export default {
                         @delete="$emit('delete')"
                         @moveUp="$emit('move-up')"
                         @moveDown="$emit('move-down')"
+                        @gencode="$emit('generate-test-code')"
                         @dismiss-error="$emit('dismiss-error')" />
                 </div>
 

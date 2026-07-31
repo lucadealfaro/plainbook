@@ -77,6 +77,7 @@ export default {
                     @run="$emit('run')"
                     @interrupt="$emit('interrupt')"
                     @saveandrun="$emit('save-and-run', $event)"
+                    @gencode="$emit('gencode')"
                     @delete=""
                     @moveUp=""
                     @moveDown="" />

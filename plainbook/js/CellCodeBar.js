@@ -16,9 +16,10 @@ export default {
         const generating = ref(false);
         const onGenCode = () => {
             generating.value = true;
-            // hasError is true exactly when the button reads "Fix Code": signal
-            // the parent to also amend the description, not just regenerate code.
-            emit('gencode', props.hasError);
+            // Never an error-fix: on error this button is replaced by the
+            // "Fix Code" button in the description toolbar (ExplanationEditor),
+            // which is the one that asks the server to amend the description.
+            emit('gencode', false);
         };
         const validating = ref(false);
         const onValidate = () => {
@@ -38,12 +39,7 @@ export default {
             }
         });
 
-        const generateLabel = computed(() => {
-            if (props.hasError) return 'Fix';
-            if (props.hasCode) return 'Regenerate';
-            return 'Generate';
-        });
-        const stopGenerateLabel = computed(() => props.hasError ? 'Stop fixing' : 'Stop generating');
+        const generateLabel = computed(() => props.hasCode ? 'Regenerate' : 'Generate');
 
         // Pressing a moved button still dismisses the top-level error bar.
         const onButtonPress = (event) => {
@@ -51,7 +47,7 @@ export default {
         };
 
         return { togglePanel, generating, onGenCode, validating, onValidate,
-            explaining, onExplain, generateLabel, stopGenerateLabel, onButtonPress };
+            explaining, onExplain, generateLabel, onButtonPress };
     },
     template: /* html */ `
         <div class="code-tabs">
@@ -79,17 +75,21 @@ export default {
                     <span class="icon"><i class="bx bx-eraser"></i></span>
                     <span>Clear</span>
                 </button>
-                <button v-if="generating" class="button is-small"
-                        title="Stop code generation" @click.stop="$emit('interrupt')">
-                    <span class="icon"><i class="bx bx-stop-circle"></i></span>
-                    <span>{{ stopGenerateLabel }}</span>
-                </button>
-                <button v-else class="button is-small"
-                        :title="hasError ? 'Fix the code so it runs without errors' : 'Generate or regenerate the code'"
-                        :disabled="running || isLocked || !canGenerate" @click.stop="onGenCode">
-                    <span class="icon"><i class="bx bx-cognition"></i></span>
-                    <span>{{ generateLabel }}</span>
-                </button>
+                <!-- On error/warning there is no Generate button here: the red
+                     "Fix Code" button in the description toolbar takes over. -->
+                <template v-if="!hasError">
+                    <button v-if="generating" class="button is-small"
+                            title="Stop code generation" @click.stop="$emit('interrupt')">
+                        <span class="icon"><i class="bx bx-stop-circle"></i></span>
+                        <span>Stop generating</span>
+                    </button>
+                    <button v-else class="button is-small"
+                            title="Generate or regenerate the code"
+                            :disabled="running || isLocked || !canGenerate" @click.stop="onGenCode">
+                        <span class="icon"><i class="bx bx-cognition"></i></span>
+                        <span>{{ generateLabel }}</span>
+                    </button>
+                </template>
                 <button v-if="validating" class="button is-small"
                         title="Stop validation" @click.stop="$emit('interrupt')">
                     <span class="icon"><i class="bx bx-stop-circle"></i></span>
