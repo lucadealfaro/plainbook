@@ -66,6 +66,30 @@ def tostring(value):
     else:
         return str(value)
 
+# What counts as "this cell is in error". Besides a formal error output, an
+# error-like stderr stream counts too: an uncaught traceback or a warning that
+# the code printed to stderr rather than raised. Kept deliberately in step with
+# outputsHaveError() in js/errorUtils.js — the client uses that to decide
+# whether to offer the "Fix Code" button, and the server uses this to decide
+# whether there is an error to fix. If the two disagree, the button appears for
+# an error the server does not see, and the fix silently does nothing.
+ERROR_LIKE_RE = re.compile(
+    r"\b\w*(?:Error|Warning|Exception)\b|Traceback \(most recent call last\)")
+
+
+def is_error_like_stderr(output):
+    """True when `output` is a stderr stream whose text looks like an error."""
+    return (output.get('output_type') == 'stream'
+            and output.get('name') == 'stderr'
+            and bool(ERROR_LIKE_RE.search(tostring(output.get('text', '')))))
+
+
+def outputs_have_error(outputs):
+    """True when any output is a formal error or an error-like stderr stream."""
+    return any(o.get('output_type') == 'error' or is_error_like_stderr(o)
+               for o in getlist(outputs or []))
+
+
 VARIABLE_INSPECTION_CODE = """
 import json
 import types
@@ -136,7 +160,13 @@ class _LiveCellMeta:
     Same category as Plainbook._cell_states: it is relative to the live kernel
     and is rebuilt each session, so it is kept off cell.metadata (which nbformat
     writes to disk) and stored on the Plainbook, keyed by cell.id. __slots__ is
-    the single source of truth for the set of ephemeral keys."""
+    the single source of truth for the set of ephemeral keys.
+
+    output_hash is the hash of the source that produced the cell's currently
+    stored output — whatever that output is, including an error and including
+    nothing — or None when no stored output belongs to the current source. The
+    execution-skip runs the cell for real as soon as it stops matching the
+    cell's current source."""
     __slots__ = ('output_hash', 'input_group_fingerprints', 'accessed_symbols',
                  'accessed_symbol_hashes', 'modified_symbols', 'deleted_symbols')
 
@@ -282,6 +312,18 @@ class Plainbook:
             cell.metadata.pop(k, None)
         return True
 
+    def _drop_outputs(self, cell):
+        """Discard a cell's stored output and the execution-skip's claim on it.
+
+        output_hash names the source that produced the stored output. Discarding
+        the output leaves nothing for a skip to reuse, and an empty output list
+        is a legal result in its own right (a cell like `v = 1` produces none),
+        so the hash cannot encode the difference: it has to be cleared
+        explicitly. Otherwise _try_skip_execution "succeeds" by handing back the
+        empty output and marking the cell executed and up to date."""
+        cell.outputs = []
+        self._live(cell).output_hash = None
+
     def _accessed_vars_unchanged(self, cell, index):
         """True iff every symbol the cell read still hashes to the stored value in
         the cell's current input state. Conservative: returns False if the cell
@@ -309,7 +351,9 @@ class Plainbook:
         true no-op for the cell's output and execution state: the existing
         output stays valid (so the execution-skip can preserve it) and
         last_valid_output_cell / last_executed_cell are left untouched. Only the
-        code-valid watermark advances. cell.source is left unchanged."""
+        code-valid watermark advances. cell.source is left unchanged, which is
+        also what keeps the execution-skip eligible: its key is the hash of the
+        source, so leaving the source alone leaves the stored output valid."""
         cell.metadata['code_description_hash'] = cell.metadata.get('description_hash')
         cell.metadata['code_timestamp'] = datetime.datetime.now().isoformat()
         self.last_valid_code_cell = index
@@ -432,6 +476,15 @@ class Plainbook:
             for out in result.get("output", []):
                 outputs.append(nbformat.from_dict(out))
             cell.outputs = outputs
+            # The code that produced the output now stored. Recorded here rather
+            # than in the success path below so that it covers failed runs too:
+            # an error output came from this source just as much as a good one
+            # did, and leaving the hash pointing at the last *successful* source
+            # is what let the execution-skip reuse a result the current code no
+            # longer matches. Recorded after the kernel call returns, not before
+            # it is sent: if _sk_request raises, cell.outputs is untouched too,
+            # so the pair stays consistent.
+            self._live(cell).output_hash = self._hash_text(cell.source)
 
             if result.get("error"):
                 err = result["error"]
@@ -468,7 +521,7 @@ class Plainbook:
             lm.accessed_symbols = accessed
             lm.modified_symbols = result.get("modified_symbols") or []
             lm.deleted_symbols = result.get("deleted_symbols") or []
-            lm.output_hash = cell.metadata.get('code_description_hash')
+            # output_hash is set above, for failed runs as well as this one.
             lm.accessed_symbol_hashes = self._read_hashes(input_state, accessed)
             lm.input_group_fingerprints = self._input_fingerprints(input_state)
             self._write()
@@ -507,8 +560,10 @@ class Plainbook:
         aliasing). See Plans/execution-skip-via-alias-groups.md.
         """
         lm = self._live(cell)
-        # The stored output must have been produced by the current code.
-        if not lm.output_hash or lm.output_hash != cell.metadata.get('code_description_hash'):
+        # The stored output must have been produced by the code now in the cell.
+        # Any change to the source — AI regeneration, a manual edit, an unfold —
+        # breaks this and forces a real execution.
+        if not lm.output_hash or lm.output_hash != self._hash_text(cell.source):
             return None
         # The cell must have run successfully before (baseline present) and its
         # previous successor state must still be live in the kernel.
@@ -516,7 +571,17 @@ class Plainbook:
             return None
         if source_state not in self._live_states:
             return None
-        # Never skip a cell that is currently in error.
+        # Never skip a cell that is currently in error. Two reasons, both needed:
+        #  1. An error is not a reusable result. A cell that failed must re-run
+        #     even when nothing about it changed, because what fixed it may be
+        #     outside the notebook: a pip install (see install_package below,
+        #     where the user re-runs the *unmodified* cell), a repaired input
+        #     file, a network resource that came back.
+        #  2. A failed run leaves stale baselines. output_hash correctly names
+        #     the code that produced the error, so re-running unchanged code
+        #     satisfies the check above, while modified_symbols and source_state
+        #     are still those of the last *successful* run. Rebuilding the
+        #     successor state from those would be wrong.
         if any(getattr(o, 'output_type', None) == 'error' for o in cell.outputs):
             return None
 
@@ -1116,15 +1181,24 @@ class Plainbook:
             if cell.cell_type in ('code', 'test'):
                 # New source: refresh the code hash and drop a now-stale explanation.
                 self._refresh_code_hash(cell)
+                # Hand-written code was not generated from the description, so
+                # the generation-skip must not assume regenerating would produce
+                # what is already here. Clearing the pin makes
+                # _code_matches_description() false, so Generate really calls the
+                # AI. Same idiom as _invalidate_cells_for_removed_files().
+                cell.metadata.pop('code_description_hash', None)
             self._clear_validation(cell)  # Clear any cached validation results
             cell.metadata['code_timestamp'] = datetime.datetime.now().isoformat()
             if cell.cell_type == 'test':
-                cell.outputs = []
+                self._drop_outputs(cell)
                 # The user has updated the test code; assume this cell valid, following invalid.
                 self.last_valid_test_cell = min(self.last_valid_test_cell, index)
             elif cell.cell_type == 'code':
-                # Reset outputs and execution count on code cell edit
-                cell.outputs = []
+                # The output produced by the pre-edit code is kept, so the user
+                # can still see what the cell last did. It is no longer current:
+                # last_valid_output_cell below marks it stale (the UI labels it
+                # so), and the execution-skip declines because the source it was
+                # produced from no longer matches, so a re-run really re-runs.
                 if index <= self.last_executed_cell:
                     self._invalidate_execution(index)
                 # The user has updated the code.  We will assume this
@@ -1151,7 +1225,7 @@ class Plainbook:
             # Clearing the code invalidates any explanation of it.
             self._refresh_code_hash(cell)
             self._clear_validation(cell)  # Clear any cached validation results
-            cell.outputs = []
+            self._drop_outputs(cell)
             if cell.cell_type == 'test':
                 self.last_valid_test_cell = min(self.last_valid_test_cell, index - 1)
             else:
@@ -1275,10 +1349,10 @@ class Plainbook:
             else:
                 cell.source = source
                 # The restored code was generated from the restored explanation, so
-                # the pair matches and needs no regeneration. Resetting
-                # code_description_hash also retires the stored output: it no longer
-                # matches the recorded output hash, so the execution-skip declines
-                # and the restored code actually runs.
+                # the pair matches and needs no regeneration. Replacing cell.source
+                # also retires the stored output: it was produced by the pre-unfold
+                # code, so the execution-skip declines and the restored code
+                # actually runs.
                 cell.metadata['code_description_hash'] = restored_hash
                 self._refresh_code_hash(cell)
                 self._invalidate_execution(index)
@@ -1839,7 +1913,11 @@ class Plainbook:
                     self._refresh_code_hash(cell)
                     self._clear_validation(cell)
                     cell.metadata['code_timestamp'] = datetime.datetime.now().isoformat()
-                    cell.outputs = []
+                    # New code: the old output is not its output. Dropping the
+                    # skip's claim along with it is what forces the next run to
+                    # really execute, even when the AI reproduced the previous
+                    # source byte for byte (the common case for "Fix Code").
+                    self._drop_outputs(cell)
                     if is_test:
                         self.last_valid_test_cell = index
                     else:
@@ -2423,7 +2501,7 @@ class Plainbook:
         with self._lock:
             for cell in self.nb.cells:
                 if cell.cell_type in ('code', 'test'):
-                    cell.outputs = []
+                    self._drop_outputs(cell)
                     # Also clear unit test sub-cell outputs
                     for unit_test in cell.metadata.get('unit_tests', {}).values():
                         unit_test['cells']['setup']['outputs'] = []
@@ -2562,15 +2640,24 @@ class Plainbook:
             return unique_name
 
     def _get_error_context(self, cell_index):
-        """If the cell has an error, include its traceback as context."""
+        """If the cell has an error, include its traceback as context.
+
+        Recognises the same two shapes as outputs_have_error(): a formal error
+        output, and an error-like stderr stream (a traceback or a warning the
+        code printed instead of raising). The formal error wins when both are
+        present, since its traceback is the more useful context."""
         context_parts = [
             "The previous attempt to run this cell resulted in this error traceback:"
         ]
         cell = self.nb.cells[cell_index]
         if cell.cell_type != 'code':
             return None
-        for output in reversed(getlist(cell.get('outputs', []))):
-            if output.output_type == 'error':
+        outputs = getlist(cell.get('outputs', []))
+        for output in reversed(outputs):
+            if output.get('output_type') == 'error':
                 traceback = context_parts + getlist(output.get('traceback', []))
                 return "\n".join(traceback)
+        for output in reversed(outputs):
+            if is_error_like_stderr(output):
+                return "\n".join(context_parts + [tostring(output.get('text', ''))])
         return None

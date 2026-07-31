@@ -897,6 +897,143 @@ class TestExecutionSkip:
         assert counts["rebuild"] == 0                       # nothing skipped
         assert self._probe(notebook, 2, "print(z)") == "101"
 
+    def test_manual_code_edit_forces_execution(self, notebook):
+        """A hand-edited cell is really re-executed, not skipped. The edit changes
+        the code but not the description, so a skip keyed on the description hash
+        would wrongly preserve the pre-edit output."""
+        idx = _add_generated_cell(notebook, "v = 1\nprint('OLD', v)")
+        notebook.last_valid_code_cell = idx
+        notebook.execute_cell(idx)
+
+        counts = self._spy_rebuilds(notebook)
+        notebook.set_cell_source(idx, "v = 2\nprint('NEW', v)")   # manual edit only
+        notebook.last_valid_code_cell = idx
+        notebook.execute_cell(idx)
+
+        assert counts["rebuild"] == 0                             # really executed
+        text = "".join(o.get("text", "") for o in notebook.nb.cells[idx].outputs
+                       if o.get("output_type") == "stream").strip()
+        assert text == "NEW 2"
+        assert self._probe(notebook, idx, "print(v)") == "2"
+
+    def test_manual_edit_keeps_stale_output(self, notebook):
+        """A hand-edited cell keeps the output of the pre-edit code, marked stale."""
+        idx = _add_generated_cell(notebook, "print('BEFORE')")
+        notebook.last_valid_code_cell = idx
+        notebook.execute_cell(idx)
+
+        notebook.set_cell_source(idx, "print('AFTER')")
+
+        text = "".join(o.get("text", "") for o in notebook.nb.cells[idx].outputs
+                       if o.get("output_type") == "stream").strip()
+        assert text == "BEFORE"                                   # output preserved
+        assert notebook.last_valid_output_cell < idx              # but stale
+
+    # --- output_hash names the code that produced the stored output ---
+
+    def _gen_stub(self, code):
+        """AI stub that regenerates a cell to `code`."""
+        calls = {"n": 0}
+        def fake_generate(api_key, **kwargs):
+            calls["n"] += 1
+            return code, None
+        _pbmod.AI_PROVIDERS["skipstub"] = dict(_pbmod.AI_PROVIDERS["gemini"])
+        _pbmod.AI_PROVIDERS["skipstub"]["generate"] = fake_generate
+        _pbmod.AI_PROVIDERS["skipstub"]["amend_explanation"] = lambda *a, **kw: None
+        return calls
+
+    def _stream_text(self, notebook, idx):
+        return "".join(o.get("text", "") for o in notebook.nb.cells[idx].outputs
+                       if o.get("output_type") == "stream").strip()
+
+    def test_error_run_records_the_executed_code(self, notebook):
+        """A failed run records the code that produced the error, not the code of
+        the last successful run. Otherwise restoring that earlier code makes the
+        skip's precondition hold against an output it never produced."""
+        good, bad = "v = 1\nprint('OK', v)", "v = 1\nprint('OK', nope)"
+        idx = _add_generated_cell(notebook, good)
+        notebook.last_valid_code_cell = idx
+        notebook.execute_cell(idx)
+        assert notebook._live(notebook.nb.cells[idx]).output_hash == notebook._hash_text(good)
+
+        notebook.set_cell_source(idx, bad)
+        notebook.last_valid_code_cell = idx
+        with pytest.raises(CellExecutionError):
+            notebook.execute_cell(idx)
+
+        assert notebook._live(notebook.nb.cells[idx]).output_hash == notebook._hash_text(bad)
+
+    def test_skip_declines_after_error_then_fix(self, notebook):
+        """The "Fix Code" sequence: break a working cell by hand, run it (error),
+        regenerate back to the original source. The next run must really execute
+        rather than hand back the output the regeneration discarded."""
+        good = "v = 1\nprint('OK', v)"
+        self._gen_stub(good)
+        idx = _add_generated_cell(notebook, good)
+        notebook.last_valid_code_cell = idx
+        notebook.execute_cell(idx)
+
+        notebook.set_cell_source(idx, "v = 1\nprint('OK', nope)")
+        notebook.last_valid_code_cell = idx
+        with pytest.raises(CellExecutionError):
+            notebook.execute_cell(idx)
+
+        notebook.generate_code_cell("key", idx, ai_provider="skipstub")
+        assert notebook.nb.cells[idx].source == good      # restored, byte-identical
+        assert notebook.last_valid_output_cell < idx      # and marked stale
+
+        counts = self._spy_rebuilds(notebook)
+        notebook.execute_cell(idx)
+
+        assert counts["rebuild"] == 0                     # really executed
+        assert self._stream_text(notebook, idx) == "OK 1"
+        assert notebook.last_valid_output_cell == idx
+
+    def test_skip_declines_after_outputs_discarded(self, notebook):
+        """Regenerating to byte-identical code still discards the output, so the
+        skip must not hand the now-empty output back as though it were current.
+        Recording the executed code on error runs does not cover this case."""
+        good = "print('HELLO')"
+        self._gen_stub(good)
+        idx = _add_generated_cell(notebook, good)
+        notebook.last_valid_code_cell = idx
+        notebook.execute_cell(idx)                        # succeeds, output stored
+        # Unpin the code from its description so generation calls the AI.
+        notebook.nb.cells[idx].metadata.pop('code_description_hash', None)
+
+        notebook.generate_code_cell("key", idx, ai_provider="skipstub")
+        assert notebook.nb.cells[idx].source == good      # identical code
+        assert notebook.nb.cells[idx].outputs == []       # output discarded
+
+        counts = self._spy_rebuilds(notebook)
+        notebook.execute_cell(idx)
+
+        assert counts["rebuild"] == 0                     # really executed
+        assert self._stream_text(notebook, idx) == "HELLO"
+
+    def test_errored_cell_reruns_with_unchanged_code(self, notebook):
+        """A cell that failed re-runs even though nothing about it changed: what
+        fixed it may be outside the notebook (a pip install, a repaired file).
+        Here the missing name is supplied by an earlier cell instead."""
+        _add_generated_cell(notebook, "a = 1")
+        idx = _add_generated_cell(notebook, "print('GOT', later_var)")
+        notebook.last_valid_code_cell = idx
+        notebook.execute_cell(0)
+        with pytest.raises(CellExecutionError):
+            notebook.execute_cell(idx)
+
+        # Supply the missing name out of band, leaving the failed cell untouched.
+        notebook._sk_request("POST", "/execute", {
+            "code": "later_var = 7", "exec_id": "fixup",
+            "state_name": notebook._cell_states[notebook.nb.cells[0].id],
+            "new_state_name": notebook._cell_states[notebook.nb.cells[0].id]})
+
+        counts = self._spy_rebuilds(notebook)
+        notebook.execute_cell(idx)                        # same code, must re-run
+
+        assert counts["rebuild"] == 0
+        assert self._stream_text(notebook, idx) == "GOT 7"
+
     def test_restart_clears_all_kernel_states_and_forces_execution(self, notebook):
         """reset_kernel clears every kernel snapshot; the next run re-executes."""
         _add_generated_cell(notebook, "a = 1")
@@ -1233,3 +1370,106 @@ class TestExplainCode:
         assert "ai_code_explanation" not in notebook.nb.cells[idx].metadata
         # New source hash recorded.
         assert notebook.nb.cells[idx].metadata["code_hash"] == notebook._hash_text("a = 2")
+
+
+class TestFixCodeAfterManualEdit:
+    """The "Fix Code" path: a cell the user broke by hand must actually be
+    regenerated, and its output must not be left deleted-but-valid.
+
+    Regression cover for two coupled bugs. The client offers Fix Code whenever
+    outputsHaveError() is true (js/errorUtils.js), which includes an error-like
+    stderr stream; the server only recognised a formal error output. For a
+    stderr-only error the server therefore saw nothing to fix, took the
+    generation-skip fast path, and returned the broken code unchanged while
+    leaving last_valid_output_cell alone — so the code stayed broken and the
+    output read as up to date after the client had cleared it."""
+
+    def _stub(self, code="v = 1\nprint('FIXED', v)"):
+        calls = {"n": 0, "error_context": None}
+        def fake_generate(api_key, **kwargs):
+            calls["n"] += 1
+            calls["error_context"] = kwargs.get("error_context")
+            return code, None
+        _pbmod.AI_PROVIDERS["genstub"] = dict(_pbmod.AI_PROVIDERS["gemini"])
+        _pbmod.AI_PROVIDERS["genstub"]["generate"] = fake_generate
+        return calls
+
+    def _generated_cell(self, notebook, source, explanation="set v to 1 and print it"):
+        """A cell in the state the AI leaves it in: code pinned to its description."""
+        idx = _add_code_cell(notebook, source)
+        cell = notebook.nb.cells[idx]
+        cell.metadata['explanation'] = explanation
+        h = notebook._hash_text(explanation)
+        cell.metadata['description_hash'] = h
+        cell.metadata['code_description_hash'] = h
+        notebook.last_valid_code_cell = idx
+        return idx
+
+    def test_error_like_stderr_is_seen_as_an_error(self, notebook):
+        """A warning printed to stderr counts as an error, as it does client-side."""
+        idx = self._generated_cell(notebook, "v = 1")
+        notebook.nb.cells[idx].outputs = [_nbf.from_dict(
+            {'output_type': 'stream', 'name': 'stderr',
+             'text': 'RuntimeWarning: v is suspicious'})]
+        assert _pbmod.outputs_have_error(notebook.nb.cells[idx].outputs)
+        assert notebook._get_error_context(idx) is not None
+
+    def test_plain_stderr_is_not_an_error(self, notebook):
+        """Ordinary stderr chatter must not be mistaken for an error."""
+        idx = self._generated_cell(notebook, "v = 1")
+        notebook.nb.cells[idx].outputs = [_nbf.from_dict(
+            {'output_type': 'stream', 'name': 'stderr', 'text': 'downloading model...'})]
+        assert not _pbmod.outputs_have_error(notebook.nb.cells[idx].outputs)
+        assert notebook._get_error_context(idx) is None
+
+    def test_fix_code_regenerates_stderr_error(self, notebook):
+        """Fix Code on a stderr-only error calls the AI and replaces the code."""
+        calls = self._stub()
+        idx = self._generated_cell(notebook, "v = 1\nprint('OK', v)")
+        # The user hand-edits the code, and running it warns on stderr.
+        notebook.set_cell_source(idx, "v = 1\nimport warnings; warnings.warn('boom')")
+        notebook.last_valid_code_cell = idx
+        notebook.nb.cells[idx].outputs = [_nbf.from_dict(
+            {'output_type': 'stream', 'name': 'stderr',
+             'text': 'UserWarning: boom'})]
+
+        new_code, success, _amended = notebook.generate_code_cell(
+            "key", idx, ai_provider="genstub")
+
+        assert calls["n"] == 1                          # the AI really ran
+        assert calls["error_context"] is not None       # and was told about the error
+        assert success
+        assert new_code == "v = 1\nprint('FIXED', v)"
+        assert notebook.nb.cells[idx].source == new_code
+
+    def test_manual_edit_defeats_the_generation_skip(self, notebook):
+        """Even with no error at all, regenerating a hand-edited cell calls the AI:
+        the code is no longer what the description would produce."""
+        calls = self._stub()
+        idx = self._generated_cell(notebook, "v = 1\nprint('OK', v)")
+        assert notebook._code_matches_description(notebook.nb.cells[idx])
+
+        notebook.set_cell_source(idx, "v = 99\nprint('HAND EDITED', v)")
+        notebook.last_valid_code_cell = idx
+        assert not notebook._code_matches_description(notebook.nb.cells[idx])
+
+        notebook.generate_code_cell("key", idx, ai_provider="genstub")
+        assert calls["n"] == 1
+        assert notebook.nb.cells[idx].source == "v = 1\nprint('FIXED', v)"
+
+    def test_real_generation_marks_output_stale(self, notebook):
+        """After the code is actually regenerated the output is gone and stale,
+        so it can never read as up to date with nothing in it."""
+        self._stub()
+        idx = self._generated_cell(notebook, "v = 1\nprint('OK', v)")
+        notebook.set_cell_source(idx, "v = 1\nboom")
+        notebook.last_valid_code_cell = idx
+        notebook.last_valid_output_cell = idx        # pretend it had a valid output
+        notebook.nb.cells[idx].outputs = [_nbf.from_dict(
+            {'output_type': 'error', 'ename': 'NameError',
+             'evalue': "name 'boom' is not defined", 'traceback': ['NameError: boom']})]
+
+        notebook.generate_code_cell("key", idx, ai_provider="genstub")
+
+        assert notebook.nb.cells[idx].outputs == []
+        assert notebook.last_valid_output_cell < idx

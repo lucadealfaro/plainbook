@@ -418,6 +418,15 @@ createApp({
                         source: content
                     });
                     if (notebook.value && notebook.value.cells[cellIndex]) {
+                        // Mirror the saved text into the cell, as the markdown
+                        // and explanation handlers do for their fields. CodeCell
+                        // renders its own localSource and never emits
+                        // update:source, so without this the cell we hold keeps
+                        // the pre-edit code. Later assignments (a regeneration)
+                        // would then be compared against a stale value, and an
+                        // update back to that value would look like no change at
+                        // all and never reach the screen.
+                        notebook.value.cells[cellIndex].source = content;
                         delete notebook.value.cells[cellIndex].metadata.validation;
                         dropCodeExplanation(cellIndex);
                     }
@@ -726,7 +735,14 @@ createApp({
                     // clears them (plainbook.py generate_code_cell), so mirror
                     // that here. This also drops any prior error output, so a
                     // single "Fix Code" reverts the button to "Regenerate code".
-                    cell.outputs = [];
+                    // Guarded on the state the response just applied: when the
+                    // server took the generation-skip fast path the code did not
+                    // change, so it keeps both the output and its validity, and
+                    // deleting it here would show an empty cell still labelled
+                    // up to date.
+                    if (last_valid_output_cell_index.value < cellIndex) {
+                        cell.outputs = [];
+                    }
                     delete cell.metadata.validation;
                     // A successful generation supersedes any pending questions.
                     dismissClarify(cellIndex);
@@ -978,6 +994,14 @@ createApp({
                 // amend is true when triggered from the "Fix Code" button: also
                 // amend the description so a clean-slate regeneration avoids the error.
                 await generateCodeOneCell(cellIndex, true, validationFeedback, amend);
+                // "Fix Code" runs the cell as well, so the fix is verified and the
+                // output the regeneration discarded is replaced rather than left
+                // blank. Plain "Regenerate" from the code bar does not: it leaves a
+                // Stale cell for the user to run. Skipped when the AI asked a
+                // question (the code is not settled) or the run was interrupted.
+                if (amend && running.value && !clarificationPending(cellIndex)) {
+                    await runCells(cellIndex);
+                }
                 running.value = false;
                 runningActivity.value = { type: null, cellIndex: null };
             }
@@ -1430,6 +1454,11 @@ createApp({
                         role: role,
                         source: content
                     });
+                    // Keep the sub-cell we hold in step with what was saved, for
+                    // the same reason as sendCodeToServer above.
+                    const subCell = notebook.value?.cells[cellIndex]
+                        ?.metadata?.unit_tests?.[testName]?.cells?.[role];
+                    if (subCell) subCell.source = content;
                 } catch (err) {
                     throw new Error('Failed to save unit test code', { cause: err });
                 }
