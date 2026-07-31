@@ -24,7 +24,7 @@ from bottle import run, default_app, request, response, redirect, TEMPLATE_PATH
 # print(f"DEBUGGER PYTHON: {sys.executable}")
 
 # Plainbook imports
-from .plainbook import ExecutionError
+from .plainbook import ExecutionError, ClarificationNeeded
 from .claude import get_claude_models
 from .gemini import get_gemini_models
 
@@ -655,6 +655,9 @@ def generate_code_cell():
             api_key, cell_index, ai_provider=ai_provider,
             model=model, validation_feedback=validation_feedback,
             amend_description=amend_description)
+    except ClarificationNeeded as e:
+        # The AI asked questions; the cell source is untouched.
+        return dict(status='needs_clarification', questions=e.questions)
     except Exception as e:
         friendly = _check_billing_error(e)
         if friendly:
@@ -887,6 +890,17 @@ def set_share_output():
     data = request.json
     share = data.get('share', True)
     notebook.set_share_output_with_ai(share)
+    return {}
+
+
+@post('/set_ask_questions')
+@action_log.logged('set_ask_questions')
+@stateful
+@require_token
+def set_ask_questions():
+    data = request.json
+    value = data.get('value', False)
+    notebook.set_ask_questions(value)
     return {}
 
 

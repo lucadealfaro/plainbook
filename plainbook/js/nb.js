@@ -32,6 +32,10 @@ createApp({
         const explanationEditKey = ref({});
         const isLocked = ref(false);
         const shareOutputWithAi = ref(true);
+        // When true (Settings), the AI may reply with questions instead of code.
+        const askQuestions = ref(false);
+        // Questions awaiting answers: clarifyState[index] = { questions: [...] }.
+        const clarifyState = ref({});
         const skipReexecution = ref(true);
         // Global "Explain code" options (stored in settings.yaml on the server).
         const explanationDetail = ref(1);      // 1 Brief .. 4 Expert
@@ -147,6 +151,7 @@ createApp({
             last_valid_test_cell_index.value = state.last_valid_test_cell;
             isLocked.value = state.is_locked || logviewEnabled.value;
             shareOutputWithAi.value = state.share_output_with_ai;
+            askQuestions.value = !!state.ask_questions;
             if (state.skip_reexecution !== undefined) {
                 skipReexecution.value = state.skip_reexecution;
             }
@@ -682,6 +687,9 @@ createApp({
                 if (!running.value) return; // Stop if running has been cancelled
                 if (notebook.value.cells[i].cell_type !== 'code') continue; // Skip non-code cells
                 await generateCodeOneCell(i);
+                // The AI asked the user a question: stop rather than generate
+                // later cells on top of a cell whose code is not settled.
+                if (clarifyState.value[i]) return;
             }
         };
         
@@ -695,6 +703,9 @@ createApp({
             // Those outputs are needed as context for code generation.
             if (last_valid_output_cell_index.value < cellIndex - 1 && cellIndex > 0) {
                 await runCells(cellIndex - 1);
+                // An earlier cell is waiting on the user, and its outputs are
+                // context for this one: stop instead of generating without them.
+                if (clarificationPending(cellIndex - 1)) return;
             }
             if (!running.value) return; // Stop if running has been cancelled
             runningActivity.value = { type: 'generating', cellIndex, cellName: cell.metadata.name || null };
@@ -717,6 +728,8 @@ createApp({
                     // single "Fix Code" reverts the button to "Regenerate code".
                     cell.outputs = [];
                     delete cell.metadata.validation;
+                    // A successful generation supersedes any pending questions.
+                    dismissClarify(cellIndex);
                     // Regenerated code invalidates any AI code explanation of it.
                     dropCodeExplanation(cellIndex);
                     // The server amended the description (Fix Code only); reflect it.
@@ -725,6 +738,11 @@ createApp({
                     }
                     console.log('Code generated for cell:', cellIndex);
                 }
+            } else if (r.status == 'needs_clarification') {
+                // The AI asked questions; show them and leave the source as-is.
+                clarifyState.value = { ...clarifyState.value,
+                    [cellIndex]: { questions: r.questions || [] } };
+                console.log('Clarification requested for cell:', cellIndex, r.questions);
             } else if (r.status == 'cancelled') {
                 console.log('Code generation cancelled for cell:', cellIndex);
             } else {
@@ -745,6 +763,9 @@ createApp({
             // First, to execute this cell we need to have valid code for it.
             if (last_valid_code_cell_index.value < cellIndex) {
                 await generateCode(cellIndex);
+                // Code generation stopped to ask the user a question; do not
+                // execute anything until the question is answered.
+                if (clarificationPending(cellIndex)) return;
             }
             if (last_executed_cell_index.value === cellIndex) {
                 // We can be asked to rerun the same cell again. 
@@ -761,6 +782,7 @@ createApp({
                     // If the code is not valid, generate it first.
                     if (last_valid_code_cell_index.value < i) {
                         await generateCode(i);
+                        if (clarificationPending(i)) return; // Waiting on the user
                     }
                     if (!running.value) return; // Stop if running has been cancelled
                     // Runs this specific cell. 
@@ -822,6 +844,8 @@ createApp({
                 await runCells(cellIndex);
                 running.value = false;
                 runningActivity.value = { type: null, cellIndex: null };
+                // Stay on the cell whose questions the user is answering.
+                if (clarificationPending(cellIndex)) return;
                 const total = notebook.value?.cells?.length ?? 0;
                 const next = Math.min(cellIndex + 1, total - 1);
                 if (next !== cellIndex) setActiveCell(next, true);
@@ -835,6 +859,8 @@ createApp({
                 await runCells(cellIndex);
                 running.value = false;
                 runningActivity.value = { type: null, cellIndex: null };
+                // Stay on the cell whose questions the user is answering.
+                if (clarificationPending(cellIndex)) return;
                 const total = notebook.value?.cells?.length ?? 0;
                 const next = Math.min(cellIndex + 1, total - 1);
                 if (next !== cellIndex) setActiveCell(next, true);
@@ -955,6 +981,37 @@ createApp({
                 running.value = false;
                 runningActivity.value = { type: null, cellIndex: null };
             }
+        };
+
+        const dismissClarify = (cellIndex) => {
+            if (!clarifyState.value[cellIndex]) return;
+            const next = { ...clarifyState.value };
+            delete next[cellIndex];
+            clarifyState.value = next;
+        };
+
+        // True when a cell at or before cellIndex is waiting on unanswered
+        // questions. Such a cell has no code the user approved, so the run must
+        // stop there instead of executing stale code or moving past it.
+        const clarificationPending = (cellIndex) =>
+            Object.keys(clarifyState.value).some((i) => Number(i) <= cellIndex);
+
+        // The answers are handed to the amend -> fold pipeline as guidance, so the
+        // AI rewrites the description to incorporate them. The question-and-answer
+        // text is prompt input only: it is never stored in the description, and the
+        // user reviews the rewritten description before it replaces the old one.
+        const ui_submitClarification = async (cellIndex, answers) => {
+            if (running.value) return;
+            const cs = clarifyState.value[cellIndex];
+            if (!cs) return;
+            const lines = cs.questions.map((q, i) => {
+                const a = (answers[i] || '').trim();
+                return a ? `Q: ${q}\nA: ${a}` : null;
+            }).filter(Boolean);
+            if (!lines.length) return;
+            dismissClarify(cellIndex);
+            await ui_amendAndFold(cellIndex,
+                'Answers to clarifying questions about this cell:\n' + lines.join('\n'));
         };
 
 
@@ -1657,6 +1714,15 @@ createApp({
                     throw new Error('Error saving execution setting', { cause: err });
                 }
             }
+            // Save the code-generation setting (independent of API keys).
+            if (keys.ask_questions !== undefined) {
+                try {
+                    // apiCall applies the returned state, which updates askQuestions.
+                    await apiCall('/set_ask_questions', 'POST', { value: keys.ask_questions });
+                } catch (err) {
+                    throw new Error('Error saving code generation setting', { cause: err });
+                }
+            }
             // Save the global "Explain code" options.
             if (keys.explanation_detail !== undefined) {
                 try {
@@ -1740,6 +1806,7 @@ createApp({
         });
 
         return { notebook, notebook_name, loading, error, isLocked, lockNotebook, shareOutputWithAi, skipReexecution, explanationDetail, explanationBullets, explanationLatex, aiTokens, verificationStatus, toggleShareOutput,
+            askQuestions, clarifyState, dismissClarify, ui_submitClarification,
             sendExplanationToServer, authToken,
             sendCodeToServer, clearCellCode, ui_saveExplanationAndRun, ui_saveCodeAndRun,
             sendMarkdownToServer, generateCode, activeIndex, reloadNotebook, downloadIpynb,
