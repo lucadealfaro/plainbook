@@ -1,3 +1,4 @@
+import ast
 import json
 import os
 import re
@@ -22,6 +23,45 @@ that are present after executing those cells.
 Return ONLY the code, no markdown formatting or explanations.
 To display Pandas dataframes, you can simply return the dataframe variable name,
 and the notebook will render it appropriately.
+"""
+
+# Marks a response that asks questions instead of returning code.
+CLARIFY_SENTINEL = "NEEDS_CLARIFICATION"
+
+# Appended to SYSTEM_INSTRUCTIONS when the notebook allows asking questions.
+# You decide which of the two responses to give; the notebook handles both.
+CLARIFY_INSTRUCTIONS = f"""
+
+You may give one of TWO responses, and it is up to you to choose which:
+
+1. THE CODE. If you know what the cell should do, just write the code, as
+   described above. This is the normal case, and what you should do whenever the
+   instructions and the context leave you without real doubts.
+
+2. QUESTIONS. If the instructions are genuinely ambiguous, so that a wrong guess
+   would produce the wrong result, ask the user instead of guessing.
+
+Choose questions only for doubts that actually change the code you would write.
+In particular, do NOT ask about:
+- Anything the context already answers. The preceding code, FILE CONTEXT, and
+  VARIABLE CONTEXT are available to you; if they settle the point, use them.
+- Anything the user has already addressed. Answers to earlier questions are
+  folded into the instructions, so if the instructions give you enough to
+  proceed, you MUST NOT ask again.
+- Refinements you can reasonably decide yourself, such as variable naming,
+  formatting, or the choice among equivalent implementations.
+
+To ask questions, respond with EXACTLY this format and NOTHING else (no
+preamble, no explanations, no code):
+{CLARIFY_SENTINEL}
+- <your first question>
+- <your second question>
+
+Rules for questions:
+- One question per line, each line starting with "- ".
+- Ask at most 3 questions.
+- Make each question specific and easy to answer (offer the likely options when
+  you can).
 """
 
 TEST_SYSTEM_INSTRUCTIONS = """
@@ -514,6 +554,46 @@ def strip_markdown_code_fences(code):
     if code.endswith("```"):
         code = code[:-3].strip()
     return code
+
+
+def _extract_questions(text):
+    """Returns the questions in a clarification response, or None if it is not one."""
+    lines = (text or "").strip().splitlines()
+    # Scan all lines: the sentinel is sometimes preceded by a preamble.
+    sentinel_idx = None
+    for i, line in enumerate(lines):
+        if line.strip().upper().startswith(CLARIFY_SENTINEL):
+            sentinel_idx = i
+            break
+    if sentinel_idx is None:
+        return None
+    questions = []
+    for line in lines[sentinel_idx + 1:]:
+        line = line.strip()
+        if not line:
+            continue
+        line = re.sub(r'^([-*•]|\d+[.)])\s*', '', line).strip()
+        if line:
+            questions.append(line)
+    return questions or ["Could you provide more detail about what this cell should do?"]
+
+
+def parse_generate_response(text):
+    """Parse a generation response into (code, None), or (None, questions) if it
+    asked for clarification."""
+    questions = _extract_questions(text)
+    if questions is not None:
+        return None, questions
+
+    code = strip_markdown_code_fences(text)
+    # A non-code reply would be a SyntaxError on run; surface it as a question.
+    try:
+        ast.parse(code)
+    except SyntaxError:
+        msg = code.strip()
+        if msg:
+            return None, [msg]
+    return code, None
 
 
 def parse_validation_response(text):

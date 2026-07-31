@@ -57,7 +57,7 @@ class TestNotebookLifecycle:
             'name', 'path', 'num_cells',
             'last_executed_cell', 'last_valid_code_cell',
             'last_valid_output_cell', 'last_valid_test_cell', 'is_locked',
-            'share_output_with_ai', 'skip_reexecution', 'ai_tokens',
+            'share_output_with_ai', 'ask_questions', 'skip_reexecution', 'ai_tokens',
             'verification_status',
         }
         assert set(state.keys()) == expected_keys
@@ -1223,7 +1223,8 @@ class TestExplainCode:
         # Stub both explain and code generation so no kernel/API is needed.
         self._stub()
         def fake_generate(api_key, **kwargs):
-            return "a = 2"
+            # Generation returns (code, questions).
+            return "a = 2", None
         _pbmod.AI_PROVIDERS["explstub"]["generate"] = fake_generate
         idx = _add_code_cell(notebook, "a = 1")
         notebook.explain_code_cell("key", idx, ai_provider="explstub")

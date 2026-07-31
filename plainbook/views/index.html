@@ -161,6 +161,7 @@
                         :markdown-edit-key="markdownEditKey[index]"
                         :explanation-edit-key="explanationEditKey[index]"
                         :module-install="moduleInstall[index]"
+                        :clarify-state="clarifyState[index]"
                         :fold-state="foldState[index]"
                         @activate="setActiveCell(index)"
 
@@ -180,6 +181,9 @@
                         @dismiss-validation="dismissValidation(index)"
                         @install-module="(module) => ui_installModule(index, module)"
                         @dismiss-module-install="dismissModuleInstall(index)"
+
+                        @submit-clarification="(answers) => ui_submitClarification(index, answers)"
+                        @dismiss-clarification="dismissClarify(index)"
 
                         @amend-and-fold="(text) => ui_amendAndFold(index, text)"
                         @accept-amend="(text) => ui_acceptAmend(index, text)"
@@ -225,6 +229,7 @@
         :has-claude-key="hasClaudeKey"
         :claude-via-bedrock="claudeViaBedrock"
         :skip-reexecution="skipReexecution"
+        :ask-questions="askQuestions"
         :explanation-detail="explanationDetail"
         :explanation-bullets="explanationBullets"
         :explanation-latex="explanationLatex"

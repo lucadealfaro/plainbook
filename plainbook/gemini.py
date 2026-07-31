@@ -14,6 +14,7 @@ from .ai_common import (
     AMEND_EXPLANATION_INSTRUCTIONS,
     NOTEBOOK_VERIFY_INSTRUCTIONS,
     TEST_VERIFY_INSTRUCTIONS,
+    CLARIFY_INSTRUCTIONS,
     FOLD_SYSTEM_INSTRUCTIONS,
     add_tokens,
     build_context_prompt,
@@ -23,6 +24,7 @@ from .ai_common import (
     build_fold_prompt,
     dump_ai_request,
     log_ai_request_size,
+    parse_generate_response,
     parse_validation_response,
     parse_verify_response,
     strip_markdown_code_fences,
@@ -64,12 +66,18 @@ def gemini_generate_code(
     validation_context=None,
     model=None,
     debug=False,
-    dump_ai_requests=False):
+    dump_ai_requests=False,
+    ask_questions=False):
+    """Returns (code, questions).  Normally the AI returns the code, and
+    questions is None; if ask_questions is enabled, the AI may instead return a
+    list of questions for the user, in which case code is None."""
     # 1. Initialize the Gemini client
     client = genai.Client(api_key=api_key)
     model = model or GEMINI_GENERATE_MODEL
 
     system_instructions = SYSTEM_INSTRUCTIONS
+    if ask_questions:
+        system_instructions += CLARIFY_INSTRUCTIONS
 
     # 2. Create the prompt
     prompt = build_context_prompt(
@@ -112,8 +120,9 @@ Code:
     if debug:
         print("Response:", response.text)
     # 4. Process the response
-    code = strip_markdown_code_fences(response.text)
-    return code
+    if ask_questions:
+        return parse_generate_response(response.text)
+    return strip_markdown_code_fences(response.text), None
 
 
 def gemini_amend_explanation(

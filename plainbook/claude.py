@@ -15,6 +15,7 @@ from .ai_common import (
     AMEND_EXPLANATION_INSTRUCTIONS,
     NOTEBOOK_VERIFY_INSTRUCTIONS,
     TEST_VERIFY_INSTRUCTIONS,
+    CLARIFY_INSTRUCTIONS,
     FOLD_SYSTEM_INSTRUCTIONS,
     add_tokens,
     build_context_prompt,
@@ -24,6 +25,7 @@ from .ai_common import (
     build_fold_prompt,
     dump_ai_request,
     log_ai_request_size,
+    parse_generate_response,
     parse_validation_response,
     parse_verify_response,
     strip_markdown_code_fences,
@@ -109,11 +111,17 @@ def claude_generate_code(
     validation_context=None,
     model=None,
     debug=False,
-    dump_ai_requests=False):
+    dump_ai_requests=False,
+    ask_questions=False):
+    """Returns (code, questions).  Normally the AI returns the code, and
+    questions is None; if ask_questions is enabled, the AI may instead return a
+    list of questions for the user, in which case code is None."""
     client = _get_client(api_key)
     model = model or CLAUDE_MODEL
 
     system_instructions = SYSTEM_INSTRUCTIONS
+    if ask_questions:
+        system_instructions += CLARIFY_INSTRUCTIONS
 
     prompt = build_context_prompt(
         preceding=preceding_code,
@@ -152,8 +160,9 @@ Code:
     response_text = _response_text(message)
     if debug:
         print("Response:", response_text)
-    code = strip_markdown_code_fences(response_text)
-    return code
+    if ask_questions:
+        return parse_generate_response(response_text)
+    return strip_markdown_code_fences(response_text), None
 
 
 def claude_amend_explanation(
