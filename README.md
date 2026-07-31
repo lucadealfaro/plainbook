@@ -1,15 +1,25 @@
 # <img src="https://github.com/lucadealfaro/plainbook/raw/main/plainbook/images/Plainbook_logo.png" height="30"> Plainbook: Natural Language Notebooks
 
-Plainbooks allow users to create and communicate data analysis and science using natural language. 
+A Plainbook is a computational notebook, written in natural language rather than code. 
 
-Plainbooks are notebooks that combine instructions and results, similarly to Jupyter notebooks. 
-The difference is that Plainbook are in natural language: the code is generated "under the hood" using AI. 
-The use of plain language allows you to share your data analysis and science with a much wider audience, including people who do not know how to code. 
+Normally you would generate a notebook with AI and then keep the code, discarding the natural language that produced it. 
+Plainbook keeps the language instead: the code is generated and executed automatically, and can be validated and tested through natural language and data inspection — no coding knowledge required.
+This lets you share your data analysis and science with a much wider audience, including people who don't know how to code.
 
-Plainbook can use multiple AIs to check that the code faithfully implements the natural language description, and can include tests to further validate the notebook. 
-When you share a notebook, the recipients can also check that the code under the hood implements the natural-language tasks. Recipients can also edit the plainbook, regenerate the code, and rerun it, just as in Jupyter notebooks. 
+Plainbooks resemble [Jupyter notebooks](https://jupyter.org/), in that they combine instructions and results in a single shareable document. 
+They differ in these ways:
 
-Thus, the goal of the Plainbook project is to replicate in natural language what made Jupyter notebooks so successful: the ability to share together code and results, so that any recipient can validate and modify the notebook.  You can read more about the design of Plainbook in our [paper](https://arxiv.org/abs/2607.05717).
+* **Linear semantics.** Cells execute strictly in order — the same order in which a human reads the natural-language description of the computation.
+* **Dependency tracking.** Code analysis determines what a change actually affects, so only a minimal portion of the Plainbook is regenerated or re-executed.
+* **Test cells.** Plainbook lets you test that individual cells implement their natural language descriptions via natural-language tests and data inspection. 
+
+Linear semantics and dependency tracking are inspired by [Marimo](https://marimo.io/). 
+The ability to test cells hinges on natural language and on the special [snapshot-kernel](https://plainbook-ai/snapshot-kernel/) underlying Plainbook. 
+
+The goal of the project is to replicate in natural language what made Jupyter so successful: sharing code and results together, so that any recipient can validate and modify what they receive. 
+Recipients can check that the generated code implements the natural-language tasks, and can edit the Plainbook, regenerate the code, and rerun it — just as in Jupyter or Marimo.
+
+You can read more about the design phylosophy of Plainbook, and its code testing approach, in the paper  [Plainbook: Data Science, in Plain Language](https://arxiv.org/abs/2607.05717). 
 
 ### Try Plainbook Now
 

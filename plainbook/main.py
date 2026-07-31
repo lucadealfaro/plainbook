@@ -1282,7 +1282,12 @@ def open_ui(url):
     exe = find_chromium_browser()
     if exe:
         try:
-            subprocess.Popen([exe, f"--app={url}"])
+            # Detach and silence the child: Chromium is chatty on stderr
+            # (Wayland/Vulkan/GPU/DBus warnings) and would otherwise spam our terminal.
+            subprocess.Popen([exe, f"--app={url}"],
+                             stdout=subprocess.DEVNULL,
+                             stderr=subprocess.DEVNULL,
+                             start_new_session=True)
             return
         except Exception:
             pass
