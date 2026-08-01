@@ -137,7 +137,11 @@
 
                 <template v-for="(cell, index) in notebook.cells" :key="index">
 
-                    <cell-insertion-zone v-if="!isLocked"
+                    <!-- Inserts above the cell. Suppressed while the notebook has
+                         a single cell, so the only way to add a second one is
+                         below it: newcomers otherwise build the notebook in the
+                         reverse of execution order. -->
+                    <cell-insertion-zone v-if="!isLocked && notebook.cells.length > 1"
                         :is-active="activeIndex === index || (activeIndex >= 0 && activeIndex === index - 1)"
                         :cell-count="notebook.cells.length"
                         @insert="(celltype) => insertCell(index, celltype)"
