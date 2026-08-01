@@ -43,6 +43,7 @@
         :has-notebook="!!notebook"
         :up-to-date="notebook && last_valid_output_cell_index >= notebook.cells.length - 1"
         :cell-count="notebook ? notebook.cells.length : 0"
+        :test-cell-count="notebook ? notebook.cells.filter(c => c.cell_type === 'test').length : 0"
         :has-api-key="availableAiProviders.length > 0"
         :debug="debug"
         :active-ai-provider="activeAiProvider"

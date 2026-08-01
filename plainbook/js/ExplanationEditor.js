@@ -215,7 +215,8 @@ const ExplanationRenderer = {
             amendText.value = '';
             isAmending.value = false;
         };
-        const onUnfold = () => emit('unfold');
+        // Backs the Unfold button, which is commented out in the template below.
+        // const onUnfold = () => emit('unfold');
         const acceptFold = () => emit('accept-amend', foldEdit.value);
         const saveFold = () => emit('save-amend', foldEdit.value);
         const dismissFoldReview = () => emit('dismiss-fold');
@@ -231,7 +232,7 @@ const ExplanationRenderer = {
             clarify, clarifyAnswers, hasAnyAnswer, submitClarify, cancelClarify,
             showFolding, foldReview, amendText, foldEdit, foldEl, submitAmend,
             amendEl, isAmending, startAmend, cancelAmend,
-            onUnfold, acceptFold, saveFold, dismissFoldReview, autoResizeFold };
+            /* onUnfold, */ acceptFold, saveFold, dismissFoldReview, autoResizeFold };
     },
 
     template: /* html */ `
@@ -375,13 +376,18 @@ const ExplanationRenderer = {
                         @click.stop="$emit('open-unit-test')">
                     <span v-if="unitTestCount" class="unit-test-counter mr-1" style="font-weight: 600;">{{ unitTestCount }}</span>
                     <span class="icon"><i class="bx bx-medical-flask"></i></span>
-                    <span>Test1</span>
+                    <span>Test</span>
                 </button>
+                <!-- Unfold: hidden by request, never shown. The backing code in
+                     setup() is commented out to match; the 'unfold' emit and the
+                     hasPrefold prop are kept so the server-side undo and the
+                     parent wiring stay intact for whenever it comes back.
                 <button v-if="showFolding && hasPrefold" class="button is-small is-link is-light"
                         title="Undo the last amendment, restoring the description and code"
                         :disabled="running || localIsLocked" @click.stop="onUnfold">
                     <span class="icon"><i class="bx bx-expand"></i></span><span>Unfold</span>
                 </button>
+                -->
                 <button v-if="showDelete" class="button is-small is-danger py-1 " title="Delete cell" aria-label="Delete"
                         :disabled="localIsLocked" @click.stop="$emit('delete')">
                     <span class="icon"><i class="bx bx-trash"></i></span>

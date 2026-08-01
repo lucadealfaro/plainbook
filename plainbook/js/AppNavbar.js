@@ -1,5 +1,5 @@
 export default {
-    props: ['isLocked', 'running', 'restarting', 'runningActivity', 'hasNotebook', 'upToDate', 'cellCount', 'hasApiKey', 'debug',
+    props: ['isLocked', 'running', 'restarting', 'runningActivity', 'hasNotebook', 'upToDate', 'cellCount', 'testCellCount', 'hasApiKey', 'debug',
             'activeAiProvider', 'availableAiProviders', 'shareOutputWithAi', 'aiTokens', 'verification', 'verificationStatus', 'logEnabled', 'logviewEnabled', 'authToken'],
     emits: [
         'lock', 'refresh', 'interrupt', 'regenerate-all',
@@ -216,10 +216,10 @@ export default {
                         </button>
 
                         <button v-if="!running && hasNotebook"
-                            :disabled="cellCount === 0"
+                            :disabled="!testCellCount"
                             @mousedown.prevent
                             @click="$emit('run-all-tests')"
-                            title="Run all tests"
+                            :title="testCellCount ? 'Run all tests' : 'This notebook has no global tests'"
                             class="button is-warning">
                             <span class="icon"><i class="bx bx-seal-check"></i></span>
                             <span>Run tests</span>
