@@ -215,7 +215,11 @@ def _get_or_create_debug_token():
     return token
 
 AUTH_TOKEN = _get_or_create_debug_token() if args.debug else secrets.token_hex(32)
-                    
+
+# Set by open_ui() when the UI is launched as a chromeless window (no browser
+# toolbar, hence no reload button). Read by /get_notebook.
+LAUNCHED_CHROMELESS = False
+
 notebook_path = os.path.abspath(args.notebook)
 
 from .plainbook import Plainbook
@@ -226,22 +230,38 @@ assert notebook.km.is_alive()
 action_log.LOGVIEW_ENABLED = args.logview
 action_log.bind(notebook, args.log and not args.logview)
                     
-# Static file routes 
+# Static file routes
+def serve_asset(filepath, folder):
+    """Serve a file that the browser must revalidate before reusing.
+
+    Bottle already sends Last-Modified and an ETag and answers conditional
+    requests with a 304, but without a Cache-Control header the browser falls
+    back to heuristic freshness (roughly 10% of the file's age) and reuses its
+    cached copy for days without ever asking. That is how a plainbook upgrade
+    ends up still running the old Javascript.
+
+    'no-cache' means "revalidate before use", not "do not store": the browser
+    keeps the file and we answer with an empty 304 unless it really changed.
+    """
+    resp = static_file(filepath, root=os.path.join(APP_FOLDER, folder))
+    resp.set_header('Cache-Control', 'no-cache')
+    return resp
+
 @route('/js/<filepath:path>')
 def server_static_js(filepath):
-    return static_file(filepath, root=os.path.join(APP_FOLDER, 'js'))
+    return serve_asset(filepath, 'js')
 
 @route('/css/<filepath:path>')
 def server_static_css(filepath):
-    return static_file(filepath, root=os.path.join(APP_FOLDER, 'css'))
+    return serve_asset(filepath, 'css')
 
 @route('/fonts/<filepath:path>')
 def server_static_fonts(filepath):
-    return static_file(filepath, root=os.path.join(APP_FOLDER, 'fonts'))
+    return serve_asset(filepath, 'fonts')
 
 @route('/images/<filepath:path>')
 def server_static_images(filepath):
-    return static_file(filepath, root=os.path.join(APP_FOLDER, 'images'))
+    return serve_asset(filepath, 'images')
 
 # Authentication decorator
 def require_token(func):
@@ -286,7 +306,7 @@ def unit_test_stateful(func):
 def index():
     token = request.query.get('token')
     if token == AUTH_TOKEN:
-        return static_file('index.html', root=os.path.join(APP_FOLDER, 'views'))
+        return serve_asset('index.html', 'views')
     if os.environ.get('CODESPACES'):
         redirect('/?token=' + AUTH_TOKEN)
     return template('login', error_message='')
@@ -312,6 +332,7 @@ def get_notebook():
         active_ai_provider=settings.get('active_ai_provider'),
         ai_providers=AI_PROVIDER_REGISTRY,
         is_codespace=_in_codespace,
+        chromeless=LAUNCHED_CHROMELESS,
         log_enabled=args.log and not args.logview,
         logview_enabled=args.logview,
         print_all_enabled=args.print_all,
@@ -1150,7 +1171,7 @@ def reset_tokens():
 def log_view():
     if not args.logview:
         raise HTTPError(404, 'Log viewer is only available when the server is started with --logview')
-    return static_file('log_view.html', root=os.path.join(APP_FOLDER, 'views'))
+    return serve_asset('log_view.html', 'views')
 
 
 @post('/log_client_event')
@@ -1293,6 +1314,7 @@ def open_browser_tab(url):
 def open_ui(url):
     """Open a chromeless app window via a Chromium-based browser if available,
     else fall back to a normal browser tab."""
+    global LAUNCHED_CHROMELESS
     exe = find_chromium_browser()
     if exe:
         try:
@@ -1302,6 +1324,9 @@ def open_ui(url):
                              stdout=subprocess.DEVNULL,
                              stderr=subprocess.DEVNULL,
                              start_new_session=True)
+            # An --app window has no toolbar, hence no reload button; the client
+            # uses this to show its own Refresh button.
+            LAUNCHED_CHROMELESS = True
             return
         except Exception:
             pass

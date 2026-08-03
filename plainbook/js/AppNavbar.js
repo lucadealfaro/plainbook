@@ -1,6 +1,6 @@
 export default {
     props: ['isLocked', 'running', 'restarting', 'runningActivity', 'hasNotebook', 'upToDate', 'cellCount', 'testCellCount', 'hasApiKey', 'debug',
-            'activeAiProvider', 'availableAiProviders', 'shareOutputWithAi', 'aiTokens', 'verification', 'verificationStatus', 'logEnabled', 'logviewEnabled', 'authToken'],
+            'activeAiProvider', 'availableAiProviders', 'shareOutputWithAi', 'aiTokens', 'verification', 'verificationStatus', 'logEnabled', 'logviewEnabled', 'chromeless', 'authToken'],
     emits: [
         'lock', 'refresh', 'interrupt', 'regenerate-all',
         'restart', 'reset-run-all', 'run-all', 'run-all-tests', 'verify-notebook', 'clear-outputs', 'open-info', 'open-settings', 'debug-request',
@@ -132,12 +132,14 @@ export default {
                             <span>.ipynb</span>
                         </button>
 
-                        <!-- <button v-if="!running && hasNotebook"
+                        <!-- Only in a chromeless window, which has no browser toolbar
+                             and so no reload button of its own. -->
+                        <button v-if="chromeless && !running && hasNotebook"
                             @click="$emit('refresh')"
                             class="button is-light" title="Reload Notebook">
                             <span class="icon"><i class="bx bx-refresh-cw"></i></span>
                             <span>Refresh</span>
-                        </button> -->
+                        </button>
 
                         <button v-if="running && hasNotebook"
                                 @click="$emit('interrupt')"

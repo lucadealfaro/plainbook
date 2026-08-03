@@ -1,5 +1,5 @@
 import { ref, computed, onMounted } from './vue.esm-browser.js';
-import { serverFetch } from './serverFetch.js';
+import { serverFetch, isServerDown } from './serverFetch.js';
 
 export default {
     props: ['authToken'],
@@ -19,6 +19,7 @@ export default {
                 savedInstructions.value = data.ai_instructions || '';
                 localInstructions.value = savedInstructions.value;
             } catch (err) {
+                if (isServerDown(err)) throw err;
                 console.warn('Failed to load AI instructions:', err);
             } finally {
                 isLoading.value = false;
@@ -35,6 +36,7 @@ export default {
                 });
                 savedInstructions.value = localInstructions.value;
             } catch (err) {
+                if (isServerDown(err)) throw err;
                 console.warn('Failed to save AI instructions:', err);
             } finally {
                 isSaving.value = false;

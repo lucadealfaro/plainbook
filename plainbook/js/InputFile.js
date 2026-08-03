@@ -39,16 +39,18 @@ export default {
             }
         };
 
-        // Navigation actions
+        // Navigation actions. These return the promise rather than dropping it:
+        // Vue only routes a handler's error to the global handler if the handler
+        // hands the promise back.
         const openFolder = (folder) => {
-            fetchFiles(folder.path);
+            return fetchFiles(folder.path);
         };
 
         const goUp = () => {
             const parts = currentPath.value.split('/').filter(Boolean);
             parts.pop();
             const parentPath = '/' + parts.join('/');
-            fetchFiles(parentPath);
+            return fetchFiles(parentPath);
         };
 
         const goHome = async () => {
@@ -57,6 +59,7 @@ export default {
                 const data = await res.json();
                 await fetchFiles(data.path);
             } catch (err) {
+                if (isServerDown(err)) throw err;
                 console.warn('Failed to navigate to home directory:', err);
             }
         };
@@ -67,6 +70,7 @@ export default {
                 const data = await res.json();
                 await fetchFiles(data.path);
             } catch (err) {
+                if (isServerDown(err)) throw err;
                 console.warn('Failed to navigate to current directory:', err);
             }
         };
@@ -145,8 +149,11 @@ export default {
             emit('file-counts', { selected: selectedFiles.size, missing: missingFiles.size });
         };
 
-        watch(selectedFiles, () => { syncSelectedFiles(); emitCounts(); }, { deep: true });
-        watch(missingFiles,  () => { syncSelectedFiles(); emitCounts(); }, { deep: true });
+        // emitCounts() first so the sync promise can be returned: Vue wraps watcher
+        // callbacks the same way it wraps event handlers, and only handles the
+        // error if the callback returns the promise.
+        watch(selectedFiles, () => { emitCounts(); return syncSelectedFiles(); }, { deep: true });
+        watch(missingFiles,  () => { emitCounts(); return syncSelectedFiles(); }, { deep: true });
 
         // Load selected files mapping from server and populate `selectedFiles`
         const loadSelectedFiles = async () => {
@@ -165,6 +172,7 @@ export default {
                 });
                 emitCounts();
             } catch (err) {
+                if (isServerDown(err)) throw err;
                 console.warn('Failed to load selected input files:', err);
             }
         };

@@ -89,6 +89,9 @@ createApp({
         const logEnabled = ref(false);
         const logviewEnabled = ref(false);
         const printAllEnabled = ref(false);
+        // True when the server launched the UI as a chromeless window, which has
+        // no browser toolbar; the navbar then offers its own Refresh button.
+        const chromeless = ref(false);
 
         const availableAiProviders = computed(() => {
             const apiKeys = {
@@ -237,6 +240,7 @@ createApp({
                 logEnabled.value = !!r.log_enabled;
                 logviewEnabled.value = !!r.logview_enabled;
                 printAllEnabled.value = !!r.print_all_enabled;
+                chromeless.value = !!r.chromeless;
                 document.body.classList.toggle('print-all', printAllEnabled.value);
                 if (logviewEnabled.value) isLocked.value = true;
                 ActionLogger.init(r.log_enabled);
@@ -250,6 +254,10 @@ createApp({
         };
 
         const reloadNotebook = async () => {
+            // Refetching replaces notebook.value, which resets every cell's local
+            // editing state, so let any open editor save first.
+            flushActiveEdits();
+            await waitForPendingSaves();
             await fetchNotebook();
         }
 
@@ -1825,17 +1833,28 @@ createApp({
             if (e.detail) updateState(e.detail);
         };
 
+        // Not every caller awaits the promise it starts: a click handler may fire
+        // a fetch and return, and Vue only routes errors from promises a handler
+        // hands back. A dead server then rejects with nobody listening. Catch the
+        // strays here instead of auditing every call site forever. Left
+        // un-prevented so the rejection still reaches the console.
+        const onUnhandledRejection = (e) => {
+            if (isServerDown(e.reason)) uiError.value = SERVER_DOWN_MESSAGE;
+        };
+
         onMounted(() => {
             fetchNotebook();
             window.addEventListener('keydown', handleKeydown);
             window.addEventListener('click', handleClickOutside);
             window.addEventListener('plainbook:files-changed', onFilesChanged);
+            window.addEventListener('unhandledrejection', onUnhandledRejection);
         });
 
         onBeforeUnmount(() => {
             window.removeEventListener('keydown', handleKeydown);
             window.removeEventListener('click', handleClickOutside);
             window.removeEventListener('plainbook:files-changed', onFilesChanged);
+            window.removeEventListener('unhandledrejection', onUnhandledRejection);
         });
 
         return { notebook, notebook_name, loading, error, isLocked, lockNotebook, shareOutputWithAi, skipReexecution, explanationDetail, explanationBullets, explanationLatex, aiTokens, verificationStatus, toggleShareOutput,
@@ -1853,7 +1872,7 @@ createApp({
             saveSettings, showSettings, showInfo, showTestHelp,
             genError, uiError, closeUiError, renameNotebook, debug, sendDebugRequest, resetTokens,
             explanationEditKey, deleteCell, moveCell,
-            clearOutputs, activeAiProvider, availableAiProviders, setActiveAiProvider, isCodespace, hasGeminiKey, hasClaudeKey, claudeViaBedrock, logEnabled, logviewEnabled, printAllEnabled, authToken,
+            clearOutputs, activeAiProvider, availableAiProviders, setActiveAiProvider, isCodespace, hasGeminiKey, hasClaudeKey, claudeViaBedrock, logEnabled, logviewEnabled, printAllEnabled, chromeless, authToken,
             restarting, ui_restart,
             ui_runTestCell, ui_runAllTests, ui_saveExplanationAndRunTest, ui_saveCodeAndRunTest, ui_forceRegenerateTestCode,
             unitTestTargetIndex, unitTestActiveSubcell, unitTestActiveTestName, enterUnitTestMode, exitUnitTestMode,
