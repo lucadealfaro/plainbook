@@ -13,6 +13,7 @@ import NotebookHelp from './NotebookHelp.js';
 import UnitTestView from './UnitTestView.js';
 import NotebookTitle from './NotebookTitle.js';
 import { outputsHaveError, getErrorInfo } from './errorUtils.js';
+import { serverFetch, isServerDown, SERVER_DOWN_MESSAGE } from './serverFetch.js';
 
 createApp({
     components: { AppNavbar, NotebookCell, CellInsertionZone, CellLabel, SettingsModal, InfoModal, TestHelpModal, UiError, PanelBar, NotebookHelp, UnitTestView, NotebookTitle },
@@ -126,7 +127,10 @@ createApp({
                 display += `\n\nCaused by: ${formatError(cause)}`;
             }
             console.log(display);
-            uiError.value = err.message || String(err);
+            // A dead server can surface under any number of wrapper messages
+            // ("Failed to fetch files", "Error in loading notebook", ...); say
+            // what actually went wrong instead.
+            uiError.value = isServerDown(err) ? SERVER_DOWN_MESSAGE : (err.message || String(err));
             // Scroll to the cell that caused the error, if known.
             // Skip in unit test mode — the cell index refers to the main
             // notebook, and scrollIntoView can shift the page up, moving
@@ -172,7 +176,7 @@ createApp({
             if (body) options.body = JSON.stringify(body);
 
             const separator = url.includes('?') ? '&' : '?';
-            const response = await fetch(`${url}${separator}token=${authToken}`, options);
+            const response = await serverFetch(`${url}${separator}token=${authToken}`, options);
             if (!response.ok) throw new Error(`API Error: ${response.statusText}`);
 
             const r = await response.json();
@@ -237,7 +241,7 @@ createApp({
                 if (logviewEnabled.value) isLocked.value = true;
                 ActionLogger.init(r.log_enabled);
             } catch (err) {
-                error.value = err.message;
+                error.value = isServerDown(err) ? SERVER_DOWN_MESSAGE : err.message;
                 throw new Error("Error in loading notebook", { cause: err });
             } finally {
                 loading.value = false;

@@ -1,4 +1,5 @@
 import { ref, computed, onMounted } from './vue.esm-browser.js';
+import { serverFetch } from './serverFetch.js';
 
 export default {
     props: ['authToken'],
@@ -12,7 +13,7 @@ export default {
         const loadInstructions = async () => {
             isLoading.value = true;
             try {
-                const res = await fetch(`/get_ai_instructions?token=${props.authToken}`);
+                const res = await serverFetch(`/get_ai_instructions?token=${props.authToken}`);
                 if (!res.ok) return;
                 const data = await res.json();
                 savedInstructions.value = data.ai_instructions || '';
@@ -27,7 +28,7 @@ export default {
         const save = async () => {
             isSaving.value = true;
             try {
-                await fetch(`/set_ai_instructions?token=${props.authToken}`, {
+                await serverFetch(`/set_ai_instructions?token=${props.authToken}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ ai_instructions: localInstructions.value })

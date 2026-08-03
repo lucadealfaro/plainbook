@@ -1,4 +1,5 @@
 import { ref, reactive, onMounted, computed, watch } from './vue.esm-browser.js';
+import { serverFetch, isServerDown } from './serverFetch.js';
 
 export default {
     props: ['authToken'],
@@ -23,7 +24,7 @@ export default {
             isLoading.value = true;
             filterQuery.value = ''; // Reset search when changing folders
             try {
-                const response = await fetch(`/file_list?token=${props.authToken}`, {
+                const response = await serverFetch(`/file_list?token=${props.authToken}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ path: path })
@@ -52,7 +53,7 @@ export default {
 
         const goHome = async () => {
             try {
-                const res = await fetch(`/home_dir?token=${props.authToken}`);
+                const res = await serverFetch(`/home_dir?token=${props.authToken}`);
                 const data = await res.json();
                 await fetchFiles(data.path);
             } catch (err) {
@@ -62,7 +63,7 @@ export default {
 
         const goCurrent = async () => {
             try {
-                const res = await fetch(`/current_dir?token=${props.authToken}`);
+                const res = await serverFetch(`/current_dir?token=${props.authToken}`);
                 const data = await res.json();
                 await fetchFiles(data.path);
             } catch (err) {
@@ -120,7 +121,7 @@ export default {
         const syncSelectedFiles = async () => {
             // Convert Map values to a plain array of file objects
             try {
-                const res = await fetch(`/set_files?token=${props.authToken}`, {
+                const res = await serverFetch(`/set_files?token=${props.authToken}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -150,7 +151,7 @@ export default {
         // Load selected files mapping from server and populate `selectedFiles`
         const loadSelectedFiles = async () => {
             try {
-                const res = await fetch(`/get_files?token=${props.authToken}`);
+                const res = await serverFetch(`/get_files?token=${props.authToken}`);
                 if (!res.ok) return;
                 const data = await res.json();
                 // Clear existing selection and repopulate
@@ -171,11 +172,15 @@ export default {
         // Get home dir on load
         const initialize = async () => {
             try {
-                const res = await fetch(`/current_dir?token=${props.authToken}`);
+                const res = await serverFetch(`/current_dir?token=${props.authToken}`);
                 const data = await res.json();
                 await fetchFiles(data.path);
                 await loadSelectedFiles();
             } catch (err) {
+                // Falling back to the root only makes sense if the server is
+                // alive and merely rejected the path; if it isn't answering,
+                // retrying just fails a second time.
+                if (isServerDown(err)) throw err;
                 await fetchFiles('/');
                 await loadSelectedFiles();
             }

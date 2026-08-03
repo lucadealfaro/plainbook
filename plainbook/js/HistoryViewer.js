@@ -4,6 +4,7 @@ import HistoryCellView from './HistoryCellView.js';
 import HistoryTimeline from './HistoryTimeline.js';
 import HistoryEntryPanel from './HistoryEntryPanel.js';
 import { replay } from './HistoryReplay.js';
+import { serverFetch } from './serverFetch.js';
 
 createApp({
     components: { HistoryCellView, HistoryTimeline, HistoryEntryPanel },
@@ -38,7 +39,7 @@ createApp({
 
         const fetchData = async () => {
             try {
-                const res = await fetch(`/get_notebook?token=${authToken}`);
+                const res = await serverFetch(`/get_notebook?token=${authToken}`);
                 if (!res.ok) throw new Error(`HTTP ${res.status}`);
                 const r = await res.json();
                 const nb = r.nb;
