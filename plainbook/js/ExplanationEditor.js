@@ -252,7 +252,7 @@ const ExplanationRenderer = {
                 </p>
                 <div v-for="(q, qi) in clarify.questions" :key="qi" class="mb-2">
                     <p class="is-size-7 mb-1">{{ qi + 1 }}. {{ q }}</p>
-                    <textarea v-model="clarifyAnswers[qi]" class="textarea is-small" rows="1"
+                    <textarea v-model="clarifyAnswers[qi]" class="textarea is-family-monospace" rows="1"
                         placeholder="Your answer..." @input="autoGrowField"></textarea>
                 </div>
                 <div class="is-flex is-justify-content-flex-end" style="gap:0.5rem;">
@@ -268,7 +268,7 @@ const ExplanationRenderer = {
         <!-- Amend mode -->
         <div v-if="showFolding && !isEditing && isAmending && isActive && hasCode && !foldReview"
              class="explanation-edit-mode px-2 pb-2">
-            <textarea ref="amendEl" v-model="amendText" class="textarea is-small mb-2" rows="2"
+            <textarea ref="amendEl" v-model="amendText" class="textarea is-family-monospace mb-2" rows="2"
                 placeholder="Amend this cell, e.g. also drop rows with null revenue."
                 @keydown.enter.exact.prevent="submitAmend"></textarea>
             <div style="display: flex; justify-content: flex-end; gap: 0.5rem;">
@@ -289,9 +289,13 @@ const ExplanationRenderer = {
                     Review the amended description. Accepting regenerates the code from it.
                 </p>
                 <p class="is-size-7 has-text-grey mb-1">Current:</p>
-                <div class="fold-original p-2 mb-2 is-size-7">{{ foldReview.original }}</div>
+                <!-- This pair is meant to be read against each other, so size and
+                     family must match. Both sit at the 0.85rem $control-size that
+                     Bulma controls default to here: the textarea gets it from
+                     .textarea, and .fold-original is pinned to it in main.scss. -->
+                <div class="fold-original is-family-monospace p-2 mb-2">{{ foldReview.original }}</div>
                 <p class="is-size-7 has-text-grey mb-1">Amended (editable):</p>
-                <textarea ref="foldEl" v-model="foldEdit" class="textarea is-small mb-2" rows="3" @input="autoResizeFold"></textarea>
+                <textarea ref="foldEl" v-model="foldEdit" class="textarea is-family-monospace mb-2" rows="3" @input="autoResizeFold"></textarea>
                 <div class="is-flex is-justify-content-flex-end" style="gap:0.5rem;">
                     <button class="button is-small" @click.stop="dismissFoldReview">Cancel</button>
                     <button class="button is-small is-info" :disabled="!foldEdit.trim()" @click.stop="saveFold">

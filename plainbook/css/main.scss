@@ -142,6 +142,9 @@ pre[class*="language-"] {
   white-space: pre-wrap;
   word-break: break-word;
   color: var(--bulma-text-weak);
+  // Read side by side with the amended textarea below it, so it matches the
+  // $control-size that every text-entry textarea uses.
+  font-size: var(--bulma-control-size);
 }
 
 // Muted utility for subtle buttons
@@ -272,7 +275,9 @@ pre[class*="language-"] {
 // ── Instructions panel (InstructionsPanel.js) ──
 .instructions-container { background: var(--bulma-scheme-main); }
 .instructions-help { font-size: 0.85rem; color: var(--bulma-text-weak); }
-.instructions-textarea { border: 1px solid var(--bulma-border); border-radius: 4px; font-family: inherit; font-size: 0.9rem; }
+// Not a Bulma .textarea (it flexes to fill the panel), but it matches one:
+// the family comes from .is-family-monospace, the size from $control-size.
+.instructions-textarea { border: 1px solid var(--bulma-border); border-radius: 4px; font-size: var(--bulma-control-size); }
 
 // ── Notebook cell (NotebookCell.js) ──
 .notebook-cell.is-active-cell { border: 2px solid var(--bulma-primary); }

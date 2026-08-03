@@ -61,7 +61,7 @@ export default {
             <textarea v-else
                 v-model="localInstructions"
                 placeholder="e.g., Use pandas for data manipulation, use these specific libraries for data access, etc."
-                class="instructions-textarea"
+                class="instructions-textarea is-family-monospace"
                 style="flex: 1; resize: none; padding: 0.5rem;"
             ></textarea>
             <div style="display: flex; justify-content: flex-end; gap: 0.5rem; margin-top: 0.5rem;">
