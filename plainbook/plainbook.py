@@ -205,6 +205,11 @@ class Plainbook:
         self._live_states = set()        # kernel state names created this session (for execution-skip)
         self._live_cell_meta = {}        # cell.id -> _LiveCellMeta (session-only skip metadata, not serialized)
         self._unit_test_states = {}     # "{cell_id}:{test_name}:{role}" -> kernel state name
+        # Keep generation and execution counters. 
+        self._requested_generations = 0
+        self._performed_generations = 0
+        self._requested_executions = 0
+        self._performed_executions = 0
         # Unit test validity is stored inline in cell.metadata.unit_tests[name]['validity']
         self._sk_process = subprocess.Popen(
             [sys.executable, "-m", "snapshot_kernel.main",
@@ -437,6 +442,7 @@ class Plainbook:
                 if self.nb.cells[i].cell_type == 'code':
                     raise ExecutionError("Cannot execute cell out of order")
 
+            self._requested_executions += 1
             input_state = self._find_input_state(index)
             cell_id = cell.id
             if cell_id in self._cell_states:
@@ -458,9 +464,9 @@ class Plainbook:
                 if skipped is not None:
                     return skipped
 
+            self._performed_executions += 1
             exec_id = uuid.uuid4().hex
             self._current_exec_id = exec_id
-
             try:
                 result = self._sk_request("POST", "/execute", {
                     "code": cell.source,
@@ -1848,6 +1854,7 @@ class Plainbook:
             assert cell.cell_type in ('code', 'test')
             if not self._is_previous_code_and_output_valid(index):
                 raise RuntimeError("Cannot generate code: previous output must be valid.")
+            self._requested_generations += 1
             # Gets code context.
             is_test = (cell.cell_type == 'test')
             error_context = self._get_error_context(index)
@@ -1859,6 +1866,7 @@ class Plainbook:
                     and self._code_matches_description(cell)
                     and self._accessed_vars_unchanged(cell, index)):
                 return self._skip_code_generation(cell, index)
+            self._performed_generations += 1 
             explanation_used = cell.metadata.get('explanation')
             instructions = self._get_instructions(explanation_used)
             # Hash of exactly the description sent to the AI, recorded below as
