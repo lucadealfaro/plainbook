@@ -323,7 +323,7 @@ const ExplanationRenderer = {
                          output is already up to date is otherwise a no-op, so
                          this is the only way to make it run again. Test cells
                          have no execution skip, so they get no addon. -->
-                    <div v-else class="buttons has-addons mb-0 mr-1">
+                    <div v-else class="buttons has-addons mb-0 mr-1" style="display: inline-flex;">
                         <button class="button run-button is-small"
                                 :class="isTestCell ? 'is-warning' : 'is-primary'"
                                 title="Run this cell and all necessary preceding cells (hold Shift to force a re-run)"
@@ -333,9 +333,13 @@ const ExplanationRenderer = {
                             <span v-else>Run test</span>
                         </button>
                         <button v-if="!isTestCell" class="button run-button is-small is-primary"
+                                style="border-left: 1px solid rgba(255, 255, 255, 0.45);
+                                       --bulma-control-padding-horizontal: calc(1.1em - 1px);
+                                       z-index: 5;"
                                 title="Force run: re-execute this cell even if nothing it depends on has changed"
                                 @click.stop="$emit('run', true)">
-                            <span class="icon"><i class="bx bx-refresh-cw"></i></span>
+                            <span class="icon" style="width: 1.25em;"><i class="bx bx-refresh-cw"></i></span>
+                            <span class="icon" style="width: 1.25em;"><i class="bx bx-play"></i></span>
                         </button>
                     </div>
                 </template>
