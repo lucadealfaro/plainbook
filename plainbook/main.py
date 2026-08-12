@@ -6,7 +6,9 @@ from functools import wraps
 import json
 from . import __version__
 from .ai_common import (reset_session_tokens, DEFAULT_EXPLANATION_DETAIL_LEVEL,
-                        DEFAULT_EXPLANATION_USE_BULLETS, DEFAULT_EXPLANATION_USE_LATEX)
+                        DEFAULT_EXPLANATION_USE_BULLETS, DEFAULT_EXPLANATION_USE_LATEX,
+                        DEFAULT_FIX_ERROR_AMENDS_DESCRIPTION, DEFAULT_ASK_QUESTIONS,
+                        DEFAULT_SKIP_REGENERATION)
 from .plainbook import CellExecutionError
 import os
 from pathlib import Path
@@ -339,6 +341,10 @@ def get_notebook():
         explanation_detail=settings.get('explanation_detail', DEFAULT_EXPLANATION_DETAIL_LEVEL),
         explanation_bullets=settings.get('explanation_bullets', DEFAULT_EXPLANATION_USE_BULLETS),
         explanation_latex=settings.get('explanation_latex', DEFAULT_EXPLANATION_USE_LATEX),
+        fix_error_amends_description=settings.get(
+            'fix_error_amends_description', DEFAULT_FIX_ERROR_AMENDS_DESCRIPTION),
+        ask_questions=settings.get('ask_questions', DEFAULT_ASK_QUESTIONS),
+        skip_regeneration=settings.get('skip_regeneration', DEFAULT_SKIP_REGENERATION),
     )
 
 @post('/set_key')
@@ -429,6 +435,29 @@ def set_explain_options():
         return dict(status='error', message=str(e))
     return dict(status='success', explanation_detail=detail,
                 explanation_bullets=bullets, explanation_latex=latex)
+
+def _save_global_flag(key, value):
+    """Persist one global boolean setting, and echo it back to the client.
+
+    Writes to both stores and dumps only _saved_settings, so environment-provided
+    API keys stay out of the file. Returns the route's response dict."""
+    for store in (settings, _saved_settings):
+        store[key] = value
+    try:
+        with open(SETTINGS_FILE, 'w') as f:
+            yaml.dump(dict(_saved_settings), f)
+    except Exception as e:
+        return dict(status='error', message=str(e))
+    return dict(status='success', **{key: value})
+
+@post('/set_fix_error_amends_description')
+@action_log.logged('set_fix_error_amends_description')
+@require_token
+def set_fix_error_amends_description():
+    """Persist the global "Fix errors also amends the description" setting."""
+    data = request.json or {}
+    value = bool(data.get('value', DEFAULT_FIX_ERROR_AMENDS_DESCRIPTION))
+    return _save_global_flag('fix_error_amends_description', value)
 
 @post('/edit_explanation')
 @action_log.logged('edit_explanation')
@@ -589,10 +618,13 @@ def rename_notebook():
 def execute_cell():
     data = request.json
     cell_index = data.get('cell_index')
+    # Sent by a future "Force Run": skips the execution fast path so the cell
+    # really runs even when its code and inputs are unchanged.
+    force_reexecute = data.get('force_reexecute', False)
     if args.debug:
         print(f"Executing cell {cell_index}")
     try:
-        outputs, details = notebook.execute_cell(cell_index)
+        outputs, details = notebook.execute_cell(cell_index, force=force_reexecute)
         return dict(status="ok", details=details, outputs=outputs)
     except CellExecutionError as e:
         # The execution error is already captured in the cell outputs. 
@@ -667,7 +699,15 @@ def generate_code_cell():
     data = request.json
     cell_index = data.get('cell_index')
     validation_feedback = data.get('validation_feedback')
-    amend_description = data.get('amend_description', False)
+    # "Fix Code" asks for the description to be amended too; honour it only when
+    # the global setting is on. When off, generate_code_cell never makes the
+    # separate amend_explanation AI call, so the description is left as written.
+    amend_description = (data.get('amend_description', False)
+                         and settings.get('fix_error_amends_description',
+                                          DEFAULT_FIX_ERROR_AMENDS_DESCRIPTION))
+    # Sent by explicit user actions (the Regenerate button); absent for the
+    # run-driven batch generation, which keeps the generation-skip fast path.
+    force_regenerate = data.get('force_regenerate', False)
     api_key, ai_provider, model, error = _get_ai_config()
     if error:
         return dict(status='error', message=error)
@@ -675,7 +715,10 @@ def generate_code_cell():
         new_code, success, amended = notebook.generate_code_cell(
             api_key, cell_index, ai_provider=ai_provider,
             model=model, validation_feedback=validation_feedback,
-            amend_description=amend_description)
+            amend_description=amend_description,
+            force_regenerate=force_regenerate,
+            ask_questions=settings.get('ask_questions', DEFAULT_ASK_QUESTIONS),
+            skip_regeneration=settings.get('skip_regeneration', DEFAULT_SKIP_REGENERATION))
     except ClarificationNeeded as e:
         # The AI asked questions; the cell source is untouched.
         return dict(status='needs_clarification', questions=e.questions)
@@ -916,24 +959,22 @@ def set_share_output():
 
 @post('/set_ask_questions')
 @action_log.logged('set_ask_questions')
-@stateful
 @require_token
 def set_ask_questions():
-    data = request.json
-    value = data.get('value', False)
-    notebook.set_ask_questions(value)
-    return {}
+    """Persist the global "Enable asking questions" setting."""
+    data = request.json or {}
+    value = bool(data.get('value', DEFAULT_ASK_QUESTIONS))
+    return _save_global_flag('ask_questions', value)
 
 
-@post('/set_skip_reexecution')
-@action_log.logged('set_skip_reexecution')
-@stateful
+@post('/set_skip_regeneration')
+@action_log.logged('set_skip_regeneration')
 @require_token
-def set_skip_reexecution():
-    data = request.json
-    skip = data.get('skip', True)
-    notebook.set_skip_reexecution(skip)
-    return {}
+def set_skip_regeneration():
+    """Persist the global "Skip regeneration when data is unchanged" setting."""
+    data = request.json or {}
+    value = bool(data.get('value', DEFAULT_SKIP_REGENERATION))
+    return _save_global_flag('skip_regeneration', value)
 
 
 @get('/current_dir')
@@ -1139,7 +1180,9 @@ def generate_unit_test_code():
         new_code, success = notebook.generate_unit_test_cell(
             api_key, cell_index, test_name, role,
             ai_provider=ai_provider, model=model,
-            validation_feedback=validation_feedback)
+            validation_feedback=validation_feedback,
+            ask_questions=settings.get('ask_questions', DEFAULT_ASK_QUESTIONS),
+            skip_regeneration=settings.get('skip_regeneration', DEFAULT_SKIP_REGENERATION))
     except Exception as e:
         friendly = _check_billing_error(e)
         if friendly:

@@ -125,7 +125,7 @@ export default {
                         @save="$emit('save-explanation', $event)"
                         @toggle-output="outputVisible = !outputVisible"
                         @update:editing="descEditing = $event"
-                        @run="$emit('run-cell')"
+                        @run="$emit('run-cell', $event)"
                         @interrupt="$emit('interrupt')"
                         @saveandrun="$emit('save-and-run', $event)"
                         @delete="$emit('delete')"

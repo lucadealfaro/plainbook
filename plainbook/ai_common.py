@@ -161,6 +161,20 @@ DEFAULT_EXPLANATION_DETAIL_LEVEL = 1   # 1 Brief .. 4 Expert
 DEFAULT_EXPLANATION_USE_BULLETS = False
 DEFAULT_EXPLANATION_USE_LATEX = False
 
+# Whether the AI may reply to an action cell with questions instead of code.
+DEFAULT_ASK_QUESTIONS = False
+
+# Whether a cell whose description and inputs are unchanged may be left alone
+# instead of being regenerated. Off: every generation request calls the AI.
+DEFAULT_SKIP_REGENERATION = True
+
+# Whether "Fix Code" also rewrites the cell's description, so that regenerating
+# from scratch would avoid the error just fixed. Off: fixing an error changes the
+# code only, the description the user wrote stands, and the separate
+# amend_explanation AI call is not made at all. Read via the settings file in
+# main.py; this is the fallback when nothing has been saved.
+DEFAULT_FIX_ERROR_AMENDS_DESCRIPTION = False
+
 NOTEBOOK_VERIFY_INSTRUCTIONS = """
 You are auditing a Jupyter notebook on behalf of a user who needs assurance that the
 notebook is both correct and safe to run.

@@ -319,13 +319,25 @@ const ExplanationRenderer = {
                         <span class="icon"><i class="bx bx-stop-circle"></i></span>
                         <span>Interrupt</span>
                     </button>
-                    <button v-else class="button run-button is-small mr-1"
-                            :class="isTestCell ? 'is-warning' : 'is-primary'"
-                            title="Run this cell and all necessary preceding cells" @click.stop="$emit('run')">
-                        <span class="icon"><i class="bx bx-play"></i></span>
-                        <span v-if="!isTestCell">Run</span>
-                        <span v-else>Run test</span>
-                    </button>
+                    <!-- Run, with a "force" addon for code cells: a cell whose
+                         output is already up to date is otherwise a no-op, so
+                         this is the only way to make it run again. Test cells
+                         have no execution skip, so they get no addon. -->
+                    <div v-else class="buttons has-addons mb-0 mr-1">
+                        <button class="button run-button is-small"
+                                :class="isTestCell ? 'is-warning' : 'is-primary'"
+                                title="Run this cell and all necessary preceding cells (hold Shift to force a re-run)"
+                                @click.stop="$emit('run', $event.shiftKey)">
+                            <span class="icon"><i class="bx bx-play"></i></span>
+                            <span v-if="!isTestCell">Run</span>
+                            <span v-else>Run test</span>
+                        </button>
+                        <button v-if="!isTestCell" class="button run-button is-small is-primary"
+                                title="Force run: re-execute this cell even if nothing it depends on has changed"
+                                @click.stop="$emit('run', true)">
+                            <span class="icon"><i class="bx bx-refresh-cw"></i></span>
+                        </button>
+                    </div>
                 </template>
                 <button v-if="showTestHelp" class="button is-success is-small mr-1" title="Test Help" @click.stop="$emit('open-test-help')">
                     <span class="icon"><i class="bx bx-info-circle"></i></span>

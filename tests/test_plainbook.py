@@ -57,7 +57,7 @@ class TestNotebookLifecycle:
             'name', 'path', 'num_cells',
             'last_executed_cell', 'last_valid_code_cell',
             'last_valid_output_cell', 'last_valid_test_cell', 'is_locked',
-            'share_output_with_ai', 'ask_questions', 'skip_reexecution', 'ai_tokens',
+            'share_output_with_ai', 'ai_tokens',
             'verification_status',
         }
         assert set(state.keys()) == expected_keys
@@ -878,9 +878,12 @@ class TestExecutionSkip:
                        if o.get("output_type") == "stream").strip()
         assert text == "KEEP 1"
 
-    def test_flag_off_disables_skip(self, notebook):
-        """With skip_reexecution off, cells are always re-executed."""
-        notebook.set_skip_reexecution(False)
+    def test_force_disables_skip(self, notebook):
+        """execute_cell(force=True) always really runs the cell.
+
+        This is what a "Force Run" needs: cells whose inputs the skip cannot see
+        (the clock, random numbers, external files) must be re-executed even
+        though nothing tracked about them changed."""
         _add_generated_cell(notebook, "x = 1\nw = 1")
         _add_generated_cell(notebook, "y = x + 1")
         _add_generated_cell(notebook, "z = w + 1")
@@ -892,7 +895,7 @@ class TestExecutionSkip:
         _set_generated_code(notebook, 0, "x = 1\nw = 100")
         notebook.last_valid_code_cell = 2
         for i in range(3):
-            notebook.execute_cell(i)
+            notebook.execute_cell(i, force=True)
 
         assert counts["rebuild"] == 0                       # nothing skipped
         assert self._probe(notebook, 2, "print(z)") == "101"
@@ -1473,3 +1476,213 @@ class TestFixCodeAfterManualEdit:
 
         assert notebook.nb.cells[idx].outputs == []
         assert notebook.last_valid_output_cell < idx
+
+
+class TestForcedRegenerationAndClear:
+    """The generation-skip must never swallow an explicit user request.
+
+    Regression cover for two coupled bugs. The skip compares the description the
+    code was generated from (code_description_hash) against the current
+    description_hash; it never looks at the code itself. So the Regenerate
+    button had no way to say "call the AI anyway" -- the client's force flag
+    stopped at the client and was never sent -- and clear_cell_code left the pin
+    in place, so a cleared cell still claimed to have been generated from its
+    description and regenerating handed back the empty string."""
+
+    def _stub(self, code="v = 1\nprint('GENERATED', v)"):
+        calls = {"n": 0}
+        def fake_generate(api_key, **kwargs):
+            calls["n"] += 1
+            return code, None
+        _pbmod.AI_PROVIDERS["genstub"] = dict(_pbmod.AI_PROVIDERS["gemini"])
+        _pbmod.AI_PROVIDERS["genstub"]["generate"] = fake_generate
+        return calls
+
+    def _skippable_cell(self, notebook, source="v = 1", explanation="set v to 1"):
+        """A cell in the exact state where the skip fires: code pinned to its
+        current description, and with a baseline of accessed variables that
+        reads nothing pre-existing (so _accessed_vars_unchanged is True rather
+        than merely lacking a baseline)."""
+        idx = _add_code_cell(notebook, source)
+        cell = notebook.nb.cells[idx]
+        cell.metadata['explanation'] = explanation
+        h = notebook._hash_text(explanation)
+        cell.metadata['description_hash'] = h
+        cell.metadata['code_description_hash'] = h
+        notebook._live(cell).accessed_symbols = []
+        notebook.last_valid_code_cell = idx
+        return idx
+
+    def test_skip_still_fires_for_run_driven_generation(self, notebook):
+        """The optimisation survives: an unforced call on an unchanged cell
+        still never reaches the AI."""
+        calls = self._stub()
+        idx = self._skippable_cell(notebook)
+
+        notebook.generate_code_cell("key", idx, ai_provider="genstub")
+
+        assert calls["n"] == 0
+        assert notebook._requested_generations == 1
+        assert notebook._performed_generations == 0
+        assert notebook.nb.cells[idx].source == "v = 1"
+
+    def test_skip_regeneration_off_always_calls_the_ai(self, notebook):
+        """The "Skip regeneration when data is unchanged" setting off: an
+        unchanged cell is regenerated anyway, without needing force."""
+        calls = self._stub()
+        idx = self._skippable_cell(notebook)
+
+        notebook.generate_code_cell("key", idx, ai_provider="genstub",
+                                    skip_regeneration=False)
+
+        assert calls["n"] == 1
+        assert notebook._performed_generations == 1
+        assert notebook.nb.cells[idx].source == "v = 1\nprint('GENERATED', v)"
+
+    def test_force_regenerate_bypasses_the_skip(self, notebook):
+        """What the Regenerate button now sends: the AI is called even though
+        the cell is unchanged and the skip would otherwise fire."""
+        calls = self._stub()
+        idx = self._skippable_cell(notebook)
+
+        notebook.generate_code_cell("key", idx, ai_provider="genstub",
+                                    force_regenerate=True)
+
+        assert calls["n"] == 1
+        assert notebook._performed_generations == 1
+        assert notebook.nb.cells[idx].source == "v = 1\nprint('GENERATED', v)"
+
+    def test_clear_code_unpins_the_description(self, notebook):
+        """Empty source was not generated from the description, so the pin that
+        makes the skip eligible has to go -- as it does for a manual edit."""
+        self._stub()
+        idx = self._skippable_cell(notebook)
+        assert notebook._code_matches_description(notebook.nb.cells[idx])
+
+        notebook.clear_cell_code(idx)
+
+        assert 'code_description_hash' not in notebook.nb.cells[idx].metadata
+        assert not notebook._code_matches_description(notebook.nb.cells[idx])
+
+    def test_clear_then_generate_calls_the_ai(self, notebook):
+        """Clearing the code and regenerating produces code again, even through
+        the unforced (run-driven) path where the skip is still enabled."""
+        calls = self._stub()
+        idx = self._skippable_cell(notebook)
+        notebook.clear_cell_code(idx)
+        assert notebook.nb.cells[idx].source == ''
+        notebook.last_valid_code_cell = idx
+
+        notebook.generate_code_cell("key", idx, ai_provider="genstub")
+
+        assert calls["n"] == 1
+        assert notebook.nb.cells[idx].source == "v = 1\nprint('GENERATED', v)"
+
+
+class TestFixErrorAmendsDescription:
+    """Whether fixing an error also rewrites the cell's description.
+
+    The "Fix errors also amends the description" setting (global, in
+    settings.yaml) decides whether main.py forwards amend_description to
+    generate_code_cell. These tests cover the behaviour it selects between: with
+    it off the separate amend_explanation AI call is never made and the
+    description the user wrote stands, and with it on the description is
+    replaced and stays pinned to the new code."""
+
+    AMENDED = "set v to 1, guarding against the missing name, and print it"
+
+    def _stub(self, code="v = 1\nprint('FIXED', v)"):
+        """Stubs BOTH generation and amendment.
+
+        Stubbing amend_explanation matters: copying the gemini provider dict
+        leaves the real gemini_amend_explanation in place, which would make a
+        live API call the moment a test enables amendment."""
+        calls = {"gen": 0, "amend": 0, "amend_args": None}
+        def fake_generate(api_key, **kwargs):
+            calls["gen"] += 1
+            return code, None
+        def fake_amend(api_key, *args, **kwargs):
+            calls["amend"] += 1
+            calls["amend_args"] = args
+            return self.AMENDED
+        _pbmod.AI_PROVIDERS["amendstub"] = dict(_pbmod.AI_PROVIDERS["gemini"])
+        _pbmod.AI_PROVIDERS["amendstub"]["generate"] = fake_generate
+        _pbmod.AI_PROVIDERS["amendstub"]["amend_explanation"] = fake_amend
+        return calls
+
+    def _errored_cell(self, notebook, explanation="set v to 1 and print it"):
+        """A generated cell whose code raised, ready to be fixed."""
+        idx = _add_code_cell(notebook, "v = 1\nprint(missing_name)")
+        cell = notebook.nb.cells[idx]
+        cell.metadata['explanation'] = explanation
+        h = notebook._hash_text(explanation)
+        cell.metadata['description_hash'] = h
+        cell.metadata['code_description_hash'] = h
+        cell.outputs = [_nbf.from_dict(
+            {'output_type': 'error', 'ename': 'NameError',
+             'evalue': "name 'missing_name' is not defined",
+             'traceback': ["NameError: name 'missing_name' is not defined"]})]
+        notebook.last_valid_code_cell = idx
+        return idx
+
+    def test_no_amendment_when_not_requested(self, notebook):
+        """Setting off: the AI is never asked about the description, and the
+        description the user wrote is left character-for-character alone."""
+        calls = self._stub()
+        idx = self._errored_cell(notebook)
+        before = notebook.nb.cells[idx].metadata['explanation']
+
+        new_code, success, amended = notebook.generate_code_cell(
+            "key", idx, ai_provider="amendstub", amend_description=False)
+
+        assert success
+        assert calls["gen"] == 1                 # the code was fixed
+        assert calls["amend"] == 0               # but no second AI call
+        assert amended is None                   # so nothing to send the client
+        assert notebook.nb.cells[idx].metadata['explanation'] == before
+
+    def test_amendment_when_requested(self, notebook):
+        """Setting on: the description is rewritten and returned to the client."""
+        calls = self._stub()
+        idx = self._errored_cell(notebook)
+
+        new_code, success, amended = notebook.generate_code_cell(
+            "key", idx, ai_provider="amendstub", amend_description=True)
+
+        assert success
+        assert calls["amend"] == 1
+        assert amended == self.AMENDED
+        assert notebook.nb.cells[idx].metadata['explanation'] == self.AMENDED
+
+    def test_amendment_keeps_the_description_pinned(self, notebook):
+        """The amended description describes the code just generated, so the two
+        hashes must stay equal -- otherwise the next Run would regenerate the
+        cell it has only just fixed."""
+        self._stub()
+        idx = self._errored_cell(notebook)
+
+        notebook.generate_code_cell("key", idx, ai_provider="amendstub",
+                                    amend_description=True)
+
+        meta = notebook.nb.cells[idx].metadata
+        assert meta['description_hash'] == notebook._hash_text(self.AMENDED)
+        assert meta['code_description_hash'] == meta['description_hash']
+        assert notebook._code_matches_description(notebook.nb.cells[idx])
+
+    def test_amendment_is_best_effort(self, notebook):
+        """A failing amend call must not lose the code fix: it is persisted
+        before the amend runs, and the exception is swallowed."""
+        calls = self._stub()
+        idx = self._errored_cell(notebook)
+        before = notebook.nb.cells[idx].metadata['explanation']
+        def boom(*a, **kw):
+            raise RuntimeError("amend provider is down")
+        _pbmod.AI_PROVIDERS["amendstub"]["amend_explanation"] = boom
+
+        new_code, success, amended = notebook.generate_code_cell(
+            "key", idx, ai_provider="amendstub", amend_description=True)
+
+        assert success
+        assert new_code == "v = 1\nprint('FIXED', v)"
+        assert amended is None
+        assert notebook.nb.cells[idx].metadata['explanation'] == before

@@ -425,8 +425,12 @@ class Plainbook:
 
     # Kernel methods
 
-    def execute_cell(self, index):
-        """Executes a code cell by index against the appropriate snapshot."""
+    def execute_cell(self, index, force=False):
+        """Executes a code cell by index against the appropriate snapshot.
+
+        ``force`` skips the execution fast path, so the cell really runs even
+        when its code and inputs are unchanged. Set it for cells with inputs the
+        skip cannot track (the current time, random numbers, external files)."""
         with self._lock:
             if index < 0 or index >= len(self.nb.cells):
                 raise ExecutionError("Cell index out of range")
@@ -454,12 +458,10 @@ class Plainbook:
                     new_state_name = uuid.uuid4().hex
                 self._cell_states[cell_id] = new_state_name
 
-            # Fast path (when enabled): if this cell's code is unchanged and
-            # nothing it reads has changed, reconstruct its successor state
-            # without re-executing. Controlled by the 'skip_reexecution' setting
-            # so it can be disabled for cells with non-tracked inputs (time,
-            # random, external files, ...).
-            if self.nb.metadata.get('skip_reexecution', True):
+            # Fast path unless the caller forces a real run: if this cell's code
+            # is unchanged and nothing it reads has changed, reconstruct its
+            # successor state without re-executing.
+            if not force:
                 skipped = self._try_skip_execution(cell, index, input_state, new_state_name)
                 if skipped is not None:
                     return skipped
@@ -835,7 +837,6 @@ class Plainbook:
             self.nb.metadata['input_files'] = []
             self.nb.metadata['is_locked'] = False
             self.nb.metadata['share_output_with_ai'] = True
-            self.nb.metadata['skip_reexecution'] = True
             self.nb.metadata['ai_instructions'] = ''
             with open(self.path, "w") as f:
                 nbformat.write(self.nb, f)
@@ -988,8 +989,6 @@ class Plainbook:
             'last_valid_test_cell': self.last_valid_test_cell,
             'is_locked': self.nb.metadata.get('is_locked', False),
             'share_output_with_ai': self.nb.metadata.get('share_output_with_ai', True),
-            'ask_questions': self.nb.metadata.get('ask_questions', False),
-            'skip_reexecution': self.nb.metadata.get('skip_reexecution', True),
             'ai_tokens': get_session_tokens(),
             'verification_status': self.get_verification_status(),
         }
@@ -1031,23 +1030,6 @@ class Plainbook:
         """Sets whether cell outputs are shared with AI."""
         with self._lock:
             self.nb.metadata['share_output_with_ai'] = share
-            self._write()
-
-    def set_ask_questions(self, value):
-        """Sets whether the AI may ask questions instead of guessing."""
-        with self._lock:
-            self.nb.metadata['ask_questions'] = bool(value)
-            self._write()
-
-    def set_skip_reexecution(self, skip):
-        """Sets whether unchanged cells may be reconstructed instead of re-run.
-
-        When True (default), a cell whose code and read-inputs are unchanged has
-        its successor state rebuilt without executing. When False, cells are
-        always re-executed — useful when cells depend on non-tracked inputs
-        (time, random numbers, external files, etc.)."""
-        with self._lock:
-            self.nb.metadata['skip_reexecution'] = skip
             self._write()
 
     def insert_cell(self, index, cell_type):
@@ -1230,6 +1212,10 @@ class Plainbook:
             cell.source = ''
             # Clearing the code invalidates any explanation of it.
             self._refresh_code_hash(cell)
+            # Empty source was not generated from the description, so the
+            # generation-skip must not assume regenerating would reproduce it.
+            # Same idiom as set_cell_source().
+            cell.metadata.pop('code_description_hash', None)
             self._clear_validation(cell)  # Clear any cached validation results
             self._drop_outputs(cell)
             if cell.cell_type == 'test':
@@ -1839,7 +1825,7 @@ class Plainbook:
         return None
 
 
-    def generate_code_cell(self, api_key, index, ai_provider="gemini", model=None, validation_feedback=None, amend_description=False):
+    def generate_code_cell(self, api_key, index, ai_provider="gemini", model=None, validation_feedback=None, amend_description=False, force_regenerate=False, ask_questions=False, skip_regeneration=True):
         """Generates code for a code or test cell at index using the specified AI provider.
 
         Returns a 3-tuple ``(new_code, success, amended_explanation)``. When the caller
@@ -1847,7 +1833,17 @@ class Plainbook:
         the cell's plain-language description is also amended so that regenerating from
         it on a clean slate would avoid the error; the amended text is returned as the
         third element (``None`` otherwise). Amendment is best-effort and never blocks the
-        code fix."""
+        code fix.
+
+        ``force_regenerate`` bypasses the generation-skip fast path below. Set it for
+        explicit user actions (the Regenerate button), where returning the existing
+        source looks like an AI that changed nothing rather than one that was never
+        asked. The run-driven batch generation leaves it False and keeps the skip.
+
+        ``ask_questions`` and ``skip_regeneration`` carry the global settings of the
+        same names; the caller reads them (main.py owns the settings file) and passes
+        them in. With ``skip_regeneration`` False the fast path is disabled entirely,
+        so a cell is regenerated whenever generation is requested."""
         with self._lock:
             assert 0 <= index < len(self.nb.cells)
             cell = self.nb.cells[index]
@@ -1860,9 +1856,12 @@ class Plainbook:
             error_context = self._get_error_context(index)
             # Skip the AI regeneration when the code already matches the
             # (unchanged) description and the accessed variables are unchanged.
-            # Conservative: code cells only, and never when fixing an error or
-            # when explicit validation feedback was requested.
-            if (not is_test and validation_feedback is None and not error_context
+            # Conservative: only when the "Skip regeneration when data is
+            # unchanged" setting is on, code cells only, never when the user
+            # asked for this explicitly, and never when fixing an error or when
+            # explicit validation feedback was requested.
+            if (skip_regeneration and not force_regenerate
+                    and not is_test and validation_feedback is None and not error_context
                     and self._code_matches_description(cell)
                     and self._accessed_vars_unchanged(cell, index)):
                 return self._skip_code_generation(cell, index)
@@ -1885,7 +1884,7 @@ class Plainbook:
                 raise RuntimeError("An AI request is already pending.")
             # Only action cells may ask questions; test cells always generate.
             # Whether questions are actually asked is up to the AI.
-            ask_questions = (not is_test) and self.nb.metadata.get('ask_questions', False)
+            ask_questions = (not is_test) and ask_questions
             try:
                 self.ai_request_pending = True
                 ai_fn_key = "generate_test" if is_test else "generate"
@@ -2052,12 +2051,17 @@ class Plainbook:
 
 
     def generate_unit_test_cell(self, api_key, cell_index, test_name, role,
-                                ai_provider="gemini", model=None, validation_feedback=None):
+                                ai_provider="gemini", model=None, validation_feedback=None,
+                                ask_questions=False, skip_regeneration=True):
         """Generate code for a unit test sub-cell."""
         if role == 'target':
+            # The target is an ordinary action cell, so it obeys the same
+            # global settings as a regular generation.
             return self.generate_code_cell(api_key, cell_index,
                                            ai_provider=ai_provider, model=model,
-                                           validation_feedback=validation_feedback)
+                                           validation_feedback=validation_feedback,
+                                           ask_questions=ask_questions,
+                                           skip_regeneration=skip_regeneration)
         assert role in ('setup', 'test'), f"Invalid role: {role}"
 
         with self._lock:

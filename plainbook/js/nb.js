@@ -12,7 +12,7 @@ import PanelBar from './PanelBar.js';
 import NotebookHelp from './NotebookHelp.js';
 import UnitTestView from './UnitTestView.js';
 import NotebookTitle from './NotebookTitle.js';
-import { outputsHaveError, getErrorInfo } from './errorUtils.js';
+import { outputsHaveStoppingError, getErrorInfo } from './errorUtils.js';
 import { serverFetch, isServerDown, SERVER_DOWN_MESSAGE } from './serverFetch.js';
 
 createApp({
@@ -37,11 +37,16 @@ createApp({
         const askQuestions = ref(false);
         // Questions awaiting answers: clarifyState[index] = { questions: [...] }.
         const clarifyState = ref({});
-        const skipReexecution = ref(true);
+        // When true (Settings), a cell whose description and inputs are unchanged
+        // is left alone instead of being regenerated.
+        const skipRegeneration = ref(true);
         // Global "Explain code" options (stored in settings.yaml on the server).
         const explanationDetail = ref(1);      // 1 Brief .. 4 Expert
         const explanationBullets = ref(false);
         const explanationLatex = ref(false);
+        // When true (Settings), "Fix Code" also rewrites the cell's description.
+        // Global, like the options above; the server decides, this is display only.
+        const fixErrorAmendsDescription = ref(false);
         const aiTokens = ref({input: 0, output: 0});
         const verificationStatus = ref('none');
         const debug = ref(false);
@@ -158,10 +163,6 @@ createApp({
             last_valid_test_cell_index.value = state.last_valid_test_cell;
             isLocked.value = state.is_locked || logviewEnabled.value;
             shareOutputWithAi.value = state.share_output_with_ai;
-            askQuestions.value = !!state.ask_questions;
-            if (state.skip_reexecution !== undefined) {
-                skipReexecution.value = state.skip_reexecution;
-            }
             if (state.ai_tokens) {
                 aiTokens.value = state.ai_tokens;
             }
@@ -237,6 +238,9 @@ createApp({
                 if (r.explanation_detail !== undefined) explanationDetail.value = r.explanation_detail;
                 explanationBullets.value = !!r.explanation_bullets;
                 explanationLatex.value = !!r.explanation_latex;
+                fixErrorAmendsDescription.value = !!r.fix_error_amends_description;
+                askQuestions.value = !!r.ask_questions;
+                if (r.skip_regeneration !== undefined) skipRegeneration.value = !!r.skip_regeneration;
                 logEnabled.value = !!r.log_enabled;
                 logviewEnabled.value = !!r.logview_enabled;
                 printAllEnabled.value = !!r.print_all_enabled;
@@ -732,6 +736,13 @@ createApp({
             runningActivity.value = { type: 'generating', cellIndex, cellName: cell.metadata.name || null };
             asRead.value = false;
             const body = { cell_index: cellIndex };
+            // An explicit user action (Regenerate / Fix Code / module rewrite):
+            // tell the server to bypass its generation-skip, so the click always
+            // calls the AI instead of silently returning the existing source.
+            // The run-driven loop above leaves force false and keeps the skip.
+            if (force) {
+                body.force_regenerate = true;
+            }
             if (validationFeedback) {
                 body.validation_feedback = validationFeedback;
             }
@@ -780,12 +791,13 @@ createApp({
 
 
         // Executes cells up to the current cell.
-        const runCells = async (cellIndex) => {
+        const runCells = async (cellIndex, force = false) => {
             asRead.value = false;
             // If this cell's output is already valid (e.g. after a Run All),
             // clicking run on it should be a no-op — match the server-side
-            // caching condition in plainbook.py execute_cell.
-            if (cellIndex <= last_valid_output_cell_index.value) {
+            // caching condition in plainbook.py execute_cell. A forced run is
+            // exactly the case where the user wants it re-run anyway.
+            if (!force && cellIndex <= last_valid_output_cell_index.value) {
                 return;
             }
             // First, to execute this cell we need to have valid code for it.
@@ -796,13 +808,13 @@ createApp({
                 if (clarificationPending(cellIndex)) return;
             }
             if (last_executed_cell_index.value === cellIndex) {
-                // We can be asked to rerun the same cell again. 
-                await runOneCell(cellIndex);
+                // We can be asked to rerun the same cell again.
+                await runOneCell(cellIndex, force);
             } else if (last_executed_cell_index.value > cellIndex) {
-                // Or, we may have executed further cells, and so be in need of a restart. 
+                // Or, we may have executed further cells, and so be in need of a restart.
                 // We need to run from the start up to cellIndex
                 await ui_resetKernel();
-                await runCells(cellIndex);
+                await runCells(cellIndex, force);
             } else {
                 // We run from the last run cell to the current one. 
                 for (let i = last_executed_cell_index.value + 1; i <= cellIndex; i++) {
@@ -813,31 +825,39 @@ createApp({
                         if (clarificationPending(i)) return; // Waiting on the user
                     }
                     if (!running.value) return; // Stop if running has been cancelled
-                    // Runs this specific cell. 
-                    await runOneCell(i);
+                    // Runs this specific cell.
+                    await runOneCell(i, force);
                 }
             }
         };
 
 
         // Function in charge of running one cell in the notebook.
-        const runOneCell = async (cellIndex) => {
+        const runOneCell = async (cellIndex, force = false) => {
             if (cellIndex < 0 || cellIndex >= notebook.value.cells.length) return;
             const cell = notebook.value.cells[cellIndex];
             if (cell.cell_type !== 'code') return; // Only run code cells
             if (!running.value) return; // Stop if running has been cancelled
             runningActivity.value = { type: 'running', cellIndex, cellName: cell.metadata.name || null };
             asRead.value = false;
-            const r = await apiCall('/execute_cell', 'POST', { cell_index: cellIndex });
+            const body = { cell_index: cellIndex };
+            // Force Run: re-execute even when the skip heuristic sees no change.
+            if (force) {
+                body.force_reexecute = true;
+            }
+            const r = await apiCall('/execute_cell', 'POST', body);
                 if (r.status === 'error') {
                     throw new Error(r.message || 'Execution failed');
                 } 
                 cell.outputs = r.outputs;
                 console.log('Cell executed:', cellIndex, r.details);
                 // Stop the run when the cell raised (CellExecutionError) or when
-                // its output contains an error-like stderr stream (e.g. an
-                // uncaught traceback or a pandas warning printed to stderr).
-                if (r.details === 'CellExecutionError' || outputsHaveError(r.outputs)) {
+                // its output contains a real failure on stderr (an uncaught
+                // traceback). A warning printed to stderr -- a pandas
+                // DtypeWarning, say -- does not stop the run and does not raise
+                // the app-level error bar: the cell ran. It still shows "Fix
+                // Code", which is driven by the wider outputsHaveError().
+                if (r.details === 'CellExecutionError' || outputsHaveStoppingError(r.outputs)) {
                     // Locate the actual error across all outputs (it may follow
                     // normal output), rather than assuming outputs[0].
                     const info = getErrorInfo(r.outputs) || {};
@@ -909,12 +929,12 @@ createApp({
         };
 
 
-        const ui_runCell = async (cellIndex) => {
+        const ui_runCell = async (cellIndex, force = false) => {
             flushActiveEdits();
             await waitForPendingSaves();
             if (!running.value) {
                 running.value = true;
-                await runCells(cellIndex);
+                await runCells(cellIndex, force);
                 running.value = false;
                 runningActivity.value = { type: null, cellIndex: null };
             }
@@ -1747,21 +1767,21 @@ createApp({
             } catch (err) {
                 throw new Error('Error saving API keys', { cause: err });
             }
-            // Save the notebook execution setting (independent of API keys).
-            if (keys.skip_reexecution !== undefined) {
-                try {
-                    await apiCall('/set_skip_reexecution', 'POST', { skip: keys.skip_reexecution });
-                } catch (err) {
-                    throw new Error('Error saving execution setting', { cause: err });
-                }
-            }
-            // Save the code-generation setting (independent of API keys).
+            // Save the code-generation settings (independent of API keys).
             if (keys.ask_questions !== undefined) {
                 try {
-                    // apiCall applies the returned state, which updates askQuestions.
-                    await apiCall('/set_ask_questions', 'POST', { value: keys.ask_questions });
+                    const r = await apiCall('/set_ask_questions', 'POST', { value: keys.ask_questions });
+                    if (r.ask_questions !== undefined) askQuestions.value = r.ask_questions;
                 } catch (err) {
                     throw new Error('Error saving code generation setting', { cause: err });
+                }
+            }
+            if (keys.skip_regeneration !== undefined) {
+                try {
+                    const r = await apiCall('/set_skip_regeneration', 'POST', { value: keys.skip_regeneration });
+                    if (r.skip_regeneration !== undefined) skipRegeneration.value = r.skip_regeneration;
+                } catch (err) {
+                    throw new Error('Error saving the regeneration setting', { cause: err });
                 }
             }
             // Save the global "Explain code" options.
@@ -1777,6 +1797,18 @@ createApp({
                     if (r.explanation_latex !== undefined) explanationLatex.value = r.explanation_latex;
                 } catch (err) {
                     throw new Error('Error saving explanation options', { cause: err });
+                }
+            }
+            // Save the "Fix errors also amends the description" setting.
+            if (keys.fix_error_amends_description !== undefined) {
+                try {
+                    const r = await apiCall('/set_fix_error_amends_description', 'POST',
+                        { value: keys.fix_error_amends_description });
+                    if (r.fix_error_amends_description !== undefined) {
+                        fixErrorAmendsDescription.value = r.fix_error_amends_description;
+                    }
+                } catch (err) {
+                    throw new Error('Error saving the description-amendment setting', { cause: err });
                 }
             }
         };
@@ -1857,7 +1889,7 @@ createApp({
             window.removeEventListener('unhandledrejection', onUnhandledRejection);
         });
 
-        return { notebook, notebook_name, loading, error, isLocked, lockNotebook, shareOutputWithAi, skipReexecution, explanationDetail, explanationBullets, explanationLatex, aiTokens, verificationStatus, toggleShareOutput,
+        return { notebook, notebook_name, loading, error, isLocked, lockNotebook, shareOutputWithAi, skipRegeneration, explanationDetail, explanationBullets, explanationLatex, fixErrorAmendsDescription, aiTokens, verificationStatus, toggleShareOutput,
             askQuestions, clarifyState, dismissClarify, ui_submitClarification,
             sendExplanationToServer, authToken,
             sendCodeToServer, clearCellCode, ui_saveExplanationAndRun, ui_saveCodeAndRun,

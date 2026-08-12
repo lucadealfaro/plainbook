@@ -1,17 +1,19 @@
 import { ref, watch } from './vue.esm-browser.js';
 
 export default {
-    props: ['isActive', 'isCodespace', 'hasGeminiKey', 'hasClaudeKey', 'claudeViaBedrock', 'skipReexecution',
-            'askQuestions', 'explanationDetail', 'explanationBullets', 'explanationLatex'],
+    props: ['isActive', 'isCodespace', 'hasGeminiKey', 'hasClaudeKey', 'claudeViaBedrock',
+            'askQuestions', 'explanationDetail', 'explanationBullets', 'explanationLatex',
+            'fixErrorAmendsDescription', 'skipRegeneration'],
     emits: ['close', 'save'],
     setup(props, { emit }) {
         const localGeminiKey = ref('');
         const localClaudeKey = ref('');
-        const localSkipReexecution = ref(true);
         const localAskQuestions = ref(false);
+        const localSkipRegeneration = ref(true);
         const localExplanationDetail = ref(1);
         const localExplanationBullets = ref(false);
         const localExplanationLatex = ref(false);
+        const localFixErrorAmendsDescription = ref(false);
         // Track whether the user has clicked to edit each field
         const geminiEditing = ref(false);
         const claudeEditing = ref(false);
@@ -28,12 +30,13 @@ export default {
                 claudeEditing.value = false;
                 geminiRemoved.value = false;
                 claudeRemoved.value = false;
-                // Default to on when the setting is not yet defined.
-                localSkipReexecution.value = props.skipReexecution !== false;
                 localAskQuestions.value = !!props.askQuestions;
+                // Default to on when the setting is not yet defined.
+                localSkipRegeneration.value = props.skipRegeneration !== false;
                 localExplanationDetail.value = props.explanationDetail || 1;
                 localExplanationBullets.value = !!props.explanationBullets;
                 localExplanationLatex.value = !!props.explanationLatex;
+                localFixErrorAmendsDescription.value = !!props.fixErrorAmendsDescription;
             }
         });
 
@@ -57,16 +60,18 @@ export default {
             emit('save', {
                 gemini_api_key: geminiRemoved.value ? null : ((geminiEditing.value || !props.hasGeminiKey) ? localGeminiKey.value : ''),
                 claude_api_key: claudeRemoved.value ? null : ((claudeEditing.value || !props.hasClaudeKey) ? localClaudeKey.value : ''),
-                skip_reexecution: localSkipReexecution.value,
                 ask_questions: localAskQuestions.value,
+                skip_regeneration: localSkipRegeneration.value,
+                fix_error_amends_description: localFixErrorAmendsDescription.value,
                 explanation_detail: localExplanationDetail.value,
                 explanation_bullets: localExplanationBullets.value,
                 explanation_latex: localExplanationLatex.value,
             });
         };
 
-        return { localGeminiKey, localClaudeKey, geminiEditing, claudeEditing, geminiRemoved, claudeRemoved, localSkipReexecution,
-            localAskQuestions, localExplanationDetail, localExplanationBullets, localExplanationLatex, startEditing, removeKey, handleSave };
+        return { localGeminiKey, localClaudeKey, geminiEditing, claudeEditing, geminiRemoved, claudeRemoved,
+            localAskQuestions, localExplanationDetail, localExplanationBullets, localExplanationLatex,
+            localFixErrorAmendsDescription, localSkipRegeneration, startEditing, removeKey, handleSave };
     },
     template: /* html */ `
     <div class="modal" :class="{'is-active': isActive}">
@@ -149,18 +154,24 @@ export default {
                         should do. It is the AI that decides: when the description is clear, it
                         simply writes the code.
                     </p>
-                </div>
-                <hr>
-                <div class="field">
-                    <label class="label">Execution</label>
-                    <label class="checkbox">
-                        <input type="checkbox" v-model="localSkipReexecution">
-                        Skip re-execution of unchanged cells
+                    <label class="checkbox mt-3">
+                        <input type="checkbox" v-model="localSkipRegeneration">
+                        Skip regeneration when data is unchanged
                     </label>
                     <p class="help">
-                        When on (default), a cell whose code and inputs have not changed is not
-                        re-run — its result is reconstructed instead. Turn this off if cells depend on
-                        untracked inputs such as the current time, random numbers, or external files.
+                        When on (default), a cell whose description and inputs have not changed is
+                        left as it is instead of being sent to the AI again. Turn this off to always
+                        regenerate a cell when the code before it changes.
+                    </p>
+                    <label class="checkbox mt-3">
+                        <input type="checkbox" v-model="localFixErrorAmendsDescription">
+                        Fix errors also amends the description
+                    </label>
+                    <p class="help">
+                        When on, the "Fix Code" button asks the AI for a revised description as
+                        well, so that regenerating from scratch would avoid the error just fixed.
+                        When off (default), fixing an error changes only the code, and the
+                        description you wrote is left untouched.
                     </p>
                 </div>
                 <hr>

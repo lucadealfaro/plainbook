@@ -7,6 +7,11 @@
 // A stderr stream is considered error-like when its text mentions a class name
 // ending in Error/Warning/Exception, or a Python traceback header.
 const ERROR_LIKE_RE = /\b\w*(?:Error|Warning|Exception)\b|Traceback \(most recent call last\)/;
+// The subset of the above that means something actually went wrong. A stream
+// that matches ERROR_LIKE_RE but not this one is only a warning (a pandas
+// DtypeWarning, say): advisory, so it must not stop a run or raise the
+// app-level error bar, even though it still offers "Fix Code" on the cell.
+const HARD_ERROR_RE = /\b\w*(?:Error|Exception)\b|Traceback \(most recent call last\)/;
 // Extracts "SomeError: message" from stderr / traceback text.
 const ERROR_TYPE_RE = /(\w*(?:Error|Warning|Exception))\s*:\s*([\s\S]*)/;
 
@@ -26,6 +31,26 @@ export function isErrorLikeStderr(out) {
 export function outputsHaveError(outputs) {
     if (!outputs) return false;
     return outputs.some(o => o.output_type === 'error' || isErrorLikeStderr(o));
+}
+
+// True when `out` is a stderr stream reporting a real failure, not just a warning.
+export function isHardErrorStderr(out) {
+    return isErrorLikeStderr(out) && HARD_ERROR_RE.test(joinText(out.text));
+}
+
+// True when `out` is a stderr stream carrying a warning and nothing worse.
+// Advisory: it neither stops a run nor renders in the full error colours.
+export function isWarningOnlyStderr(out) {
+    return isErrorLikeStderr(out) && !isHardErrorStderr(out);
+}
+
+// True when any output should stop a run: a formal error output, or stderr that
+// is more than a warning. Deliberately narrower than outputsHaveError(): a cell
+// that only warned still ran, so the run carries on and no error bar appears,
+// while the cell keeps offering "Fix Code" for the warning.
+export function outputsHaveStoppingError(outputs) {
+    if (!outputs) return false;
+    return outputs.some(o => o.output_type === 'error' || isHardErrorStderr(o));
 }
 
 // Returns { ename, evalue } for the first error in `outputs`, or null.

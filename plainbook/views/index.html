@@ -179,7 +179,7 @@
                         @save-code-and-run-test="(content) => ui_saveCodeAndRunTest(content, index)"
 
                         @interrupt="ui_interruptKernel"
-                        @run-cell="ui_runCell(index)"
+                        @run-cell="ui_runCell(index, $event)"
                         @generate-code="ui_forceRegenerateCellCode(index, $event)"
                         @clear-code="clearCellCode(index)"
                         @validate-code="ui_validateCode(index)"
@@ -234,11 +234,12 @@
         :has-gemini-key="hasGeminiKey"
         :has-claude-key="hasClaudeKey"
         :claude-via-bedrock="claudeViaBedrock"
-        :skip-reexecution="skipReexecution"
         :ask-questions="askQuestions"
+        :skip-regeneration="skipRegeneration"
         :explanation-detail="explanationDetail"
         :explanation-bullets="explanationBullets"
         :explanation-latex="explanationLatex"
+        :fix-error-amends-description="fixErrorAmendsDescription"
         @close="showSettings = false"
         @save="(keys) => {showSettings = false; saveSettings(keys); }"
     />
