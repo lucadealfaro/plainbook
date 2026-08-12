@@ -80,6 +80,30 @@ except FileNotFoundError:
 # they are never persisted to disk.
 _saved_settings = dict(settings)
 
+
+def _write_settings():
+    """Persist the settings file.
+
+    Only _saved_settings is written. `settings` additionally holds values that
+    must never reach disk -- API keys taken from environment variables, and the
+    '__bedrock__' sentinel -- so dumping it instead would leak them into
+    ~/.config/plainbook/settings.yaml. Raises on I/O failure."""
+    with open(SETTINGS_FILE, 'w') as f:
+        yaml.dump(dict(_saved_settings), f)
+
+
+def _save_settings(**values):
+    """Set one or more global settings, in memory and on disk.
+
+    The single way to change a persisted setting: writes each value to both
+    stores (so it takes effect now and survives a restart) and then saves.
+    Raises on I/O failure, so callers that report errors to the client should
+    wrap this. Never use it for values that must stay out of the file -- assign
+    those to `settings` directly."""
+    for store in (settings, _saved_settings):
+        store.update(values)
+    _write_settings()
+
 # Fill in missing API keys from environment variables (e.g. Codespaces secrets)
 for env_var, setting_key in [('CLAUDE_API_KEY', 'claude_api_key'), ('GEMINI_API_KEY', 'gemini_api_key')]:
     if not settings.get(setting_key) and os.environ.get(env_var):
@@ -125,9 +149,7 @@ def _update_claude_models():
     try:
         latest = get_claude_models(api_key)
         # Save to settings for offline fallback
-        settings['claude_models'] = latest
-        with open(SETTINGS_FILE, 'w') as f:
-            yaml.dump(settings, f)
+        _save_settings(claude_models=latest)
         if args.debug:
             print(f"Updated Claude models: { {k: v for k, v in latest.items() if v} }")
     except Exception as e:
@@ -159,9 +181,7 @@ def _update_gemini_models():
     latest = None
     try:
         latest = get_gemini_models(api_key, families)
-        settings['gemini_models'] = latest
-        with open(SETTINGS_FILE, 'w') as f:
-            yaml.dump(settings, f)
+        _save_settings(gemini_models=latest)
         if args.debug:
             print(f"Updated Gemini models: { {k: v for k, v in latest.items() if v} }")
     except Exception as e:
@@ -208,12 +228,10 @@ def _get_or_create_debug_token():
                 return token
     # Create a new debug token.
     token = secrets.token_hex(32)
-    settings['debug_token'] = {
+    _save_settings(debug_token={
         'token': token,
         'created': datetime.datetime.now(),
-    }
-    with open(SETTINGS_FILE, 'w') as f:
-        yaml.dump(settings, f)
+    })
     return token
 
 AUTH_TOKEN = _get_or_create_debug_token() if args.debug else secrets.token_hex(32)
@@ -372,9 +390,11 @@ def set_key():
         _saved_settings['claude_api_key'] = claude_api_key
     settings['gemini_api_key'] = gemini_api_key
     settings['claude_api_key'] = claude_api_key
+    # Not _save_settings(): the two stores deliberately disagree here (under
+    # Bedrock the sentinel goes to `settings` only), so the assignments above
+    # stand and only the write is shared.
     try:
-        with open(SETTINGS_FILE, 'w') as f:
-            yaml.dump(dict(_saved_settings), f)
+        _write_settings()
     except Exception as e:
         return dict(status='error', message=str(e))
     # After saving, apply env-var fallbacks to in-memory settings only
@@ -406,9 +426,10 @@ def set_active_ai():
             if not settings.get(p['key_setting']):
                 return dict(status='error', message=f'No API key set for {p["name"]}')
             break
-    settings['active_ai_provider'] = provider_id
-    with open(SETTINGS_FILE, 'w') as f:
-        yaml.dump(settings, f)
+    try:
+        _save_settings(active_ai_provider=provider_id)
+    except Exception as e:
+        return dict(status='error', message=str(e))
     return dict(status='success', active_ai_provider=provider_id)
 
 @post('/set_explain_options')
@@ -424,13 +445,9 @@ def set_explain_options():
     detail = max(1, min(4, detail))
     bullets = bool(data.get('bullets', DEFAULT_EXPLANATION_USE_BULLETS))
     latex = bool(data.get('latex', DEFAULT_EXPLANATION_USE_LATEX))
-    for store in (settings, _saved_settings):
-        store['explanation_detail'] = detail
-        store['explanation_bullets'] = bullets
-        store['explanation_latex'] = latex
     try:
-        with open(SETTINGS_FILE, 'w') as f:
-            yaml.dump(dict(_saved_settings), f)
+        _save_settings(explanation_detail=detail, explanation_bullets=bullets,
+                       explanation_latex=latex)
     except Exception as e:
         return dict(status='error', message=str(e))
     return dict(status='success', explanation_detail=detail,
@@ -439,13 +456,10 @@ def set_explain_options():
 def _save_global_flag(key, value):
     """Persist one global boolean setting, and echo it back to the client.
 
-    Writes to both stores and dumps only _saved_settings, so environment-provided
-    API keys stay out of the file. Returns the route's response dict."""
-    for store in (settings, _saved_settings):
-        store[key] = value
+    Returns the route's response dict, so the boolean-setting routes are a
+    one-liner each."""
     try:
-        with open(SETTINGS_FILE, 'w') as f:
-            yaml.dump(dict(_saved_settings), f)
+        _save_settings(**{key: value})
     except Exception as e:
         return dict(status='error', message=str(e))
     return dict(status='success', **{key: value})
