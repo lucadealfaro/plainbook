@@ -1,7 +1,9 @@
 import hashlib
+import os
 
 import pytest
-from plainbook.plainbook import CellExecutionError, ExecutionError, Plainbook
+from plainbook.plainbook import (CellExecutionError, ExecutionError, Plainbook,
+                                 normalize_notebook_name)
 
 
 @pytest.fixture
@@ -1723,3 +1725,52 @@ class TestFixErrorAmendsDescription:
         assert new_code == "v = 1\nprint('FIXED', v)"
         assert amended is None
         assert notebook.nb.cells[idx].metadata['explanation'] == before
+
+
+class TestNotebookNaming:
+    """normalize_notebook_name: the shared rules for a user-typed notebook name.
+
+    Used by rename() and by the new-plainbook route, so that "create" and
+    "rename" accept exactly the same things. The basename rule matters for the
+    new-notebook route in particular: a typed path must not be a way to write
+    outside the current notebook's folder."""
+
+    @pytest.mark.parametrize("typed,expected", [
+        ("analysis", "analysis"),
+        ("  analysis  ", "analysis"),
+        ("analysis.plnb", "analysis"),
+        ("analysis.ipynb", "analysis"),
+        ("analysis.PLNB", "analysis"),          # extension match is case-insensitive
+        ("/tmp/elsewhere/analysis.plnb", "analysis"),   # path component dropped
+        ("../../etc/passwd", "passwd"),
+        ("my.data.analysis", "my.data.analysis"),  # only a notebook extension is dropped
+    ])
+    def test_accepted_names(self, typed, expected):
+        assert normalize_notebook_name(typed) == expected
+
+    @pytest.mark.parametrize("typed", ["", "   ", None, ".plnb", ".ipynb", "/tmp/"])
+    def test_rejected_names(self, typed):
+        with pytest.raises(ValueError):
+            normalize_notebook_name(typed)
+
+    def test_rename_still_works(self, notebook):
+        """rename() delegates to the helper; its own behaviour is unchanged."""
+        _add_code_cell(notebook, "x = 1")
+        original_path = notebook.path
+
+        notebook.rename("renamed.plnb")            # typed extension is dropped
+
+        assert notebook.name == "renamed"
+        assert notebook.path == os.path.join(os.path.dirname(original_path), "renamed.plnb")
+        assert os.path.exists(notebook.path)
+        assert os.path.exists(original_path)       # the original is left alone
+
+    def test_rename_refuses_a_collision(self, notebook):
+        """Renaming onto an existing file must not overwrite it."""
+        notebook.rename("taken")
+        first = notebook.path
+        notebook.rename("other")
+
+        with pytest.raises(ValueError):
+            notebook.rename("taken")
+        assert notebook.path != first              # still on the second name

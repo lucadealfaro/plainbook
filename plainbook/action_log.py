@@ -100,6 +100,7 @@ OP_LOG_CONFIG = {
     "lock_notebook": {"snapshot": False},
     "set_share_output": {"snapshot": False},
     "set_ask_questions": {"snapshot": False},
+    "new_notebook": {"snapshot": False},
     "set_skip_regeneration": {"snapshot": False},
     "set_fix_error_amends_description": {"snapshot": False},
     "set_files": {"snapshot": False, "truncate_param_fields": {"files": 4096, "missing_files": 4096}},

@@ -16,6 +16,8 @@ import secrets
 import shutil
 import socket
 import subprocess
+import threading
+import time
 import yaml
 import sys
 import webbrowser
@@ -26,7 +28,7 @@ from bottle import run, default_app, request, response, redirect, TEMPLATE_PATH
 # print(f"DEBUGGER PYTHON: {sys.executable}")
 
 # Plainbook imports
-from .plainbook import ExecutionError, ClarificationNeeded
+from .plainbook import ExecutionError, ClarificationNeeded, normalize_notebook_name
 from .claude import get_claude_models
 from .gemini import get_gemini_models
 
@@ -283,6 +285,55 @@ def server_static_fonts(filepath):
 def server_static_images(filepath):
     return serve_asset(filepath, 'images')
 
+# ── Client liveness ────────────────────────────────────────────────────────
+# The server exits when its window goes away: a pagehide beacon schedules the
+# exit (see /shutdown), and a watchdog reaps the process if the beacon is lost
+# or the browser dies. Both are cancelled/refreshed by any authenticated
+# request, which is what makes a page *reload* safe -- a reload fires pagehide
+# too, and its first request lands well inside the grace period.
+SHUTDOWN_GRACE_SECONDS = 5      # after a beacon; long enough for a reload
+CLIENT_IDLE_TIMEOUT_SECONDS = 300   # no requests at all -> assume gone
+_last_client_activity = time.monotonic()
+_shutdown_at = None
+# The idle timeout only starts counting once a client has actually connected, so
+# that a server whose URL is being loaded by hand (--debug prints it rather than
+# opening a window) is never reaped before anyone arrives.
+_client_seen = False
+
+
+def _note_client_activity():
+    """A live client just talked to us: refresh the watchdog and cancel any
+    pending shutdown."""
+    global _last_client_activity, _shutdown_at, _client_seen
+    _last_client_activity = time.monotonic()
+    _shutdown_at = None
+    _client_seen = True
+
+
+def _watchdog():
+    """Exit once the client is gone.
+
+    Two triggers: a shutdown scheduled by the pagehide beacon whose grace period
+    has elapsed, and a long silence (the beacon was lost, or the browser was
+    killed). Runs as a daemon thread."""
+    while True:
+        time.sleep(1)
+        now = time.monotonic()
+        due = _shutdown_at is not None and now >= _shutdown_at
+        idle = _client_seen and (now - _last_client_activity) > CLIENT_IDLE_TIMEOUT_SECONDS
+        if due or idle:
+            print("\nThe Plainbook window is gone; shutting down.")
+            try:
+                notebook._shutdown()      # terminate the snapshot kernel
+            except Exception as e:
+                print(f"Error shutting down the kernel: {e}")
+            # os._exit, not sys.exit: this is not the main thread (run() owns
+            # it), so sys.exit would unwind only this one. atexit therefore will
+            # not fire, which is exactly why the kernel is terminated above. The
+            # notebook itself is written synchronously on every change.
+            os._exit(0)
+
+
 # Authentication decorator
 def require_token(func):
     @wraps(func)
@@ -290,6 +341,7 @@ def require_token(func):
         token = request.query.get('token')
         if token != AUTH_TOKEN:
             raise HTTPError(403, 'Invalid or missing token')
+        _note_client_activity()
         return func(*args, **kwargs)
     return wrapper
 
@@ -998,6 +1050,64 @@ def get_current_dir():
     where plainbook was launched)."""
     return {"path": os.path.dirname(os.path.abspath(notebook.path))}
 
+@get('/ping')
+@require_token
+def ping():
+    """Client heartbeat. The body is irrelevant: require_token has already
+    refreshed the liveness clock, which is the whole point of the route."""
+    return {}
+
+@post('/shutdown')
+@require_token
+def shutdown():
+    """Asked by the client's pagehide beacon: schedule the exit.
+
+    Deliberately not immediate. A page reload fires pagehide too, so exiting
+    here would kill the server on every refresh; instead the watchdog carries it
+    out after a grace period, and any request in the meantime cancels it."""
+    global _shutdown_at
+    _shutdown_at = time.monotonic() + SHUTDOWN_GRACE_SECONDS
+    return {}
+
+def _spawn_plainbook(path):
+    """Launch an independent plainbook for `path`.
+
+    Exactly what the command line does: a new server on its own scanned port, a
+    new Plainbook with its own snapshot kernel, its own auth token, opening its
+    own window. Detached so it outlives this process, and silenced because
+    nothing reads its output.
+
+    --debug is deliberately NOT inherited: in debug mode main() prints the URL
+    instead of opening a window, and this child's stdout goes to DEVNULL, so it
+    would start invisibly."""
+    cmd = [sys.executable, '-m', 'plainbook.main', path]
+    if args.use_browser:
+        cmd.append('--use-browser')
+    subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                     start_new_session=True)
+
+@post('/new_notebook')
+@action_log.logged('new_notebook')
+@require_token
+def new_notebook():
+    """Create a new plainbook in this notebook's folder and open it in its own
+    window. This process and its notebook are untouched."""
+    data = request.json or {}
+    try:
+        name = normalize_notebook_name(data.get('name'))
+    except ValueError as e:
+        return dict(status='error', message=str(e))
+    folder = os.path.dirname(os.path.abspath(notebook.path))
+    path = os.path.join(folder, name + '.plnb')
+    if os.path.exists(path):
+        return dict(status='error',
+                    message=f"A notebook named '{name}.plnb' already exists in this folder.")
+    try:
+        _spawn_plainbook(path)
+    except Exception as e:
+        return dict(status='error', message=f'Could not start the new plainbook: {e}')
+    return dict(status='success', name=name, path=path)
+
 @get('/home_dir')
 @require_token
 def get_home_dir():
@@ -1401,6 +1511,8 @@ def main():
         open_browser_tab(url)   # forced normal tab
     else:
         open_ui(url)            # chromeless app window if a Chromium browser exists, else a tab
+    # Reap this process when its window closes (or its browser dies).
+    threading.Thread(target=_watchdog, daemon=True).start()
     app_with_logging = logger_middleware(default_app()) if args.debug else default_app()
     # Do not use reloader=True.
     try:

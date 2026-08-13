@@ -12,11 +12,12 @@ import PanelBar from './PanelBar.js';
 import NotebookHelp from './NotebookHelp.js';
 import UnitTestView from './UnitTestView.js';
 import NotebookTitle from './NotebookTitle.js';
+import NewNotebookModal from './NewNotebookModal.js';
 import { outputsHaveStoppingError, getErrorInfo } from './errorUtils.js';
 import { serverFetch, isServerDown, SERVER_DOWN_MESSAGE } from './serverFetch.js';
 
 createApp({
-    components: { AppNavbar, NotebookCell, CellInsertionZone, CellLabel, SettingsModal, InfoModal, TestHelpModal, UiError, PanelBar, NotebookHelp, UnitTestView, NotebookTitle },
+    components: { AppNavbar, NotebookCell, CellInsertionZone, CellLabel, SettingsModal, InfoModal, TestHelpModal, UiError, PanelBar, NotebookHelp, UnitTestView, NotebookTitle, NewNotebookModal },
     setup() {
         // Extract token from URL
         const urlParams = new URLSearchParams(window.location.search);
@@ -111,6 +112,9 @@ createApp({
 
         // For test help modal
         const showTestHelp = ref(false);
+        const showNewNotebook = ref(false);
+        // Shown in the new-plainbook dialog: where the new file will be created.
+        const newNotebookFolder = ref('');
 
         // Test cell state
         const last_valid_test_cell_index = ref(-1);
@@ -1853,6 +1857,34 @@ createApp({
             }
         };
 
+        // Open the new-plainbook dialog, showing where the file will land.
+        const openNewNotebook = async () => {
+            newNotebookFolder.value = '';
+            showNewNotebook.value = true;
+            try {
+                const r = await apiCall('/current_dir');
+                newNotebookFolder.value = r.path || '';
+            } catch (err) {
+                // Only the help line is affected; creating still works.
+                console.warn('Could not determine the notebook folder:', err);
+            }
+        };
+
+        // Create a new plainbook. The server launches it as its own process, so
+        // it appears in a new window with its own kernel; nothing changes here.
+        const createNotebook = async (name) => {
+            if (!name) return;
+            showNewNotebook.value = false;
+            try {
+                const r = await apiCall('/new_notebook', 'POST', { name });
+                if (r.status === 'error') {
+                    uiError.value = r.message || 'Could not create the new plainbook.';
+                }
+            } catch (err) {
+                uiError.value = (err && err.message) || 'Could not create the new plainbook.';
+            }
+        };
+
         const handleClickOutside = (event) => {
             if (event.target.closest('.modal')) return;
             const container = document.querySelector('.notebook-container');
@@ -1878,12 +1910,34 @@ createApp({
             if (isServerDown(e.reason)) uiError.value = SERVER_DOWN_MESSAGE;
         };
 
+        // ── Telling the server we are still here ──
+        // Each Plainbook window owns a server and a kernel, so the server exits
+        // when its window goes away. Two signals, because neither suffices:
+        //   - pagehide + sendBeacon: the prompt one. sendBeacon is the only send
+        //     that reliably survives page teardown (a fetch here is cancelled).
+        //     The server only *schedules* the exit, because a reload fires
+        //     pagehide too and the reloaded page's first request cancels it.
+        //   - the ping below: the safety net, for a dropped beacon or a browser
+        //     that was killed. The server's idle limit is minutes, not seconds,
+        //     because browsers throttle timers in hidden tabs to about 1/minute.
+        const PING_INTERVAL_MS = 30000;
+        let pingTimer = null;
+        const sendPing = () => {
+            // Bypass apiCall: a failed heartbeat is not worth an error banner.
+            serverFetch(`/ping?token=${authToken}`).catch(() => {});
+        };
+        const onPageHide = () => {
+            navigator.sendBeacon(`/shutdown?token=${authToken}`);
+        };
+
         onMounted(() => {
             fetchNotebook();
             window.addEventListener('keydown', handleKeydown);
             window.addEventListener('click', handleClickOutside);
             window.addEventListener('plainbook:files-changed', onFilesChanged);
             window.addEventListener('unhandledrejection', onUnhandledRejection);
+            window.addEventListener('pagehide', onPageHide);
+            pingTimer = setInterval(sendPing, PING_INTERVAL_MS);
         });
 
         onBeforeUnmount(() => {
@@ -1891,6 +1945,8 @@ createApp({
             window.removeEventListener('click', handleClickOutside);
             window.removeEventListener('plainbook:files-changed', onFilesChanged);
             window.removeEventListener('unhandledrejection', onUnhandledRejection);
+            window.removeEventListener('pagehide', onPageHide);
+            if (pingTimer) clearInterval(pingTimer);
         });
 
         return { notebook, notebook_name, loading, error, isLocked, lockNotebook, shareOutputWithAi, skipRegeneration, explanationDetail, explanationBullets, explanationLatex, fixErrorAmendsDescription, aiTokens, verificationStatus, toggleShareOutput,
@@ -1906,6 +1962,7 @@ createApp({
             last_executed_cell_index, last_valid_code_cell_index, last_valid_output_cell_index,
             last_valid_test_cell_index,
             saveSettings, showSettings, showInfo, showTestHelp,
+            showNewNotebook, newNotebookFolder, openNewNotebook, createNotebook,
             genError, uiError, closeUiError, renameNotebook, debug, sendDebugRequest, resetTokens,
             explanationEditKey, deleteCell, moveCell,
             clearOutputs, activeAiProvider, availableAiProviders, setActiveAiProvider, isCodespace, hasGeminiKey, hasClaudeKey, claudeViaBedrock, logEnabled, logviewEnabled, printAllEnabled, chromeless, authToken,

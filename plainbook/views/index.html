@@ -66,6 +66,7 @@
         @run-all="ui_runCell(notebook.cells.length - 1)"
         @clear-outputs="clearOutputs"
         @open-info="showInfo = true"
+        @new-notebook="openNewNotebook"
         @open-settings="showSettings = true"
         @debug-request="sendDebugRequest"
         @reset-tokens="resetTokens"
@@ -252,6 +253,13 @@
     <test-help-modal
         :is-active="showTestHelp"
         @close="showTestHelp = false"
+    />
+    <!-- New Plainbook Modal -->
+    <new-notebook-modal
+        :is-active="showNewNotebook"
+        :folder="newNotebookFolder"
+        @close="showNewNotebook = false"
+        @create="createNotebook"
     />
 
     </script>

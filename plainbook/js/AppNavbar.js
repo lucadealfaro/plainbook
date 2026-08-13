@@ -2,7 +2,7 @@ export default {
     props: ['isLocked', 'running', 'restarting', 'runningActivity', 'hasNotebook', 'upToDate', 'cellCount', 'testCellCount', 'hasApiKey', 'debug',
             'activeAiProvider', 'availableAiProviders', 'shareOutputWithAi', 'aiTokens', 'verification', 'verificationStatus', 'logEnabled', 'logviewEnabled', 'chromeless', 'authToken'],
     emits: [
-        'lock', 'refresh', 'interrupt', 'regenerate-all',
+        'lock', 'refresh', 'interrupt', 'regenerate-all', 'new-notebook',
         'restart', 'reset-run-all', 'run-all', 'run-all-tests', 'verify-notebook', 'clear-outputs', 'open-info', 'open-settings', 'debug-request',
         'set-ai-provider', 'toggle-share-output', 'reset-tokens', 'download-ipynb'
         ],
@@ -97,6 +97,11 @@ export default {
                         <button class="button is-light" @click="$emit('open-info')" title="About Plainbook">
                             <img src="/images/Plainbook_logo.png" alt="About Plainbook"
                                  style="height: 1.5em;">
+                        </button>
+
+                        <button class="button is-light" title="New plainbook (opens in its own window)"
+                                @click="$emit('new-notebook')">
+                        <span class="icon"><i class="bx bx-plus"></i></span>
                         </button>
 
                         <button v-if="isLocked" class="button is-warning" title="Unlock Notebook" @click="$emit('lock', false)">

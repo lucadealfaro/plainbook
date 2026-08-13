@@ -31,6 +31,24 @@ AI_PROVIDERS = {
 MAX_OUTPUT_CHARS_FOR_AI = 2000
 
 
+def normalize_notebook_name(new_name):
+    """The bare notebook name from user input.
+
+    Takes the basename (a typed path is not a way to write elsewhere) and drops a
+    trailing .plnb/.ipynb if the user typed one, so the caller can append the
+    canonical extension itself. Raises ValueError when nothing is left. Shared by
+    rename() and by the new-notebook route, so both validate identically."""
+    name = os.path.basename((new_name or '').strip())
+    for ext in ('.plnb', '.ipynb'):
+        if name.lower().endswith(ext):
+            name = name[:-len(ext)]
+            break
+    name = name.strip()
+    if not name:
+        raise ValueError("Please provide a name for the notebook.")
+    return name
+
+
 class ExecutionError(Exception):
     """Custom exception for execution errors in Plainbook."""
     pass
@@ -958,15 +976,7 @@ class Plainbook:
         Raises ValueError on an empty or conflicting name.
         """
         with self._lock:
-            name = os.path.basename((new_name or '').strip())
-            # Drop a trailing notebook extension if the user typed one.
-            for ext in ('.plnb', '.ipynb'):
-                if name.lower().endswith(ext):
-                    name = name[:-len(ext)]
-                    break
-            name = name.strip()
-            if not name:
-                raise ValueError("Please provide a name for the notebook.")
+            name = normalize_notebook_name(new_name)
             if name == self.name:
                 return
             parent = os.path.dirname(self.path) or "."
