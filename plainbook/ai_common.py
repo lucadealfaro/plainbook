@@ -169,11 +169,11 @@ DEFAULT_ASK_QUESTIONS = False
 DEFAULT_SKIP_REGENERATION = True
 
 # Whether "Fix Code" also rewrites the cell's description, so that regenerating
-# from scratch would avoid the error just fixed. Off: fixing an error changes the
-# code only, the description the user wrote stands, and the separate
+# from scratch would avoid the error just fixed. Turned off, fixing an error
+# changes the code only, the description the user wrote stands, and the separate
 # amend_explanation AI call is not made at all. Read via the settings file in
 # main.py; this is the fallback when nothing has been saved.
-DEFAULT_FIX_ERROR_AMENDS_DESCRIPTION = False
+DEFAULT_FIX_ERROR_AMENDS_DESCRIPTION = True
 
 NOTEBOOK_VERIFY_INSTRUCTIONS = """
 You are auditing a Jupyter notebook on behalf of a user who needs assurance that the

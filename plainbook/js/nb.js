@@ -46,7 +46,7 @@ createApp({
         const explanationLatex = ref(false);
         // When true (Settings), "Fix Code" also rewrites the cell's description.
         // Global, like the options above; the server decides, this is display only.
-        const fixErrorAmendsDescription = ref(false);
+        const fixErrorAmendsDescription = ref(true);
         const aiTokens = ref({input: 0, output: 0});
         const verificationStatus = ref('none');
         const debug = ref(false);
@@ -238,7 +238,9 @@ createApp({
                 if (r.explanation_detail !== undefined) explanationDetail.value = r.explanation_detail;
                 explanationBullets.value = !!r.explanation_bullets;
                 explanationLatex.value = !!r.explanation_latex;
-                fixErrorAmendsDescription.value = !!r.fix_error_amends_description;
+                if (r.fix_error_amends_description !== undefined) {
+                    fixErrorAmendsDescription.value = !!r.fix_error_amends_description;
+                }
                 askQuestions.value = !!r.ask_questions;
                 if (r.skip_regeneration !== undefined) skipRegeneration.value = !!r.skip_regeneration;
                 logEnabled.value = !!r.log_enabled;
@@ -825,8 +827,10 @@ createApp({
                         if (clarificationPending(i)) return; // Waiting on the user
                     }
                     if (!running.value) return; // Stop if running has been cancelled
-                    // Runs this specific cell.
-                    await runOneCell(i, force);
+                    // Runs this specific cell. Force applies only to the cell the
+                    // user asked for: the preceding ones may still be reconstructed
+                    // if nothing they depend on changed.
+                    await runOneCell(i, force && i === cellIndex);
                 }
             }
         };

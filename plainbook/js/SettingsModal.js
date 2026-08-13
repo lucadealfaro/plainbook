@@ -13,7 +13,7 @@ export default {
         const localExplanationDetail = ref(1);
         const localExplanationBullets = ref(false);
         const localExplanationLatex = ref(false);
-        const localFixErrorAmendsDescription = ref(false);
+        const localFixErrorAmendsDescription = ref(true);
         // Track whether the user has clicked to edit each field
         const geminiEditing = ref(false);
         const claudeEditing = ref(false);
@@ -36,7 +36,8 @@ export default {
                 localExplanationDetail.value = props.explanationDetail || 1;
                 localExplanationBullets.value = !!props.explanationBullets;
                 localExplanationLatex.value = !!props.explanationLatex;
-                localFixErrorAmendsDescription.value = !!props.fixErrorAmendsDescription;
+                // Default to on when the setting is not yet defined.
+                localFixErrorAmendsDescription.value = props.fixErrorAmendsDescription !== false;
             }
         });
 
@@ -168,10 +169,10 @@ export default {
                         Fix errors also amends the description
                     </label>
                     <p class="help">
-                        When on, the "Fix Code" button asks the AI for a revised description as
-                        well, so that regenerating from scratch would avoid the error just fixed.
-                        When off (default), fixing an error changes only the code, and the
-                        description you wrote is left untouched.
+                        When on (default), the "Fix Code" button asks the AI for a revised
+                        description as well, so that regenerating from scratch would avoid the
+                        error just fixed. Turn this off to have fixing an error change only the
+                        code, leaving the description you wrote untouched.
                     </p>
                 </div>
                 <hr>

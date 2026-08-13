@@ -900,6 +900,43 @@ class TestExecutionSkip:
         assert counts["rebuild"] == 0                       # nothing skipped
         assert self._probe(notebook, 2, "print(z)") == "101"
 
+    def test_force_run_invalidates_later_cells(self, notebook):
+        """Re-running a cell makes everything after it stale.
+
+        The states of the following cells were computed from this cell's
+        previous value, so they cannot keep reading as up to date -- otherwise a
+        Force Run on cell 0 would leave cells 1 and 2 claiming valid output
+        derived from a value that no longer exists."""
+        _add_generated_cell(notebook, "import itertools; c = itertools.count()")
+        _add_generated_cell(notebook, "y = next(c)")
+        _add_generated_cell(notebook, "z = y")
+        notebook.last_valid_code_cell = 2
+        for i in range(3):
+            notebook.execute_cell(i)
+        assert notebook.last_executed_cell == 2
+        assert notebook.last_valid_output_cell == 2
+
+        # Force-run the first cell only; the rest must drop back to stale.
+        notebook.execute_cell(0, force=True)
+
+        assert notebook.last_executed_cell == 0
+        assert notebook.last_valid_output_cell == 0
+        assert notebook.last_valid_test_cell <= 0
+
+    def test_forward_execution_does_not_invalidate(self, notebook):
+        """Running cells forward in order must not trip the re-execution
+        invalidation: each cell is new, not a re-run."""
+        _add_generated_cell(notebook, "x = 1")
+        _add_generated_cell(notebook, "y = x + 1")
+        _add_generated_cell(notebook, "z = y + 1")
+        notebook.last_valid_code_cell = 2
+        for i in range(3):
+            notebook.execute_cell(i)
+
+        assert notebook.last_executed_cell == 2
+        assert notebook.last_valid_output_cell == 2
+        assert self._probe(notebook, 2, "print(z)") == "3"
+
     def test_manual_code_edit_forces_execution(self, notebook):
         """A hand-edited cell is really re-executed, not skipped. The edit changes
         the code but not the description, so a skip keyed on the description hash

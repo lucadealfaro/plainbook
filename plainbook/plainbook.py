@@ -439,7 +439,9 @@ class Plainbook:
             cell = self.nb.cells[index]
             if cell.cell_type != 'code':
                 return None, "Not a code cell"
-            if index <= min(self.last_executed_cell, self.last_valid_output_cell):
+            # Already executed with a still-valid output: hand it straight back.
+            # A forced run is precisely the request to ignore this.
+            if not force and index <= min(self.last_executed_cell, self.last_valid_output_cell):
                 return cell.outputs, "Cached"
             # Checks that all intervening cells between last_executed_cell and index are non-code.
             for i in range(self.last_executed_cell + 1, index):
@@ -457,6 +459,12 @@ class Plainbook:
                 while new_state_name in existing_names:
                     new_state_name = uuid.uuid4().hex
                 self._cell_states[cell_id] = new_state_name
+
+            # Whether this cell has already run in this kernel. If it has, a real
+            # re-execution invalidates everything after it (see the success path
+            # below). A successful skip does not: it reproduces the same result,
+            # so the states that followed remain correct.
+            was_reexecution = index <= self.last_executed_cell
 
             # Fast path unless the caller forces a real run: if this cell's code
             # is unchanged and nothing it reads has changed, reconstruct its
@@ -513,7 +521,17 @@ class Plainbook:
                     evalue=err.get("evalue", ""),
                 )
 
-            # Success: update execution pointer
+            # Success: update execution pointer.
+            if was_reexecution:
+                # This cell ran again (a Force Run, typically), so every state
+                # after it was computed from its previous value and is stale.
+                # The snapshots themselves are kept, as _invalidate_from
+                # documents: they are rebuild sources for the execution-skip,
+                # which re-checks its input fingerprints against the current
+                # state and declines when they no longer match.
+                self._invalidate_from(index + 1)
+                self.last_valid_output_cell = min(self.last_valid_output_cell, index)
+                self.last_valid_test_cell = min(self.last_valid_test_cell, index)
             self.last_executed_cell = index
             self.last_valid_output_cell = max(index, self.last_valid_output_cell)
             self._live_states.add(new_state_name)
