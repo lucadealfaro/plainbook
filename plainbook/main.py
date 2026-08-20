@@ -28,7 +28,7 @@ from bottle import run, default_app, request, response, redirect, TEMPLATE_PATH
 # print(f"DEBUGGER PYTHON: {sys.executable}")
 
 # Plainbook imports
-from .plainbook import (ExecutionError, ClarificationNeeded,
+from .plainbook import (ExecutionError, ClarificationNeeded, check_notebook_file,
                         normalize_notebook_name, unique_notebook_path)
 from .claude import get_claude_models
 from .gemini import get_gemini_models
@@ -1091,36 +1091,96 @@ def _spawn_plainbook(path):
     subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                      start_new_session=True)
 
+def _resolve_folder(folder):
+    """The absolute folder a notebook should be written into.
+
+    Defaults to the current notebook's folder when the client sends nothing, so
+    a request without a folder behaves as it always did. Raises ValueError with
+    a user-facing message otherwise: the picker only ever offers real
+    directories, so this guards against a stale listing or a hand-made
+    request."""
+    if not folder:
+        return os.path.dirname(os.path.abspath(notebook.path))
+    path = os.path.abspath(os.path.expanduser(folder))
+    if not os.path.isdir(path):
+        return _raise_not_a_folder(folder)
+    return path
+
+
+def _raise_not_a_folder(folder):
+    raise ValueError(f"{folder} is not a folder.")
+
+
 @post('/new_notebook')
 @action_log.logged('new_notebook')
 @require_token
 def new_notebook():
-    """Create a new plainbook in this notebook's folder and open it in its own
-    window. This process and its notebook are untouched. A name already in use
-    gets _2, _3, ... appended rather than being refused."""
+    """Create a plainbook in the chosen folder and open it in its own window.
+    This process and its notebook are untouched.
+
+    A name that is already taken is *opened* rather than created afresh: the
+    name and the folder together name a file, so asking for one that exists is a
+    request to open it. The client checks this too, in order to label its
+    button; checking again here closes the race and is the only check that
+    counts."""
     data = request.json or {}
     try:
         name = normalize_notebook_name(data.get('name'))
+        folder = _resolve_folder(data.get('folder'))
     except ValueError as e:
         return dict(status='error', message=str(e))
-    folder = os.path.dirname(os.path.abspath(notebook.path))
-    name, path = unique_notebook_path(folder, name)
+    path = os.path.join(folder, name + '.plnb')
+    opened = os.path.exists(path)
+    if opened:
+        try:
+            check_notebook_file(path)
+        except ValueError as e:
+            return dict(status='error', message=str(e))
     try:
         _spawn_plainbook(path)
     except Exception as e:
         return dict(status='error', message=f'Could not start the new plainbook: {e}')
-    return dict(status='success', name=name, path=path)
+    return dict(status='success', name=name, path=path, opened=opened)
+
+
+@post('/open_notebook')
+@action_log.logged('open_notebook')
+@require_token
+def open_notebook():
+    """Open an existing notebook in its own window, leaving this one running.
+
+    The file is checked here rather than left to the child: _spawn_plainbook
+    detaches the child and discards its output, so a child that cannot load its
+    file dies without anyone noticing."""
+    data = request.json or {}
+    raw = (data.get('path') or '').strip()
+    if not raw:
+        return dict(status='error', message='Please choose a notebook to open.')
+    path = os.path.abspath(os.path.expanduser(raw))
+    try:
+        check_notebook_file(path)
+    except ValueError as e:
+        return dict(status='error', message=str(e))
+    try:
+        _spawn_plainbook(path)
+    except Exception as e:
+        return dict(status='error', message=f'Could not open the notebook: {e}')
+    return dict(status='success',
+                name=os.path.splitext(os.path.basename(path))[0], path=path)
 
 @post('/copy_notebook')
 @action_log.logged('copy_notebook')
 @require_token
 def copy_notebook():
-    """Save a copy of this plainbook under a new name in the same folder, and
+    """Save a copy of this plainbook under a new name, in the chosen folder, and
     open the copy in its own window. This process and its notebook are
-    untouched, so work continues here on the original."""
+    untouched, so work continues here on the original. Unlike a new plainbook, a
+    name already in use gets _2, _3, ... appended: a copy must never open, let
+    alone overwrite, the file it would have copied onto."""
     data = request.json or {}
     try:
-        name, path = notebook.save_copy(data.get('name'))
+        folder = _resolve_folder(data.get('folder'))
+        name, path = notebook.save_copy(data.get('name'), folder=folder)
     except ValueError as e:
         return dict(status='error', message=str(e))
     try:
@@ -1158,7 +1218,11 @@ def file_list():
                 })
         # Sort: Directories first, then files alphabetically
         results.sort(key=lambda x: (x['type'] != 'directory', x['name'].lower()))
-        return {"files": results} # Returning a list wrapped in a dict is a best practice
+        # path/parent let the client navigate without doing platform-specific
+        # surgery on the string: at the root, parent == path, which is how the
+        # picker knows to disable "Up".
+        return {"files": results, "path": abs_path,
+                "parent": os.path.dirname(abs_path) or abs_path}
 
     except PermissionError:
         raise HTTPError(403, 'Permission denied')

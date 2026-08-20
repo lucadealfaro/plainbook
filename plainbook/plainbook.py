@@ -64,6 +64,32 @@ def unique_notebook_path(folder, name):
     return candidate, os.path.join(folder, candidate + ".plnb")
 
 
+def check_notebook_file(path):
+    """Raise ValueError unless `path` is a file we can open as a notebook.
+
+    Called before opening a notebook the user picked, from the process that can
+    still tell them what went wrong: a file that cannot be loaded must be
+    reported here, not discovered by a child process that dies silently. The
+    messages are user-facing.
+
+    The question asked is only "can nbformat load it?", which is exactly what
+    the Plainbook constructor will ask. It is deliberately not a strict
+    validation: nbformat logs schema violations rather than raising, which is
+    what lets our own 'test' cell type round-trip."""
+    if not os.path.exists(path):
+        raise ValueError(f"There is no file at {path}.")
+    if os.path.isdir(path):
+        raise ValueError(f"{os.path.basename(path)} is a folder, not a notebook.")
+    try:
+        nbformat.read(path, as_version=4)
+    except Exception as e:
+        # Deliberately broad: a file can fail to be a notebook in many ways
+        # (bad JSON, no 'cells', a top-level array, an unreadable encoding),
+        # and each nbformat version raises its own assortment of types.
+        raise ValueError(
+            f"{os.path.basename(path)} is not a notebook file.") from e
+
+
 class ExecutionError(Exception):
     """Custom exception for execution errors in Plainbook."""
     pass
@@ -1005,18 +1031,20 @@ class Plainbook:
             self.name, self.path = unique_notebook_path(parent, name)
             self._write()
 
-    def save_copy(self, new_name):
-        """Write a copy of this notebook under a new name in the same folder.
+    def save_copy(self, new_name, folder=None):
+        """Write a copy of this notebook under a new name, in `folder`.
 
-        This notebook's own name and path are untouched; the copy is just a file
-        on disk, which the caller then opens as its own plainbook. Adds _2, _3,
-        ... if the requested name is taken. Returns (name, path).
+        `folder` defaults to this notebook's own folder, and is expected to have
+        been validated by the caller. This notebook's own name and path are
+        untouched; the copy is just a file on disk, which the caller then opens
+        as its own plainbook. Adds _2, _3, ... if the requested name is taken.
+        Returns (name, path).
 
         Raises ValueError on an empty name.
         """
         with self._lock:
             name = normalize_notebook_name(new_name)
-            parent = os.path.dirname(self.path) or "."
+            parent = folder or os.path.dirname(self.path) or "."
             name, path = unique_notebook_path(parent, name)
             self._write(path)
             return name, path

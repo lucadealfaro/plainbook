@@ -4,7 +4,8 @@ import os
 import nbformat
 import pytest
 from plainbook.plainbook import (CellExecutionError, ExecutionError, Plainbook,
-                                 normalize_notebook_name, unique_notebook_path)
+                                 check_notebook_file, normalize_notebook_name,
+                                 unique_notebook_path)
 
 
 @pytest.fixture
@@ -1832,3 +1833,71 @@ class TestNotebookNaming:
     def test_save_copy_rejects_an_empty_name(self, notebook):
         with pytest.raises(ValueError):
             notebook.save_copy("  ")
+
+    def test_save_copy_into_another_folder(self, notebook, tmp_path):
+        """The copy dialog can now choose where the copy lands."""
+        _add_code_cell(notebook, "x = 1")
+        elsewhere = tmp_path / "elsewhere"
+        elsewhere.mkdir()
+        original_path = notebook.path
+
+        name, path = notebook.save_copy("moved", folder=str(elsewhere))
+
+        assert (name, path) == ("moved", os.path.join(str(elsewhere), "moved.plnb"))
+        assert os.path.exists(path)
+        assert notebook.path == original_path
+        assert [c.source for c in nbformat.read(path, as_version=4).cells] == \
+            [c.source for c in notebook.nb.cells]
+
+    def test_save_copy_into_another_folder_avoids_a_collision(self, notebook, tmp_path):
+        elsewhere = tmp_path / "elsewhere"
+        elsewhere.mkdir()
+        notebook.save_copy("moved", folder=str(elsewhere))
+
+        name, path = notebook.save_copy("moved", folder=str(elsewhere))
+
+        assert name == "moved_2"
+        assert os.path.dirname(path) == str(elsewhere)
+
+
+class TestCheckNotebookFile:
+    """check_notebook_file guards the "open an existing plainbook" flow.
+
+    It runs in the process that can still tell the user what went wrong: the
+    child that would open the file is detached with its output discarded, so a
+    file it cannot load would make it die invisibly."""
+
+    def test_accepts_a_plainbook(self, notebook):
+        _add_code_cell(notebook, "x = 1")
+        name, path = notebook.save_copy("openable")
+
+        check_notebook_file(path)          # does not raise
+
+    def test_accepts_a_plain_jupyter_notebook(self, tmp_path):
+        path = tmp_path / "plain.ipynb"
+        nb = nbformat.v4.new_notebook()
+        nb.cells = [nbformat.v4.new_code_cell("print(1)")]
+        nbformat.write(nb, str(path))
+
+        check_notebook_file(str(path))     # does not raise
+
+    def test_rejects_a_missing_file(self, tmp_path):
+        with pytest.raises(ValueError, match="no file"):
+            check_notebook_file(str(tmp_path / "absent.plnb"))
+
+    def test_rejects_a_folder(self, tmp_path):
+        with pytest.raises(ValueError, match="folder"):
+            check_notebook_file(str(tmp_path))
+
+    @pytest.mark.parametrize("content", [
+        "this is not json at all",
+        "",
+        '{"foo": 1}',                      # valid JSON, no cells
+        "[1, 2, 3]",                       # valid JSON, not even an object
+    ])
+    def test_rejects_a_non_notebook(self, tmp_path, content):
+        path = tmp_path / "impostor.plnb"
+        path.write_text(content)
+
+        with pytest.raises(ValueError, match="not a notebook"):
+            check_notebook_file(str(path))

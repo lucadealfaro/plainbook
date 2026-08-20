@@ -68,6 +68,7 @@
         @open-info="showInfo = true"
         @new-notebook="openNewNotebook"
         @copy-notebook="openCopyNotebook"
+        @open-notebook="openExistingNotebook"
         @open-settings="showSettings = true"
         @debug-request="sendDebugRequest"
         @reset-tokens="resetTokens"
@@ -255,14 +256,15 @@
         :is-active="showTestHelp"
         @close="showTestHelp = false"
     />
-    <!-- New Plainbook Modal -->
-    <new-notebook-modal
+    <!-- New / Copy / Open Plainbook Modal -->
+    <notebook-file-modal
         :is-active="showNewNotebook"
-        :folder="newNotebookFolder"
+        :start-folder="newNotebookFolder"
         :mode="notebookModalMode"
         :default-name="notebookModalDefaultName"
+        :auth-token="authToken"
         @close="showNewNotebook = false"
-        @create="createNotebook"
+        @submit="submitNotebookDialog"
     />
 
     </script>

@@ -265,6 +265,10 @@ pre[class*="language-"] {
 .file-browser-nav .button { border: 1px solid var(--bulma-border); }
 .file-item { padding: 0.1rem 0.5rem; border-bottom: 1px solid var(--bulma-scheme-main-bis); display: flex; align-items: center; gap: 4px; }
 .file-name-link { cursor: pointer; color: var(--bulma-link); font-weight: 500; }
+.file-item:hover { background: var(--bulma-scheme-main-bis); }
+.file-item.is-selected { background: var(--bulma-primary); }
+.file-item.is-selected .file-name-link,
+.file-item.is-selected .icon { color: var(--bulma-primary-invert); }
 .dir-icon { color: var(--bulma-link); }
 .selected-files-panel { width: 300px; background: var(--bulma-scheme-main-bis); display: flex; flex-direction: column; }
 .selected-files-header { padding: 0.5rem; font-weight: bold; background: var(--bulma-scheme-main-ter); }

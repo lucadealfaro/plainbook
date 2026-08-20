@@ -12,12 +12,12 @@ import PanelBar from './PanelBar.js';
 import NotebookHelp from './NotebookHelp.js';
 import UnitTestView from './UnitTestView.js';
 import NotebookTitle from './NotebookTitle.js';
-import NewNotebookModal from './NewNotebookModal.js';
+import NotebookFileModal from './NotebookFileModal.js';
 import { outputsHaveStoppingError, getErrorInfo } from './errorUtils.js';
 import { serverFetch, isServerDown, SERVER_DOWN_MESSAGE } from './serverFetch.js';
 
 createApp({
-    components: { AppNavbar, NotebookCell, CellInsertionZone, CellLabel, SettingsModal, InfoModal, TestHelpModal, UiError, PanelBar, NotebookHelp, UnitTestView, NotebookTitle, NewNotebookModal },
+    components: { AppNavbar, NotebookCell, CellInsertionZone, CellLabel, SettingsModal, InfoModal, TestHelpModal, UiError, PanelBar, NotebookHelp, UnitTestView, NotebookTitle, NotebookFileModal },
     setup() {
         // Extract token from URL
         const urlParams = new URLSearchParams(window.location.search);
@@ -115,8 +115,8 @@ createApp({
         const showNewNotebook = ref(false);
         // Shown in the new-plainbook dialog: where the new file will be created.
         const newNotebookFolder = ref('');
-        // The same dialog serves the "+" and the copy buttons: 'new' or 'copy',
-        // with the name it opens prefilled with.
+        // The same dialog serves the "+", copy and open buttons: 'new', 'copy'
+        // or 'open', with the name it opens prefilled with.
         const notebookModalMode = ref('new');
         const notebookModalDefaultName = ref('');
 
@@ -1879,24 +1879,36 @@ createApp({
 
         const openNewNotebook = () => openNotebookDialog('new', '');
 
+        // Opening picks a file rather than naming one, so there is no name to
+        // suggest.
+        const openExistingNotebook = () => openNotebookDialog('open', '');
+
         // Copying suggests <name>_copy; the dialog preselects it, so typing
         // replaces it.
         const openCopyNotebook = () =>
             openNotebookDialog('copy', (notebook_name.value || 'notebook') + '_copy');
 
-        // Create a new plainbook, or a copy of this one. Either way the server
-        // launches it as its own process, so it appears in a new window with
-        // its own kernel; nothing changes here.
-        const createNotebook = async (name) => {
-            if (!name) return;
-            const isCopy = notebookModalMode.value === 'copy';
-            const failure = isCopy
-                ? 'Could not copy the plainbook.'
-                : 'Could not create the new plainbook.';
+        // Create a new plainbook, copy this one, or open an existing one. In
+        // every case the server launches it as its own process, so it appears
+        // in a new window with its own kernel; nothing changes here.
+        //
+        // `path` is set when the dialog knows it is dealing with a file that
+        // already exists -- an explicit pick in open mode, or a name in new
+        // mode that turned out to be taken -- and then the request is an open,
+        // whichever button was pressed.
+        const submitNotebookDialog = async ({ mode, name, folder, path }) => {
+            const isCopy = mode === 'copy';
+            const isOpen = mode === 'open' || !!path;
+            const failure = isOpen ? 'Could not open the plainbook.'
+                : isCopy ? 'Could not copy the plainbook.'
+                    : 'Could not create the new plainbook.';
+            if (isOpen ? !path : !name) return;
             showNewNotebook.value = false;
+            const [route, body] = isOpen ? ['/open_notebook', { path }]
+                : isCopy ? ['/copy_notebook', { name, folder }]
+                    : ['/new_notebook', { name, folder }];
             try {
-                const r = await apiCall(isCopy ? '/copy_notebook' : '/new_notebook',
-                                        'POST', { name });
+                const r = await apiCall(route, 'POST', body);
                 if (r.status === 'error') {
                     uiError.value = r.message || failure;
                 }
@@ -1983,7 +1995,7 @@ createApp({
             last_valid_test_cell_index,
             saveSettings, showSettings, showInfo, showTestHelp,
             showNewNotebook, newNotebookFolder, notebookModalMode, notebookModalDefaultName,
-            openNewNotebook, openCopyNotebook, createNotebook,
+            openNewNotebook, openCopyNotebook, openExistingNotebook, submitNotebookDialog,
             genError, uiError, closeUiError, renameNotebook, debug, sendDebugRequest, resetTokens,
             explanationEditKey, deleteCell, moveCell,
             clearOutputs, activeAiProvider, availableAiProviders, setActiveAiProvider, isCodespace, hasGeminiKey, hasClaudeKey, claudeViaBedrock, logEnabled, logviewEnabled, printAllEnabled, chromeless, authToken,
