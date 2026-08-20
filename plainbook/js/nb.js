@@ -12,11 +12,12 @@ import PanelBar from './PanelBar.js';
 import NotebookHelp from './NotebookHelp.js';
 import UnitTestView from './UnitTestView.js';
 import NotebookTitle from './NotebookTitle.js';
+import SideIndex from './SideIndex.js';
 import { outputsHaveError, getErrorInfo } from './errorUtils.js';
 import { serverFetch, isServerDown, SERVER_DOWN_MESSAGE } from './serverFetch.js';
 
 createApp({
-    components: { AppNavbar, NotebookCell, CellInsertionZone, CellLabel, SettingsModal, InfoModal, TestHelpModal, UiError, PanelBar, NotebookHelp, UnitTestView, NotebookTitle },
+    components: { AppNavbar, NotebookCell, CellInsertionZone, CellLabel, SettingsModal, InfoModal, TestHelpModal, UiError, PanelBar, NotebookHelp, UnitTestView, NotebookTitle, SideIndex },
     setup() {
         // Extract token from URL
         const urlParams = new URLSearchParams(window.location.search);
@@ -79,6 +80,8 @@ createApp({
 
         // For settings modal
         const showSettings = ref(false);
+        // TOC sidebar (open by default; toggled via divider triangle)
+        const tocOpen = ref(true);
         // API keys are never stored client-side; only presence flags are used.
         const activeAiProvider = ref(null);
         const aiProviderRegistry = ref([]);
@@ -1870,6 +1873,7 @@ createApp({
             last_executed_cell_index, last_valid_code_cell_index, last_valid_output_cell_index,
             last_valid_test_cell_index,
             saveSettings, showSettings, showInfo, showTestHelp,
+            tocOpen,
             genError, uiError, closeUiError, renameNotebook, debug, sendDebugRequest, resetTokens,
             explanationEditKey, deleteCell, moveCell,
             clearOutputs, activeAiProvider, availableAiProviders, setActiveAiProvider, isCodespace, hasGeminiKey, hasClaudeKey, claudeViaBedrock, logEnabled, logviewEnabled, printAllEnabled, chromeless, authToken,
