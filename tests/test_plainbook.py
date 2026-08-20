@@ -1,9 +1,10 @@
 import hashlib
 import os
 
+import nbformat
 import pytest
 from plainbook.plainbook import (CellExecutionError, ExecutionError, Plainbook,
-                                 normalize_notebook_name)
+                                 normalize_notebook_name, unique_notebook_path)
 
 
 @pytest.fixture
@@ -1765,12 +1766,69 @@ class TestNotebookNaming:
         assert os.path.exists(notebook.path)
         assert os.path.exists(original_path)       # the original is left alone
 
-    def test_rename_refuses_a_collision(self, notebook):
-        """Renaming onto an existing file must not overwrite it."""
+    def test_rename_avoids_a_collision(self, notebook):
+        """Renaming onto an existing file takes the next free name, and must
+        not overwrite the file that is already there."""
         notebook.rename("taken")
         first = notebook.path
         notebook.rename("other")
+        _add_code_cell(notebook, "x = 1")      # written to the second name only
 
+        notebook.rename("taken")
+
+        assert notebook.name == "taken_2"
+        assert notebook.path == os.path.join(os.path.dirname(first), "taken_2.plnb")
+        assert os.path.exists(notebook.path)
+        assert os.path.exists(first)               # the earlier file is untouched
+        assert nbformat.read(first, as_version=4).cells == []
+
+    def test_rename_to_the_current_name_is_a_noop(self, notebook):
+        """Re-committing the same title must not spawn a _2 copy."""
+        notebook.rename("stable")
+        path = notebook.path
+
+        notebook.rename("stable.plnb")             # same name, typed extension
+
+        assert notebook.path == path
+        assert not os.path.exists(
+            os.path.join(os.path.dirname(path), "stable_2.plnb"))
+
+    @pytest.mark.parametrize("existing,expected", [
+        ([], "free"),
+        (["free"], "free_2"),
+        (["free", "free_2"], "free_3"),
+        (["free_2"], "free"),                      # only the exact name blocks
+    ])
+    def test_unique_notebook_path(self, tmp_path, existing, expected):
+        for name in existing:
+            (tmp_path / f"{name}.plnb").write_text("")
+
+        name, path = unique_notebook_path(str(tmp_path), "free")
+
+        assert name == expected
+        assert path == os.path.join(str(tmp_path), expected + ".plnb")
+
+    def test_save_copy(self, notebook):
+        """The copy has the same cells, and the original keeps its own name."""
+        _add_code_cell(notebook, "x = 1")
+        original_name, original_path = notebook.name, notebook.path
+
+        name, path = notebook.save_copy("duplicate.plnb")
+
+        assert (name, path) == (
+            "duplicate", os.path.join(os.path.dirname(original_path), "duplicate.plnb"))
+        assert (notebook.name, notebook.path) == (original_name, original_path)
+        copied = nbformat.read(path, as_version=4)
+        assert [c.source for c in copied.cells] == [c.source for c in notebook.nb.cells]
+
+    def test_save_copy_avoids_a_collision(self, notebook):
+        notebook.save_copy("dup")
+
+        name, path = notebook.save_copy("dup")
+
+        assert name == "dup_2"
+        assert os.path.exists(path)
+
+    def test_save_copy_rejects_an_empty_name(self, notebook):
         with pytest.raises(ValueError):
-            notebook.rename("taken")
-        assert notebook.path != first              # still on the second name
+            notebook.save_copy("  ")

@@ -2,7 +2,7 @@ export default {
     props: ['isLocked', 'running', 'restarting', 'runningActivity', 'hasNotebook', 'upToDate', 'cellCount', 'testCellCount', 'hasApiKey', 'debug',
             'activeAiProvider', 'availableAiProviders', 'shareOutputWithAi', 'aiTokens', 'verification', 'verificationStatus', 'logEnabled', 'logviewEnabled', 'chromeless', 'authToken'],
     emits: [
-        'lock', 'refresh', 'interrupt', 'regenerate-all', 'new-notebook',
+        'lock', 'refresh', 'interrupt', 'regenerate-all', 'new-notebook', 'copy-notebook',
         'restart', 'reset-run-all', 'run-all', 'run-all-tests', 'verify-notebook', 'clear-outputs', 'open-info', 'open-settings', 'debug-request',
         'set-ai-provider', 'toggle-share-output', 'reset-tokens', 'download-ipynb'
         ],
@@ -99,10 +99,16 @@ export default {
                                  style="height: 1.5em;">
                         </button>
 
-                        <button class="button is-light" title="New plainbook (opens in its own window)"
-                                @click="$emit('new-notebook')">
-                        <span class="icon"><i class="bx bx-plus"></i></span>
-                        </button>
+                        <div class="buttons has-addons mb-0" style="display: inline-flex;">
+                            <button class="button is-light" title="New plainbook (opens in its own window)"
+                                    @click="$emit('new-notebook')">
+                                <span class="icon"><i class="bx bx-plus"></i></span>
+                            </button>
+                            <button class="button is-light" title="Copy this plainbook under a new name (opens in its own window)"
+                                    @click="$emit('copy-notebook')">
+                                <span class="icon"><i class="bx bx-copy"></i></span>
+                            </button>
+                        </div>
 
                         <button v-if="isLocked" class="button is-warning" title="Unlock Notebook" @click="$emit('lock', false)">
                         <span class="icon"><i class="bx bx-lock"></i></span>

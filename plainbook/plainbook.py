@@ -49,6 +49,21 @@ def normalize_notebook_name(new_name):
     return name
 
 
+def unique_notebook_path(folder, name):
+    """The (name, path) to use for a new .plnb in `folder`, avoiding collisions.
+
+    If `name`.plnb is taken, tries name_2, name_3, ... Returns the name actually
+    chosen together with its full path, so callers can report the real name back
+    to the user. Shared by rename(), save_copy() and the new-notebook route, so
+    that naming a notebook never fails just because the name is in use."""
+    candidate = name
+    n = 1
+    while os.path.exists(os.path.join(folder, candidate + ".plnb")):
+        n += 1
+        candidate = f"{name}_{n}"
+    return candidate, os.path.join(folder, candidate + ".plnb")
+
+
 class ExecutionError(Exception):
     """Custom exception for execution errors in Plainbook."""
     pass
@@ -959,11 +974,15 @@ class Plainbook:
                 self._invalidate_cells_for_removed_files(
                     f.get('path') for f in missing_input_files)
 
-    def _write(self):
+    def _write(self, path=None):
+        """Write the notebook to `path`, defaulting to its own path.
+
+        The explicit path is for save_copy(), which writes the same content
+        elsewhere without this notebook changing where it lives."""
         self.nb.metadata['last_valid_code_cell'] = self.last_valid_code_cell
         self.nb.metadata['last_valid_output'] = self.last_valid_output_cell
         self.nb.metadata['last_valid_test_cell'] = self.last_valid_test_cell
-        with open(self.path, "w") as f:
+        with open(path or self.path, "w") as f:
             nbformat.write(self.nb, f)
 
     def rename(self, new_name):
@@ -973,20 +992,34 @@ class Plainbook:
         saved continuously, simply changing the name/path and writing once is
         enough for it to continue naturally under the new name.
 
-        Raises ValueError on an empty or conflicting name.
+        A name already in use is not an error: _2, _3, ... is appended, and the
+        name the notebook actually took is reflected in self.name.
+
+        Raises ValueError on an empty name.
         """
         with self._lock:
             name = normalize_notebook_name(new_name)
             if name == self.name:
                 return
             parent = os.path.dirname(self.path) or "."
-            new_path = os.path.join(parent, name + ".plnb")
-            if os.path.exists(new_path):
-                raise ValueError(
-                    f"A notebook named '{name}.plnb' already exists in this folder.")
-            self.name = name
-            self.path = new_path
+            self.name, self.path = unique_notebook_path(parent, name)
             self._write()
+
+    def save_copy(self, new_name):
+        """Write a copy of this notebook under a new name in the same folder.
+
+        This notebook's own name and path are untouched; the copy is just a file
+        on disk, which the caller then opens as its own plainbook. Adds _2, _3,
+        ... if the requested name is taken. Returns (name, path).
+
+        Raises ValueError on an empty name.
+        """
+        with self._lock:
+            name = normalize_notebook_name(new_name)
+            parent = os.path.dirname(self.path) or "."
+            name, path = unique_notebook_path(parent, name)
+            self._write(path)
+            return name, path
 
     def append_log_entry(self, entry):
         """Append an action-log entry to nb.metadata['log'] and persist.

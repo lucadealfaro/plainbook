@@ -28,7 +28,8 @@ from bottle import run, default_app, request, response, redirect, TEMPLATE_PATH
 # print(f"DEBUGGER PYTHON: {sys.executable}")
 
 # Plainbook imports
-from .plainbook import ExecutionError, ClarificationNeeded, normalize_notebook_name
+from .plainbook import (ExecutionError, ClarificationNeeded,
+                        normalize_notebook_name, unique_notebook_path)
 from .claude import get_claude_models
 from .gemini import get_gemini_models
 
@@ -67,8 +68,12 @@ parser.add_argument('--logview', action='store_true', default=False,
 parser.add_argument('--print-all', '--print_all', dest='print_all',
                     action='store_true', default=False,
                     help='Include the navbar and files/instructions panel in the browser print/PDF output.')
+parser.add_argument('--app-window', action='store_true', default=False,
+                    help='Open the UI in a dedicated app window instead of a normal browser tab.')
+# Deprecated: a normal browser tab is now the default, so this flag does nothing.
+# Kept (hidden) so existing commands and aliases keep working.
 parser.add_argument('--use-browser', action='store_true', default=False,
-                    help='Open the UI in a normal browser tab instead of a dedicated app window.')
+                    help=argparse.SUPPRESS)
 args = parser.parse_args()
 
 try:
@@ -1081,8 +1086,8 @@ def _spawn_plainbook(path):
     instead of opening a window, and this child's stdout goes to DEVNULL, so it
     would start invisibly."""
     cmd = [sys.executable, '-m', 'plainbook.main', path]
-    if args.use_browser:
-        cmd.append('--use-browser')
+    if args.app_window:
+        cmd.append('--app-window')
     subprocess.Popen(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
                      start_new_session=True)
 
@@ -1091,21 +1096,37 @@ def _spawn_plainbook(path):
 @require_token
 def new_notebook():
     """Create a new plainbook in this notebook's folder and open it in its own
-    window. This process and its notebook are untouched."""
+    window. This process and its notebook are untouched. A name already in use
+    gets _2, _3, ... appended rather than being refused."""
     data = request.json or {}
     try:
         name = normalize_notebook_name(data.get('name'))
     except ValueError as e:
         return dict(status='error', message=str(e))
     folder = os.path.dirname(os.path.abspath(notebook.path))
-    path = os.path.join(folder, name + '.plnb')
-    if os.path.exists(path):
-        return dict(status='error',
-                    message=f"A notebook named '{name}.plnb' already exists in this folder.")
+    name, path = unique_notebook_path(folder, name)
     try:
         _spawn_plainbook(path)
     except Exception as e:
         return dict(status='error', message=f'Could not start the new plainbook: {e}')
+    return dict(status='success', name=name, path=path)
+
+@post('/copy_notebook')
+@action_log.logged('copy_notebook')
+@require_token
+def copy_notebook():
+    """Save a copy of this plainbook under a new name in the same folder, and
+    open the copy in its own window. This process and its notebook are
+    untouched, so work continues here on the original."""
+    data = request.json or {}
+    try:
+        name, path = notebook.save_copy(data.get('name'))
+    except ValueError as e:
+        return dict(status='error', message=str(e))
+    try:
+        _spawn_plainbook(path)
+    except Exception as e:
+        return dict(status='error', message=f'Could not start the copy: {e}')
     return dict(status='success', name=name, path=path)
 
 @get('/home_dir')
@@ -1507,10 +1528,10 @@ def main():
     print(f"Authentication token: {AUTH_TOKEN}")
     if args.debug:
         print(f"Please load this URL: {url}")
-    elif args.use_browser:
-        open_browser_tab(url)   # forced normal tab
-    else:
+    elif args.app_window:
         open_ui(url)            # chromeless app window if a Chromium browser exists, else a tab
+    else:
+        open_browser_tab(url)   # normal browser tab (the default)
     # Reap this process when its window closes (or its browser dies).
     threading.Thread(target=_watchdog, daemon=True).start()
     app_with_logging = logger_middleware(default_app()) if args.debug else default_app()

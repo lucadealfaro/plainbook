@@ -115,6 +115,10 @@ createApp({
         const showNewNotebook = ref(false);
         // Shown in the new-plainbook dialog: where the new file will be created.
         const newNotebookFolder = ref('');
+        // The same dialog serves the "+" and the copy buttons: 'new' or 'copy',
+        // with the name it opens prefilled with.
+        const notebookModalMode = ref('new');
+        const notebookModalDefaultName = ref('');
 
         // Test cell state
         const last_valid_test_cell_index = ref(-1);
@@ -1857,31 +1861,47 @@ createApp({
             }
         };
 
-        // Open the new-plainbook dialog, showing where the file will land.
-        const openNewNotebook = async () => {
+        // Open the plainbook dialog in the given mode, showing where the file
+        // will land. The folder is only for the help line, so a failure to get
+        // it does not stop the dialog.
+        const openNotebookDialog = async (mode, defaultName) => {
+            notebookModalMode.value = mode;
+            notebookModalDefaultName.value = defaultName;
             newNotebookFolder.value = '';
             showNewNotebook.value = true;
             try {
                 const r = await apiCall('/current_dir');
                 newNotebookFolder.value = r.path || '';
             } catch (err) {
-                // Only the help line is affected; creating still works.
                 console.warn('Could not determine the notebook folder:', err);
             }
         };
 
-        // Create a new plainbook. The server launches it as its own process, so
-        // it appears in a new window with its own kernel; nothing changes here.
+        const openNewNotebook = () => openNotebookDialog('new', '');
+
+        // Copying suggests <name>_copy; the dialog preselects it, so typing
+        // replaces it.
+        const openCopyNotebook = () =>
+            openNotebookDialog('copy', (notebook_name.value || 'notebook') + '_copy');
+
+        // Create a new plainbook, or a copy of this one. Either way the server
+        // launches it as its own process, so it appears in a new window with
+        // its own kernel; nothing changes here.
         const createNotebook = async (name) => {
             if (!name) return;
+            const isCopy = notebookModalMode.value === 'copy';
+            const failure = isCopy
+                ? 'Could not copy the plainbook.'
+                : 'Could not create the new plainbook.';
             showNewNotebook.value = false;
             try {
-                const r = await apiCall('/new_notebook', 'POST', { name });
+                const r = await apiCall(isCopy ? '/copy_notebook' : '/new_notebook',
+                                        'POST', { name });
                 if (r.status === 'error') {
-                    uiError.value = r.message || 'Could not create the new plainbook.';
+                    uiError.value = r.message || failure;
                 }
             } catch (err) {
-                uiError.value = (err && err.message) || 'Could not create the new plainbook.';
+                uiError.value = (err && err.message) || failure;
             }
         };
 
@@ -1962,7 +1982,8 @@ createApp({
             last_executed_cell_index, last_valid_code_cell_index, last_valid_output_cell_index,
             last_valid_test_cell_index,
             saveSettings, showSettings, showInfo, showTestHelp,
-            showNewNotebook, newNotebookFolder, openNewNotebook, createNotebook,
+            showNewNotebook, newNotebookFolder, notebookModalMode, notebookModalDefaultName,
+            openNewNotebook, openCopyNotebook, createNotebook,
             genError, uiError, closeUiError, renameNotebook, debug, sendDebugRequest, resetTokens,
             explanationEditKey, deleteCell, moveCell,
             clearOutputs, activeAiProvider, availableAiProviders, setActiveAiProvider, isCodespace, hasGeminiKey, hasClaudeKey, claudeViaBedrock, logEnabled, logviewEnabled, printAllEnabled, chromeless, authToken,

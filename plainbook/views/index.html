@@ -67,6 +67,7 @@
         @clear-outputs="clearOutputs"
         @open-info="showInfo = true"
         @new-notebook="openNewNotebook"
+        @copy-notebook="openCopyNotebook"
         @open-settings="showSettings = true"
         @debug-request="sendDebugRequest"
         @reset-tokens="resetTokens"
@@ -258,6 +259,8 @@
     <new-notebook-modal
         :is-active="showNewNotebook"
         :folder="newNotebookFolder"
+        :mode="notebookModalMode"
+        :default-name="notebookModalDefaultName"
         @close="showNewNotebook = false"
         @create="createNotebook"
     />
