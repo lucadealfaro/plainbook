@@ -212,7 +212,7 @@ export default {
                     <span v-else>Up to date</span>
                 </button>
                 <span style="flex: 1;"></span>
-                <button v-if="!collapsed && !isEditing && !localIsLocked"
+                <button v-if="isActive && !collapsed && !isEditing && !localIsLocked"
                     class="button is-small is-info mt-1 mr-3"
                     @click="enterEditMode">
                     <span class="icon"><i class="bx bx-pencil"></i></span>
