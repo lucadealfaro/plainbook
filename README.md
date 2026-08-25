@@ -1,4 +1,4 @@
-# <img src="https://github.com/lucadealfaro/plainbook/raw/main/plainbook/images/Plainbook_logo.png" height="30"> Plainbook: Natural Language Notebooks
+# <img src="https://github.com/plainbook-ai/plainbook/raw/main/plainbook/images/Plainbook_logo.png" height="30"> Plainbook: Natural Language Notebooks
 
 A Plainbook is a computational notebook, written in natural language rather than code. 
 
@@ -34,7 +34,7 @@ You can read more about the design phylosophy of Plainbook, and its code testing
 4. A trial Claude API key is provided; you can add your own in Settings
 
 **Example Notebooks:**
-* [Soccer World Cup Analysis](https://github.com/lucadealfaro/plainbook/raw/main/examples/Soccer_w_Tests.plnb) — demonstrates action cells, tests, and AI validation
+* [Soccer World Cup Analysis](https://github.com/plainbook-ai/plainbook/raw/main/examples/Soccer_w_Tests.plnb) — demonstrates action cells, tests, and AI validation
 
 ## Installation and use
 
@@ -63,7 +63,7 @@ You can use any file name you like, with any extension you like.
 
 ### Resources
 
-* [GitHub Repository](https://github.com/lucadealfaro/plainbook).
+* [GitHub Repository](https://github.com/plainbook-ai/plainbook).
 * [Pypi package](https://pypi.org/project/plainbook/).
 * [Development mailing list](https://groups.google.com/g/plainbook).
 
@@ -77,7 +77,7 @@ Plainbooks consist of three types of cells:
 
 * **Test cells**, where the user can write properties that should hold at certain points of the notebook to check that everything is working as expected.
 
-Differently from standard Jupyter notebooks, Plainbooks cells are guaranteed to be executed in order, from first to last, matching the order in which humans read the cells. Plainbooks relies on a [checkpointing kernel](https://github.com/lucadealfaro/snapshot-kernel) to remember the execution state after each cell, so that it can re-run a cell without having to start from the beginning.
+Differently from standard Jupyter notebooks, Plainbooks cells are guaranteed to be executed in order, from first to last, matching the order in which humans read the cells. Plainbooks relies on a [checkpointing kernel](https://github.com/plainbook-ai/snapshot-kernel) to remember the execution state after each cell, so that it can re-run a cell without having to start from the beginning.
 
 **AI Providers**
 Plainbook is designed to work with multiple AI providers, and users can choose which provider to use for code generation and checking.  The system is designed to allow users to easily switch between providers, so that users can cross-check that the implementation obtained from one provider is considered valid by another provider.  This avoids over-reliance on a single class of AI models. 
