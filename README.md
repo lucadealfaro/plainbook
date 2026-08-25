@@ -88,9 +88,45 @@ Currently, Plainbook supports Gemini and Claude models.  You will need an API ke
 
 * L. de Alfaro, M. Aubert, R. Jhala, E. Pastor, E. Baralis. [_Plainbook: Data Science, in Plain Language_](https://arxiv.org/abs/2607.05717), July 2026.
 
+## Citing Plainbook
+
+To cite **the software**, use the Zenodo record — it has its own author list,
+which is not the same as the paper's:
+
+> L. de Alfaro, M. Aubert, R. Jhala, D. Soni, U. Ejiogu, E. Pastor, E. Baralis.
+> _Plainbook: Natural Language Notebooks_ (software). BSD 3-Clause.
+> https://doi.org/10.5281/zenodo.XXXXXXX
+
+```bibtex
+@software{plainbook,
+  title     = {Plainbook: Natural Language Notebooks},
+  author    = {de Alfaro, Luca and Aubert, Mathis and Jhala, Ranjit and
+               Soni, Dhyan and Ejiogu, Uchechi and Pastor, Eliana and
+               Baralis, Elena},
+  year      = {2026},
+  doi       = {10.5281/zenodo.XXXXXXX},
+  url       = {https://github.com/plainbook-ai/plainbook},
+  license   = {BSD-3-Clause}
+}
+```
+
+To cite the design and the testing approach, cite the paper:
+
+```bibtex
+@article{plainbook-paper,
+  title   = {Plainbook: Data Science, in Plain Language},
+  author  = {de Alfaro, Luca and Aubert, Mathis and Jhala, Ranjit and
+             Pastor, Eliana and Baralis, Elena},
+  journal = {arXiv preprint arXiv:2607.05717},
+  year    = {2026},
+  doi     = {10.48550/arXiv.2607.05717}
+}
+```
+
 ## Contributors
 
-To contribute to Plainbook, please see the [DEVELOP.md](DEVELOP.md) file. 
+To contribute to Plainbook, please see [CONTRIBUTING.md](CONTRIBUTING.md) for
+the licensing terms, and [DEVELOP.md](DEVELOP.md) for development setup.
 
 * [Luca de Alfaro](https://github.com/lucadealfaro), lead developer, UC Santa Cruz. 
 * [Mathis Aubert](https://github.com/Maths-A), UC Santa Cruz. 
@@ -99,3 +135,9 @@ To contribute to Plainbook, please see the [DEVELOP.md](DEVELOP.md) file.
 * [Uchechi Ejiogu]().
 * [Eliana Pastor](https://elianap.github.io/), Politecnico di Torino.
 * [Elena Baralis](https://www.polito.it/en/staff?p=elena.baralis), Politecnico di Torino.
+
+## License
+
+Plainbook is released under the [BSD 3-Clause license](LICENSE.md).
+Contributions are accepted under the same license — see
+[CONTRIBUTING.md](CONTRIBUTING.md).
