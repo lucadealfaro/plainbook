@@ -104,7 +104,7 @@ which is not the same as the paper's:
                Soni, Dhyan and Ejiogu, Uchechi and Pastor, Eliana and
                Baralis, Elena},
   year      = {2026},
-  doi       = {10.5281/zenodo.XXXXXXX},
+  doi       = {10.5281/zenodo.22100743},
   url       = {https://github.com/plainbook-ai/plainbook},
   license   = {BSD-3-Clause}
 }
