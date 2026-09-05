@@ -22,12 +22,282 @@
         flex-direction: column;
         height: 100vh; /* Full viewport height */
     }
+
+    /* Workspace: TOC sidebar + main column */
+    .notebook-workspace {
+        flex-grow: 1;
+        display: flex;
+        min-height: 0;
+        overflow: hidden;
+    }
+    .notebook-main {
+        flex: 1;
+        min-width: 0;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+        overflow: hidden;
+    }
+
     /* The scrollable area */
     .notebook-area {
         flex-grow: 1;      /* Take up all remaining space */
         overflow-y: auto;  /* Scroll only this div */
         padding-bottom: 70vh; /* Extra space so last cell can scroll to top */
+        min-width: 0;
     }
+
+
+    /* ── SideIndex (table of contents) ── */
+    .side-index-wrap {
+        position: relative;
+        flex-shrink: 0;
+        display: flex;
+        min-height: 0;
+        align-self: stretch;
+        z-index: 4;
+        overflow: visible;
+    }
+    .side-index-wrap.is-closed {
+        width: 0;
+    }
+    .side-index-wrap.is-resizing {
+        cursor: col-resize;
+    }
+    .side-index {
+        position: relative;
+        flex-shrink: 0;
+        display: flex;
+        flex-direction: column;
+        background: var(--bulma-scheme-main-bis, #f5f5f5);
+        border-right: 1px solid var(--bulma-border, #dbdbdb);
+        min-height: 0;
+        user-select: none;
+        height: 100%;
+    }
+    .notebook-main > .panel-container {
+        border-radius: 0;
+        border-left: none;
+        border-right: none;
+        border-top: none;
+        flex-shrink: 0;
+    }
+    .side-index-toggle {
+        position: absolute;
+        top: 50%;
+        right: -11px;
+        transform: translateY(-50%);
+        z-index: 5;
+        width: 14px;
+        height: 28px;
+        padding: 0;
+        margin: 0;
+        border: 1px solid var(--bulma-border, #dbdbdb);
+        border-left: none;
+        border-radius: 0 4px 4px 0;
+        background: var(--bulma-scheme-main, #fff);
+        color: var(--bulma-text-weak, #7a7a7a);
+        cursor: pointer;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        line-height: 1;
+        box-shadow: 1px 0 2px rgba(0, 0, 0, 0.06);
+    }
+    .side-index-toggle:hover {
+        color: var(--bulma-primary, #3257dc);
+        background: var(--bulma-scheme-main-bis, #f5f5f5);
+    }
+    .side-index-toggle .bx {
+        font-size: 0.85rem;
+    }
+    .side-index-wrap.is-closed .side-index-toggle {
+        right: -14px;
+        border-left: 1px solid var(--bulma-border, #dbdbdb);
+        border-radius: 4px;
+    }
+    .side-index-title {
+        flex-shrink: 0;
+        box-sizing: border-box;
+        display: flex;
+        align-items: center;
+        justify-content: flex-start;
+        gap: 0.45rem;
+        height: 2.35rem;
+        padding: 0 0.65rem;
+        border-bottom: none;
+        font-size: 0.9rem;
+        font-weight: 400;
+        letter-spacing: 0.01em;
+        color: var(--bulma-text, #363636);
+        line-height: 1.2;
+        white-space: nowrap;
+        text-align: left;
+    }
+    .side-index-title-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        flex-shrink: 0;
+        color: var(--bulma-text-weak, #7a7a7a);
+        font-size: 0.9rem;
+        line-height: 1;
+    }
+    .side-index-title-text {
+        display: inline-block;
+    }
+    .side-index-modes {
+        display: flex;
+        flex-shrink: 0;
+        gap: 0.15rem;
+        padding: 0.4rem 0.4rem 0.35rem;
+        border-bottom: 1px solid var(--bulma-border, #dbdbdb);
+    }
+    .side-index-mode {
+        flex: 1;
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        padding: 0.3rem 0.4rem;
+        border-radius: 3px;
+        font-size: 0.75rem;
+        font-weight: 500;
+        color: var(--bulma-text-weak, #7a7a7a);
+        line-height: 1.2;
+    }
+    .side-index-mode:hover {
+        background: var(--bulma-scheme-main, #fff);
+        color: var(--bulma-text, #363636);
+    }
+    .side-index-mode.is-active {
+        background: var(--bulma-scheme-main, #fff);
+        color: var(--bulma-primary, #3257dc);
+        font-weight: 700;
+    }
+    .side-index-body {
+        flex: 1;
+        overflow-y: auto;
+        padding: 0.5rem 0.35rem 0.75rem 0.35rem;
+        min-height: 0;
+    }
+    .side-index-empty {
+        margin: 0.5rem 0.4rem;
+        font-size: 0.8rem;
+        color: var(--bulma-text-weak, #7a7a7a);
+        line-height: 1.4;
+        user-select: text;
+    }
+
+    .side-index-list,
+    .side-index-sublist {
+        list-style: none;
+        margin: 0;
+        padding: 0;
+    }
+
+    .side-index-sublist > .side-index-item {
+        opacity: 0.75;
+        padding-left: 0.75rem;
+        margin-top: 0.15rem;
+    }
+    .side-index-item.side-index-h2 {
+        padding-left: 0.6rem;
+        opacity: 1;
+    }
+
+    .side-index-sublist {
+        padding-left: 1.15rem;
+    }
+    
+    .side-index-item {
+        margin: 0.1rem 0;
+    }
+    .side-index-row {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.1rem;
+    }
+    .side-index-expand {
+        flex-shrink: 0;
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        padding: 0.15rem 0.1rem;
+        line-height: 1;
+        color: var(--bulma-text-weak, #7a7a7a);
+        border-radius: 3px;
+        width: 1.25rem;
+    }
+    .side-index-expand-spacer {
+        flex-shrink: 0;
+        width: 1.25rem;
+    }
+    .side-index-expand:hover {
+        color: var(--bulma-text, #363636);
+        background: var(--bulma-scheme-main, #fff);
+    }
+    .side-index-expand:disabled {
+        opacity: 0.35;
+        cursor: default;
+    }
+    .side-index-expand:disabled:hover {
+        background: transparent;
+        color: var(--bulma-text-weak, #7a7a7a);
+    }
+    .side-index-link {
+        flex: 1;
+        text-align: left;
+        border: none;
+        background: transparent;
+        cursor: pointer;
+        padding: 0.2rem 0.35rem;
+        border-radius: 3px;
+        font-size: 0.85rem;
+        line-height: 1.35;
+        color: var(--bulma-text, #363636);
+        word-break: break-word;
+        user-select: text;
+    }
+
+    .side-index-h1 > .side-index-row > .side-index-link,
+    .side-index-h2 > .side-index-row > .side-index-link,
+    .side-index-code > .side-index-row > .side-index-link {
+        font-weight: 600;
+        font-size: 0.9rem;
+    }
+
+    .side-index-link:hover {
+        background: var(--bulma-scheme-main, #fff);
+        color: var(--bulma-primary, #3257dc);
+    }
+    .side-index-preview {
+        margin: 0.1rem 0 0.35rem 1.35rem;
+        padding: 0.25rem 0.4rem;
+        font-size: 0.75rem;
+        line-height: 1.35;
+        color: var(--bulma-text-weak, #7a7a7a);
+        font-style: italic;
+        word-break: break-word;
+        user-select: text;
+    }
+    .side-index-resizer {
+        position: absolute;
+        top: 0;
+        right: -3px;
+        width: 6px;
+        height: 100%;
+        cursor: col-resize;
+        z-index: 2;
+    }
+    .side-index-resizer:hover,
+    .side-index.is-resizing .side-index-resizer {
+        background: var(--bulma-primary, #3257dc);
+        opacity: 0.35;
+    }
+    @media print {
+        .side-index-wrap { display: none !important; }
+    }
+
     </style>
   </head>
   <body>
@@ -78,154 +348,163 @@
         @verify-notebook="ui_verifyNotebook"
     />
 
-    <panel-bar
-        :auth-token="authToken"
-        :verification="notebook?.metadata?.verification"
-        @dismiss-verification="dismissVerification"
-    />
-
     <ui-error 
         :error="uiError" 
         @close="closeUiError" 
     />
 
-    <unit-test-view
-        v-if="unitTestTargetIndex !== null"
-        :notebook="notebook"
-        :target-cell-index="unitTestTargetIndex"
-        :auth-token="authToken"
-        :running="running"
-        :running-activity="runningActivity"
-        :is-locked="isLocked"
-        :last-valid-code-cell-index="last_valid_code_cell_index"
-        :last-valid-output-cell-index="last_valid_output_cell_index"
-        :unit-test-validity="unitTestValidity"
-        v-model:active-sub-cell="unitTestActiveSubcell"
-        v-model:active-test-name="unitTestActiveTestName"
-        @exit="exitUnitTestMode"
-        @add-unit-test="addUnitTest"
-        @delete-unit-test="deleteUnitTest"
-        @rename-unit-test="renameUnitTest"
-        @save-unit-test-explanation="saveUnitTestExplanation"
-        @save-unit-test-code="saveUnitTestCode"
-        @clear-unit-test-code="clearUnitTestCode"
-        @clear-unit-test-outputs="clearUnitTestOutputs"
-        @run-unit-test="ui_runUnitTest"
-        @run-unit-test-subcell="ui_runUnitTestSubcell"
-        @generate-unit-test-code="generateUnitTestCode"
-        @validate-unit-test-code="ui_validateUnitTestCode"
-        @dismiss-unit-test-validation="dismissUnitTestValidation"
-        @save-explanation="(content) => sendExplanationToServer(content, unitTestTargetIndex)"
-        @save-code="(content) => sendCodeToServer(content, unitTestTargetIndex)"
-        @gencode="ui_forceRegenerateCellCode(unitTestTargetIndex)"
-        @clearcode="clearCellCode(unitTestTargetIndex)"
-        @validate="ui_validateCode(unitTestTargetIndex)"
-        @dismiss-validation="dismissValidation(unitTestTargetIndex)"
-        @interrupt="ui_interruptKernel"
-    />
+    <div class="notebook-workspace">
+        <side-index
+            :cells="notebook?.cells || []"
+            :is-open="tocOpen"
+            @toggle="tocOpen = !tocOpen"
+        />
+        <div class="notebook-main">
+            <panel-bar
+                :auth-token="authToken"
+                :verification="notebook?.metadata?.verification"
+                @dismiss-verification="dismissVerification"
+            />
 
-    <div v-else class="section notebook-area">
-        <notebook-title
-            :name="notebook_name"
-            :is-locked="isLocked"
-            @rename="renameNotebook" />
-        <div class="notebook-container px-2 py-2">
-            <div v-if="loading" class="has-text-centered py-6">
-                <button class="button is-loading is-ghost is-large">Loading</button>
-                <p class="has-text-grey">Fetching notebook data...</p>
-            </div>
-            <div v-else-if="error" class="notification is-danger is-light">
-                <button class="delete" @click="error = null"></button>
-                <strong>Error:</strong> {{ error }}
-            </div>
-            <div v-else="notebook">
+            <unit-test-view
+                v-if="unitTestTargetIndex !== null"
+                :notebook="notebook"
+                :target-cell-index="unitTestTargetIndex"
+                :auth-token="authToken"
+                :running="running"
+                :running-activity="runningActivity"
+                :is-locked="isLocked"
+                :last-valid-code-cell-index="last_valid_code_cell_index"
+                :last-valid-output-cell-index="last_valid_output_cell_index"
+                :unit-test-validity="unitTestValidity"
+                v-model:active-sub-cell="unitTestActiveSubcell"
+                v-model:active-test-name="unitTestActiveTestName"
+                @exit="exitUnitTestMode"
+                @add-unit-test="addUnitTest"
+                @delete-unit-test="deleteUnitTest"
+                @rename-unit-test="renameUnitTest"
+                @save-unit-test-explanation="saveUnitTestExplanation"
+                @save-unit-test-code="saveUnitTestCode"
+                @clear-unit-test-code="clearUnitTestCode"
+                @clear-unit-test-outputs="clearUnitTestOutputs"
+                @run-unit-test="ui_runUnitTest"
+                @run-unit-test-subcell="ui_runUnitTestSubcell"
+                @generate-unit-test-code="generateUnitTestCode"
+                @validate-unit-test-code="ui_validateUnitTestCode"
+                @dismiss-unit-test-validation="dismissUnitTestValidation"
+                @save-explanation="(content) => sendExplanationToServer(content, unitTestTargetIndex)"
+                @save-code="(content) => sendCodeToServer(content, unitTestTargetIndex)"
+                @gencode="ui_forceRegenerateCellCode(unitTestTargetIndex)"
+                @clearcode="clearCellCode(unitTestTargetIndex)"
+                @validate="ui_validateCode(unitTestTargetIndex)"
+                @dismiss-validation="dismissValidation(unitTestTargetIndex)"
+                @interrupt="ui_interruptKernel"
+            />
 
-                <template v-for="(cell, index) in notebook.cells" :key="index">
-
-                    <!-- Inserts above the cell. Suppressed while the notebook has
-                         a single cell, so the only way to add a second one is
-                         below it: newcomers otherwise build the notebook in the
-                         reverse of execution order. -->
-                    <cell-insertion-zone v-if="!isLocked && notebook.cells.length > 1"
-                        :is-active="activeIndex === index || (activeIndex >= 0 && activeIndex === index - 1)"
-                        :cell-count="notebook.cells.length"
-                        @insert="(celltype) => insertCell(index, celltype)"
-                    />
-
-                    <cell-label
-                        v-if="cell.cell_type === 'code'"
-                        :name="cell.metadata.name"
-                    />
-
-                    <notebook-cell
-                        :cell="cell"
-                        :is-active="activeIndex === index"
-                        :is-locked="isLocked"
-                        :running="running"
-                        :code-valid="last_valid_code_cell_index >= index"
-                        :output-valid="last_valid_output_cell_index >= index"
-                        :executed="last_executed_cell_index >= index"
-                        :test-code-valid="last_valid_test_cell_index >= index"
-                        :as-read="asRead"
-                        :markdown-edit-key="markdownEditKey[index]"
-                        :explanation-edit-key="explanationEditKey[index]"
-                        :module-install="moduleInstall[index]"
-                        :clarify-state="clarifyState[index]"
-                        :fold-state="foldState[index]"
-                        @activate="setActiveCell(index)"
-
-                        @save-markdown="(content) => sendMarkdownToServer(content, index)"
-                        @save-explanation="(content) => sendExplanationToServer(content, index)"
-                        @save-code="(content) => sendCodeToServer(content, index)"
-                        @save-and-run="(content) => ui_saveExplanationAndRun(content, index)"
-                        @save-code-and-run="(content) => ui_saveCodeAndRun(content, index)"
-                        @save-code-and-run-test="(content) => ui_saveCodeAndRunTest(content, index)"
-
-                        @interrupt="ui_interruptKernel"
-                        @run-cell="ui_runCell(index, $event)"
-                        @generate-code="ui_forceRegenerateCellCode(index, $event)"
-                        @clear-code="clearCellCode(index)"
-                        @validate-code="ui_validateCode(index)"
-                        @explain-code="ui_explainCode(index)"
-                        @dismiss-validation="dismissValidation(index)"
-                        @install-module="(module) => ui_installModule(index, module)"
-                        @dismiss-module-install="dismissModuleInstall(index)"
-
-                        @submit-clarification="(answers) => ui_submitClarification(index, answers)"
-                        @dismiss-clarification="dismissClarify(index)"
-
-                        @amend-and-fold="(text) => ui_amendAndFold(index, text)"
-                        @accept-amend="(text) => ui_acceptAmend(index, text)"
-                        @save-amend="(text) => ui_saveAmend(index, text)"
-                        @dismiss-fold="dismissFold(index)"
-                        @unfold="ui_unfold(index)"
-
-                        @run-test="ui_runTestCell(index)"
-                        @save-and-run-test="(content) => ui_saveExplanationAndRunTest(content, index)"
-                        @generate-test-code="ui_forceRegenerateTestCode(index)"
-                        @open-test-help="showTestHelp = true"
-
-                        @open-unit-test="enterUnitTestMode(index)"
-
-                        @delete="deleteCell(index)"
-                        @move-up="moveCell(index, -1)"
-                        @move-down="moveCell(index, 1)"
-                        @dismiss-error="closeUiError"
-                    />
-
-                </template>
-
-                <cell-insertion-zone v-if="!isLocked"
-                    :is-active="(activeIndex === -1 && notebook.cells.length === 0) || activeIndex === notebook.cells.length - 1"
-                    :cell-count="notebook.cells.length"
-                    @insert="(celltype) => insertCell(notebook.cells.length, celltype)"
-                />
-
-                <div class="box" style="margin-top: 6rem;" v-if="notebook.cells.length === 0 && !loading">
-                    <h1 class="title is-4 has-text-centered">Getting Started</h1>
-                    <notebook-help />
+            <div v-else class="section notebook-area">
+            <notebook-title
+                :name="notebook_name"
+                :is-locked="isLocked"
+                @rename="renameNotebook" />
+            <div class="notebook-container px-2 py-2">
+                <div v-if="loading" class="has-text-centered py-6">
+                    <button class="button is-loading is-ghost is-large">Loading</button>
+                    <p class="has-text-grey">Fetching notebook data...</p>
                 </div>
+                <div v-else-if="error" class="notification is-danger is-light">
+                    <button class="delete" @click="error = null"></button>
+                    <strong>Error:</strong> {{ error }}
+                </div>
+                <div v-else="notebook">
 
+                    <template v-for="(cell, index) in notebook.cells" :key="index">
+
+                        <!-- Inserts above the cell. Suppressed while the notebook has
+                             a single cell, so the only way to add a second one is
+                             below it: newcomers otherwise build the notebook in the
+                             reverse of execution order. -->
+                        <cell-insertion-zone v-if="!isLocked && notebook.cells.length > 1"
+                            :is-active="activeIndex === index || (activeIndex >= 0 && activeIndex === index - 1)"
+                            :cell-count="notebook.cells.length"
+                            @insert="(celltype) => insertCell(index, celltype)"
+                        />
+
+                        <cell-label
+                            v-if="cell.cell_type === 'code'"
+                            :name="cell.metadata.name"
+                        />
+
+                        <notebook-cell
+                            :cell="cell"
+                            :is-active="activeIndex === index"
+                            :is-locked="isLocked"
+                            :running="running"
+                            :code-valid="last_valid_code_cell_index >= index"
+                            :output-valid="last_valid_output_cell_index >= index"
+                            :executed="last_executed_cell_index >= index"
+                            :test-code-valid="last_valid_test_cell_index >= index"
+                            :as-read="asRead"
+                            :markdown-edit-key="markdownEditKey[index]"
+                            :explanation-edit-key="explanationEditKey[index]"
+                            :module-install="moduleInstall[index]"
+                            :clarify-state="clarifyState[index]"
+                            :fold-state="foldState[index]"
+                            @activate="setActiveCell(index)"
+
+                            @save-markdown="(content) => sendMarkdownToServer(content, index)"
+                            @save-explanation="(content) => sendExplanationToServer(content, index)"
+                            @save-code="(content) => sendCodeToServer(content, index)"
+                            @save-and-run="(content) => ui_saveExplanationAndRun(content, index)"
+                            @save-code-and-run="(content) => ui_saveCodeAndRun(content, index)"
+                            @save-code-and-run-test="(content) => ui_saveCodeAndRunTest(content, index)"
+
+                            @interrupt="ui_interruptKernel"
+                            @run-cell="ui_runCell(index, $event)"
+                            @generate-code="ui_forceRegenerateCellCode(index, $event)"
+                            @clear-code="clearCellCode(index)"
+                            @validate-code="ui_validateCode(index)"
+                            @explain-code="ui_explainCode(index)"
+                            @dismiss-validation="dismissValidation(index)"
+                            @install-module="(module) => ui_installModule(index, module)"
+                            @dismiss-module-install="dismissModuleInstall(index)"
+
+                            @submit-clarification="(answers) => ui_submitClarification(index, answers)"
+                            @dismiss-clarification="dismissClarify(index)"
+
+                            @amend-and-fold="(text) => ui_amendAndFold(index, text)"
+                            @accept-amend="(text) => ui_acceptAmend(index, text)"
+                            @save-amend="(text) => ui_saveAmend(index, text)"
+                            @dismiss-fold="dismissFold(index)"
+                            @unfold="ui_unfold(index)"
+
+                            @run-test="ui_runTestCell(index)"
+                            @save-and-run-test="(content) => ui_saveExplanationAndRunTest(content, index)"
+                            @generate-test-code="ui_forceRegenerateTestCode(index)"
+                            @open-test-help="showTestHelp = true"
+
+                            @open-unit-test="enterUnitTestMode(index)"
+
+                            @delete="deleteCell(index)"
+                            @move-up="moveCell(index, -1)"
+                            @move-down="moveCell(index, 1)"
+                            @dismiss-error="closeUiError"
+                        />
+
+                    </template>
+
+                    <cell-insertion-zone v-if="!isLocked"
+                        :is-active="(activeIndex === -1 && notebook.cells.length === 0) || activeIndex === notebook.cells.length - 1"
+                        :cell-count="notebook.cells.length"
+                        @insert="(celltype) => insertCell(notebook.cells.length, celltype)"
+                    />
+
+                    <div class="box" style="margin-top: 6rem;" v-if="notebook.cells.length === 0 && !loading">
+                        <h1 class="title is-4 has-text-centered">Getting Started</h1>
+                        <notebook-help />
+                    </div>
+
+                </div>
+            </div>
             </div>
         </div>
     </div>

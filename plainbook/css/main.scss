@@ -384,6 +384,15 @@ pre[class*="language-"] {
     padding-bottom: 0 !important;
   }
 
+  .notebook-workspace {
+    display: block !important;
+    overflow: visible !important;
+    height: auto !important;
+  }
+  .side-index {
+    display: none !important;
+  }
+
   // Hide application chrome (always-hidden bits).
   .navbar,
   .modal,
